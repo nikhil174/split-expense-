@@ -40,3 +40,5 @@ Source files are committed to GitHub. Live deployment, secret configuration, D1 
 
 
 <!-- Build trigger: verify Cloudflare Git integration is active. -->
+
+<!-- Build trigger after compatibility-date correction: 2026-10-28 -->
