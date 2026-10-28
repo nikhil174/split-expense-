@@ -2,14 +2,24 @@
 
 Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 
-## Access model
-- Visitors submit only their name.
-- Every request starts as pending and requires the admin's approval.
+## Architecture and access model
+- Public endpoint lists existing groups; visitors choose a group and submit their name plus that group ID.
+- Group names are globally unique (case-insensitive, surrounding whitespace ignored), enforced by a D1 unique index.
+- Only the separate admin session can create groups or review membership requests.
+- Approving a request both activates the visitor's 3-hour access and adds them to the requested group.
+- Admin identity/session (`split_admin`) and regular member session (`split_session`) are separate. The admin can request membership in their own group and approve that request, then use the normal expense UI.
+- Members cannot create groups, directly add members, or bypass approval using invite codes.
 - The admin signs in with a PIN configured as the Worker secret `ADMIN_PIN`.
 - Approved visitors can activate a passwordless, server-side session lasting up to 3 hours.
 - The admin can reject pending requests or revoke approved access.
-- Group APIs verify the active session and group membership.
-- Invite codes expire after 7 days.
+- Group, expense, balance, and member reads verify both the active member session and group membership.
+- Group access is request/approval based; no invite-code bypass.
+
+## Current implementation notes
+- Public: `GET /api/groups/public`, `POST /api/access/request`, `GET /api/access/status`, `POST /api/access/enter`.
+- Admin-only: `POST /api/admin/login`, `GET /api/admin/groups`, `POST /api/admin/groups`, `GET /api/admin/requests`, and approve/reject/revoke request actions.
+- Member-only: group, expense, and balance endpoints. A member request is scoped to one selected group.
+- Migration `0004_group_access_and_unique_names.sql` adds the group reference and case-insensitive unique group-name index.
 
 ## Cloudflare setup
 
