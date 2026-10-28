@@ -37,3 +37,6 @@ The SQL migrations add new `appx_*` tables and do not modify or delete existing 
 
 ## Current status
 Source files are committed to GitHub. Live deployment, secret configuration, D1 migration execution, and end-to-end testing against the existing database remain to be done.
+
+
+<!-- Build trigger: verify Cloudflare Git integration is active. -->
