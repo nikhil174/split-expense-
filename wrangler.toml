@@ -1,6 +1,10 @@
 name = "split-expense"
 main = "src/index.js"
 compatibility_date = "2026-10-28"
+keep_vars = true
+
+[secrets]
+required = ["ADMIN_PIN", "SESSION_SECRET"]
 
 [assets]
 directory = "./public"
