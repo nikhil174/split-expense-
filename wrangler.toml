@@ -10,5 +10,5 @@ run_worker_first = true
 [[d1_databases]]
 binding = "split-expense"
 database_name = "split_expense_db"
-database_id = "REPLACE_WITH_EXISTING_D1_DATABASE_ID"
+database_id = "5820131f-8799-405f-b91d-fcc4cbe0fb53"
 migrations_dir = "migrations"
