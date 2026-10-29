@@ -3,7 +3,7 @@ import { ChevronRight, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedMoney, EASE, EmptyState, List, Page, PersonAvatar, SectionTitle, listItem, pressableRow } from "@/components/app/bits";
 import { GlitterDust, Sheen, Sparkles } from "@/components/app/glitter";
-import { useGroups } from "@/hooks/queries";
+import { useGroups, usePeopleBalances } from "@/hooks/queries";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
 import { cn } from "@/lib/utils";
@@ -14,31 +14,37 @@ function greeting() {
 }
 
 // Balance card: white with a hairline, a faint champagne light, a slow sheen and a few glints.
-export function AquaCard({ children, className }: { children: React.ReactNode; className?: string }) {
+// With onClick the whole card is one button (used on Home to open Balances).
+export function AquaCard({ children, className, onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
+  const Tag = onClick ? m.button : m.section;
   return (
-    <m.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
-      className={cn("panel relative overflow-hidden p-5", className)}>
+    <Tag initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
+      {...(onClick ? { type: "button" as const, onClick } : {})}
+      className={cn("panel relative block w-full overflow-hidden p-5 text-left", onClick && "cursor-pointer transition-transform duration-150 active:scale-[0.985]", className)}>
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_100%_0%,rgb(214_170_80/14%),transparent_60%)]" />
       <Sheen />
       <GlitterDust />
       <Sparkles />
       <div className="relative">{children}</div>
-    </m.section>
+    </Tag>
   );
 }
 
 export function GroupsScreen({ name }: { name: string }) {
-  const groups = useGroups();
+  const groups = useGroups(), people = usePeopleBalances();
   const list = groups.data || [];
-  const owedToYou = list.reduce((s, g) => s + Math.max(0, Number(g.myBalanceCents || 0)), 0);
-  const youOwe = list.reduce((s, g) => s + Math.max(0, -Number(g.myBalanceCents || 0)), 0);
+  // Person-by-person totals, so these match the Balances screen exactly
+  // (in one group you can be owed by one person and owe another).
+  const owedToYou = people.data?.owedToYouCents ?? list.reduce((s, g) => s + Math.max(0, Number(g.myBalanceCents || 0)), 0);
+  const youOwe = people.data?.youOweCents ?? list.reduce((s, g) => s + Math.max(0, -Number(g.myBalanceCents || 0)), 0);
   const net = owedToYou - youOwe;
+  const count = people.data?.people.length ?? 0;
   return (
     <Page>
       <p className="eyebrow px-1">{greeting()}</p>
       <h1 className="page-title mt-1 px-1">{name.split(" ")[0]}</h1>
 
-      <AquaCard className="mt-5">
+      <AquaCard className="mt-5" onClick={() => navigate({ name: "balances" })}>
         <p className="eyebrow">{net > 0 ? "Overall, you are owed" : net < 0 ? "Overall, you owe" : "Overall balance"}</p>
         <div className="mt-2 min-h-11">
           {groups.isPending ? <Skeleton className="h-11 w-44" /> : net === 0 ? <p className="text-[30px] font-medium tracking-[-0.02em]">All settled up</p> : <AnimatedMoney cents={Math.abs(net)} size="hero" className={net > 0 ? "text-positive" : "text-negative"} />}
@@ -47,6 +53,10 @@ export function GroupsScreen({ name }: { name: string }) {
           <div><p className="text-[12px] text-muted-foreground">Owed to you</p><p className={cn("tabular mt-0.5 text-[16px] font-medium", owedToYou ? "text-positive" : "text-muted-foreground")}>{inr(owedToYou)}</p></div>
           <div className="border-l border-hairline pl-4"><p className="text-[12px] text-muted-foreground">You owe</p><p className={cn("tabular mt-0.5 text-[16px] font-medium", youOwe ? "text-negative" : "text-muted-foreground")}>{inr(youOwe)}</p></div>
         </div>
+        <span className="mt-4 flex items-center justify-between border-t border-hairline pt-3 text-[13.5px] font-medium">
+          <span>{count ? `See ${count === 1 ? "1 person" : count + " people"}` : "See balances by person"}</span>
+          <ChevronRight className="size-[18px] text-[#141716]/35" strokeWidth={2.4} />
+        </span>
       </AquaCard>
 
       <div className="mt-7">

@@ -148,7 +148,22 @@ try {
   await shot(bea, "bea-expenses");
   step("exact split: ₹5.00 + ₹4.99 blocked, exact saves; row expands; search filters");
 
+  await cy.goto(BASE + "/#/");
   await cy.reload();
+  await cy.getByRole("button", { name: /Overall, you owe.*₹55\.00.*See 1 person/s }).click();
+  await cy.getByRole("heading", { name: "Balances" }).waitFor();
+  await cy.getByRole("heading", { name: "You owe" }).waitFor();
+  assert.equal(await cy.getByRole("heading", { name: "Owes you" }).count(), 0);
+  await cy.getByRole("button", { name: /Bea E2E.*₹55\.00/s }).click();
+  await cy.getByRole("heading", { name: "You & Bea E2E" }).waitFor();
+  assert.equal(await cy.locator("tbody tr").count(), 2, "both shared expenses listed");
+  await cy.goBack();
+  await cy.getByRole("heading", { name: "Balances" }).waitFor();
+  await noHorizontalOverflow(cy, "balances by person");
+  await shot(cy, "cy-balances");
+  await cy.goBack();
+  step("home balance card opens balances by person; tapping a person shows your shared expenses");
+
   await openGroup(cy);
   assert.match((await heroStatus(cy)).replace(/\s+/g, " "), /you owe ₹55\.00/i);
   assert.match((await cy.getByRole("row", { name: /Dinner/ }).innerText()).replace(/\s+/g, " "), /you borrowed ₹50\.00/i);

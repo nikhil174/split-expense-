@@ -9,6 +9,7 @@ import { AuthScreen } from "@/features/auth/AuthScreen";
 import { GroupsScreen } from "@/features/groups/GroupsScreen";
 import { GroupScreen } from "@/features/groups/GroupScreen";
 import { PersonScreen } from "@/features/groups/PersonScreen";
+import { BalancesScreen } from "@/features/groups/BalancesScreen";
 import { AdminScreen } from "@/features/admin/AdminScreen";
 import { keys, useMe } from "@/hooks/queries";
 import { ApiError, post } from "@/lib/api";
@@ -119,6 +120,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
           {route.name === "home" && <GroupsScreen name={user.name} />}
           {route.name === "admin" && isAdmin && <AdminScreen adminName={user.name} />}
           {route.name === "group" && <GroupScreen groupId={route.groupId} tab={route.tab} />}
+          {route.name === "balances" && <BalancesScreen />}
           {route.name === "person" && <PersonScreen groupId={route.groupId} memberId={route.memberId} />}
         </React.Fragment>
       </AnimatePresence>

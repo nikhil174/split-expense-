@@ -2,12 +2,13 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { toast } from "sonner";
 import {
   get, post, type AccessRequest, type AdminDashboard, type AdminExpense, type AdminGroup, type Balance, type Dashboard,
-  type Debt, type Expense, type GroupDetail, type GroupSummary, type Me, type MergePreview, type Mine, type PersonView, type Settlement,
+  type Debt, type Expense, type GroupDetail, type GroupSummary, type Me, type MergePreview, type Mine, type PeopleBalances, type PersonView, type Settlement,
 } from "@/lib/api";
 
 export const keys = {
   me: ["me"] as const,
   groups: ["groups"] as const,
+  people: ["people-balances"] as const,
   group: (id: string) => ["group", id] as const,
   admin: ["admin"] as const,
 };
@@ -15,6 +16,8 @@ export const keys = {
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => get<Me>("/api/me"), staleTime: 60_000 });
 export const useGroups = (enabled = true) =>
   useQuery({ queryKey: keys.groups, queryFn: () => get<{ groups: GroupSummary[] }>("/api/groups").then(d => d.groups), enabled });
+
+export const usePeopleBalances = () => useQuery({ queryKey: keys.people, queryFn: () => get<PeopleBalances>("/api/balances") });
 
 // Every group-scoped query shares the ["group", id] prefix, so one
 // invalidation after a write refreshes the whole screen.
@@ -32,7 +35,7 @@ export const useDashboard = (id: string) => useQuery(groupQuery<Dashboard>(id, "
 export const usePerson = (id: string, memberId: string) => useQuery(groupQuery<PersonView>(id, "person-" + memberId, "/with/" + encodeURIComponent(memberId)));
 
 export function refreshGroup(qc: QueryClient, groupId: string) {
-  return Promise.all([qc.invalidateQueries({ queryKey: keys.group(groupId) }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.admin })]);
+  return Promise.all([qc.invalidateQueries({ queryKey: keys.group(groupId) }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.admin })]);
 }
 
 export type NewExpense =
