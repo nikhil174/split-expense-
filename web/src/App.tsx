@@ -41,7 +41,7 @@ export default function App() {
       <LazyMotion features={loadMotionFeatures} strict>
         <Root />
       </LazyMotion>
-      <Toaster position="bottom-center" offset={{ bottom: 100 }} mobileOffset={{ bottom: 100, left: 16, right: 16 }} toastOptions={{ classNames: { toast: "!rounded-[20px] !border-0 !bg-[#1b2623]/92 !text-white !text-[14px] !shadow-[0_14px_36px_-10px_rgb(0_0_0/40%)] backdrop-blur-xl", description: "!text-white/70", success: "[&_[data-icon]]:!text-[#3ee0a6]", error: "[&_[data-icon]]:!text-[#ff7b80]" } }} />
+      <Toaster position="bottom-center" offset={{ bottom: 100 }} mobileOffset={{ bottom: 100, left: 16, right: 16 }} toastOptions={{ classNames: { toast: "!rounded-[20px] !border-0 !bg-[#141716]/95 !text-white !text-[14px] !shadow-[0_14px_36px_-10px_rgb(0_0_0/40%)] backdrop-blur-xl", description: "!text-white/70", success: "[&_[data-icon]]:!text-[#8fd6b8]", error: "[&_[data-icon]]:!text-[#f2a492]" } }} />
     </QueryClientProvider>
   );
 }
@@ -83,7 +83,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
   const screenKey = route.name === "group" ? "group-" + route.groupId : route.name === "person" ? "person-" + route.groupId + route.memberId : route.name;
   return (
     <div className="min-h-dvh overflow-x-clip">
-      <header className="sticky top-0 z-30 bg-[#f3f6f5]/70 pt-[env(safe-area-inset-top)] backdrop-blur-2xl backdrop-saturate-150">
+      <header className="sticky top-0 z-30 bg-[#f7f7f5]/70 pt-[env(safe-area-inset-top)] backdrop-blur-2xl backdrop-saturate-150">
         <div className="mx-auto flex h-[58px] max-w-2xl items-center gap-3 px-4">
           <button type="button" onClick={() => navigate({ name: isAdmin && view === "admin" ? "admin" : "home" })} className="flex cursor-pointer items-baseline gap-1.5" aria-label="Home">
             <Wordmark />
@@ -102,6 +102,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
               <DropdownMenuLabel className="font-normal">
                 <p className="headline">{user.name}</p>
                 <p className="text-xs text-muted-foreground">{isAdmin ? "Administrator · also a member" : "Member"}</p>
+                <p className="mt-1.5 text-[11px] text-muted-foreground/70">Build {__BUILD__}</p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={e => { e.preventDefault(); signOut(); }} disabled={signingOut}><LogOut />{signingOut ? "Signing out…" : "Sign out"}</DropdownMenuItem>

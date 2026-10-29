@@ -65,7 +65,7 @@ export function AuthScreen() {
       <div className="mx-auto flex min-h-dvh max-w-md flex-col px-4 pt-[max(3rem,env(safe-area-inset-top))] pb-10">
         <m.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.45, ease: EASE }} className="flex flex-col items-center text-center">
           <Wordmark large />
-          <h1 className="mt-5 text-[32px] leading-[38px] font-semibold tracking-[-0.025em]">Split Expense</h1>
+          <h1 className="mt-5 text-[32px] leading-[38px] font-medium tracking-[-0.03em]">Split Expense</h1>
           <p className="mt-2 max-w-[30ch] text-[15px] text-muted-foreground">Track shared spending, see exactly who owes whom, and settle up in a tap.</p>
         </m.div>
 
@@ -130,7 +130,7 @@ export function AuthScreen() {
             </AnimatePresence>
           </div>
         </m.div>
-        <p className="footnote mt-auto pt-10 text-center text-muted-foreground">Amounts are kept to the exact paisa.</p>
+        <p className="footnote mt-auto pt-10 text-center text-muted-foreground">Amounts are kept to the exact paisa.<span className="mt-1 block text-[11px] opacity-60">Build {__BUILD__}</span></p>
       </div>
     </div>
   );

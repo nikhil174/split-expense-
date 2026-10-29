@@ -33,13 +33,13 @@ export function AdminScreen({ adminName }: { adminName: string }) {
       <p className="inline-flex items-center gap-1.5 px-1 text-[15px] text-muted-foreground"><ShieldCheck className="size-4" />Administrator</p>
       <h1 className="page-title px-1">Overview</h1>
       <AquaCard className="mt-5">
-        <p className="text-[14px] text-white/85">Total recorded spend</p>
-        <div className="mt-2 min-h-11">{s ? <AnimatedMoney cents={s.totalSpentCents} size="hero" /> : <Skeleton className="h-11 w-48 bg-white/25" />}</div>
+        <p className="eyebrow">Total recorded spend</p>
+        <div className="mt-2 min-h-11">{s ? <AnimatedMoney cents={s.totalSpentCents} size="hero" /> : <Skeleton className="h-11 w-48" />}</div>
         <div className="mt-5 grid grid-cols-4 gap-2">
           {[["Groups", s?.groups], ["Members", s?.members], ["Pending", s?.pending], ["Expenses", s?.expenses]].map(([label, value]) => (
-            <div key={label as string} className="rounded-[16px] bg-white/16 px-1 py-2.5 text-center backdrop-blur-sm">
-              <p className="tabular text-[20px] leading-none font-semibold">{value ?? "–"}</p>
-              <p className="mt-1 text-[11.5px] text-white/80">{label}</p>
+            <div key={label as string} className="rounded-[14px] bg-[#141716]/[0.035] px-1 py-2.5 text-center">
+              <p className="tabular text-[20px] leading-none font-medium">{value ?? "–"}</p>
+              <p className="mt-1 text-[11.5px] text-muted-foreground">{label}</p>
             </div>
           ))}
         </div>
@@ -49,7 +49,7 @@ export function AdminScreen({ adminName }: { adminName: string }) {
         {duplicates.map(d => (
           <m.div key={d.id} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
             <div className="panel mt-4 flex items-start gap-3 p-4">
-              <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-primary/10 text-primary"><UserCheck className="size-5" /></span>
+              <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-[#141716]/[0.05] text-foreground"><UserCheck className="size-5" strokeWidth={1.8} /></span>
               <div className="min-w-0 flex-1 text-sm">
                 <p className="font-medium">You also have a separate member entry in {d.groupName}</p>
                 <p className="mt-0.5 text-muted-foreground">“{d.name}” is treated as a different person. Merge it so you're one person with an admin view and a normal view.</p>
@@ -60,7 +60,7 @@ export function AdminScreen({ adminName }: { adminName: string }) {
         ))}
       </AnimatePresence>
 
-      <div className="sticky top-[58px] z-20 -mx-4 mt-5 bg-[#f3f6f5]/70 px-4 py-2 backdrop-blur-2xl"><Segmented id="admin-tab" value={tab} onChange={setTab} options={[
+      <div className="sticky top-[58px] z-20 -mx-4 mt-5 bg-[#f7f7f5]/70 px-4 py-2 backdrop-blur-2xl"><Segmented id="admin-tab" value={tab} onChange={setTab} options={[
         { value: "requests", label: <>Requests{pending > 0 && <span className="ml-1 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-negative px-1 text-[11px] font-semibold text-white">{pending}</span>}</> },
         { value: "groups", label: "Groups" },
         { value: "expenses", label: "Expenses" },
@@ -79,9 +79,9 @@ export function AdminScreen({ adminName }: { adminName: string }) {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-[#fff4db] text-[#b77900]",
+  pending: "bg-[#f4efe4] text-[#86651f]",
   approved: "bg-positive-soft text-positive",
-  revoked: "bg-[#0e1a16]/[0.05] text-muted-foreground",
+  revoked: "bg-[#141716]/[0.05] text-muted-foreground",
   rejected: "bg-negative-soft text-negative",
 };
 
@@ -222,7 +222,7 @@ function ConfirmDialog({ confirm, onClose }: { confirm: Confirm | null; onClose:
       <AlertDialogContent className="max-w-[360px] rounded-[26px] border-0 p-6">
         <AlertDialogHeader><AlertDialogTitle className="title-2">{confirm?.title}</AlertDialogTitle><AlertDialogDescription>{confirm?.body}</AlertDialogDescription></AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={busy} className="rounded-full border-0 bg-[#0e1a16]/[0.06] shadow-none">Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy} className="rounded-full border-0 bg-[#141716]/[0.06] shadow-none">Cancel</AlertDialogCancel>
           <LoadingButton variant={confirm?.destructive ? "destructive" : "default"} loading={busy} onClick={async () => {
             if (!confirm) return;
             setBusy(true);
@@ -260,7 +260,7 @@ function MergeDialog({ request, onClose }: { request: AccessRequest | null; onCl
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={merge.isPending} className="rounded-full border-0 bg-[#0e1a16]/[0.06] shadow-none">Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={merge.isPending} className="rounded-full border-0 bg-[#141716]/[0.06] shadow-none">Cancel</AlertDialogCancel>
           <LoadingButton loading={merge.isPending} loadingText="Merging…" disabled={!p} onClick={() => request && merge.mutate(request.id, { onSuccess: onClose })}>Merge into me</LoadingButton>
         </AlertDialogFooter>
       </AlertDialogContent>

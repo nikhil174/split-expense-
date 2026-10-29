@@ -30,7 +30,7 @@ export function PersonScreen({ groupId, memberId }: { groupId: string; memberId:
 
       <div className="panel mt-4 flex flex-col items-center px-5 pt-6 pb-6 text-center">
         {d ? <PersonAvatar id={memberId} name={d.other.name} size="lg" className="size-20 text-[30px]" /> : <Skeleton className="size-20 rounded-full" />}
-        {d ? <h1 className="mt-3 text-[24px] leading-[30px] font-semibold tracking-[-0.02em]">You & {d.other.name}</h1> : <Skeleton className="mt-3 h-7 w-40" />}
+        {d ? <h1 className="mt-3 text-[24px] leading-[30px] font-medium tracking-[-0.02em]">You & {d.other.name}</h1> : <Skeleton className="mt-3 h-7 w-40" />}
         {d && (
           <>
             <p className={cn("mt-1 text-[14px] font-medium", n > 0 ? "text-positive" : n < 0 ? "text-negative" : "text-muted-foreground")}>
@@ -44,9 +44,9 @@ export function PersonScreen({ groupId, memberId }: { groupId: string; memberId:
       {d && n !== 0 && (
         <div className="mt-4">
           {n < 0 && myDebt && <Button size="xl" className="w-full" onClick={() => setSettling(myDebt)}><HandCoins className="size-5" />Pay {d.other.name}</Button>}
-          {n < 0 && !myDebt && debts.data && <p className="subhead rounded-[18px] bg-white/70 px-4 py-3 text-muted-foreground">{d.other.name} is no longer an active member. Ask the admin to record this payment.</p>}
+          {n < 0 && !myDebt && debts.data && <p className="subhead rounded-[18px] bg-[#141716]/[0.035] px-4 py-3 text-muted-foreground">{d.other.name} is no longer an active member. Ask the admin to record this payment.</p>}
           {n > 0 && theirDebt && <Button size="xl" variant="secondary" className="w-full" onClick={() => setSettling(theirDebt)}>Record payment from {d.other.name}</Button>}
-          {n > 0 && !theirDebt && debts.data && <p className="subhead rounded-[18px] bg-white/70 px-4 py-3 text-center text-muted-foreground">Waiting for {d.other.name} to record their payment.</p>}
+          {n > 0 && !theirDebt && debts.data && <p className="subhead rounded-[18px] bg-[#141716]/[0.035] px-4 py-3 text-center text-muted-foreground">Waiting for {d.other.name} to record their payment.</p>}
         </div>
       )}
 

@@ -19,7 +19,7 @@ export function SheetHeader({ title, description, disabled }: { title: string; d
         <DrawerTitle className="text-[22px] leading-7 font-semibold tracking-[-0.02em]">{title}</DrawerTitle>
         <DrawerDescription className="mt-0.5 text-[13.5px] text-muted-foreground">{description}</DrawerDescription>
       </div>
-      <DrawerClose disabled={disabled} aria-label="Cancel" className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-[#0e1a16]/[0.06] text-foreground transition-transform active:scale-90 disabled:opacity-40"><X className="size-[18px]" strokeWidth={2.4} /></DrawerClose>
+      <DrawerClose disabled={disabled} aria-label="Cancel" className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-[#141716]/[0.06] text-foreground transition-transform active:scale-90 disabled:opacity-40"><X className="size-[18px]" strokeWidth={2.4} /></DrawerClose>
     </div>
   );
 }
@@ -80,7 +80,7 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
             <div className="grid grid-cols-[1.1fr_1fr] gap-3">
               <div>
                 <label htmlFor="exp-amount" className="eyebrow mb-2 block px-1">Total</label>
-                <div className="flex h-12 items-center rounded-[16px] border border-[#0e1a16]/[0.08] bg-white px-4 shadow-[0_1px_2px_rgb(16_40_32/4%)] transition-[border-color,box-shadow] focus-within:border-primary/50 focus-within:ring-[3px] focus-within:ring-primary/15">
+                <div className="flex h-12 items-center rounded-[16px] border border-[#141716]/[0.08] bg-white px-4 shadow-[0_1px_2px_rgb(16_40_32/4%)] transition-[border-color,box-shadow] focus-within:border-primary/50 focus-within:ring-[3px] focus-within:ring-primary/15">
                   <span className="mr-1 text-[16px] text-muted-foreground">₹</span>
                   <input id="exp-amount" required inputMode="decimal" type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className="tabular h-full w-full min-w-0 bg-transparent text-[18px] font-semibold outline-none" />
                 </div>
@@ -106,7 +106,7 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
                           <button key={mm.id} type="button" role="checkbox" aria-checked={on} onClick={() => toggle(mm.id)} className={pressableRow}>
                             <PersonAvatar id={mm.id} name={mm.name} size="sm" />
                             <span className="flex-1 truncate text-[15px]">{label(mm.id, mm.name)}</span>
-                            <span className={cn("grid size-[22px] place-items-center rounded-full border-2 transition-colors duration-150", on ? "border-primary bg-primary text-white" : "border-[#0e1a16]/20")}><Check className={cn("size-3.5 transition-opacity", on ? "opacity-100" : "opacity-0")} strokeWidth={3.2} /></span>
+                            <span className={cn("grid size-[22px] place-items-center rounded-full border-2 transition-colors duration-150", on ? "border-primary bg-primary text-white" : "border-[#141716]/20")}><Check className={cn("size-3.5 transition-opacity", on ? "opacity-100" : "opacity-0")} strokeWidth={3.2} /></span>
                           </button>
                         );
                       })}
@@ -125,7 +125,7 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
                           <label htmlFor={"manual-" + mm.id} className="min-w-0 flex-1 truncate text-[15px]">{label(mm.id, mm.name)}</label>
                           <span className="text-[15px] text-muted-foreground">₹</span>
                           <input id={"manual-" + mm.id} aria-label={"Exact share for " + mm.name} inputMode="decimal" type="number" min="0" step="0.01" placeholder="0.00"
-                            value={manual[mm.id] || ""} onChange={e => setManual(v => ({ ...v, [mm.id]: e.target.value }))} className="tabular h-9 w-24 min-w-0 rounded-[12px] bg-[#0e1a16]/[0.04] px-2.5 text-right text-[15px] font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/30" />
+                            value={manual[mm.id] || ""} onChange={e => setManual(v => ({ ...v, [mm.id]: e.target.value }))} className="tabular h-9 w-24 min-w-0 rounded-[12px] bg-[#141716]/[0.04] px-2.5 text-right text-[15px] font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/30" />
                         </div>
                       ))}
                     </List>
@@ -136,7 +136,7 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
             </div>
             <AnimatePresence>{error && <m.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} role="alert" className="subhead rounded-[16px] bg-negative-soft px-4 py-3 text-negative">{error}</m.p>}</AnimatePresence>
           </div>
-          <div className="safe-bottom bg-[#f7f9f8]/90 px-4 pt-3 backdrop-blur-xl">
+          <div className="safe-bottom bg-[#fbfbf9]/90 px-4 pt-3 backdrop-blur-xl">
             <LoadingButton type="submit" size="xl" className="w-full" disabled={!valid} loading={add.isPending} loadingText="Saving…">
               {total ? `Save ${inr(total)} expense` : "Save expense"}
             </LoadingButton>
@@ -157,7 +157,7 @@ function ManualMeter({ allocated, total }: { allocated: number | null; total: nu
         <span className="tabular text-muted-foreground">Allocated {inr(allocated)} of {inr(total)}</span>
         <span className={cn("font-semibold", done ? "text-positive" : over ? "text-negative" : "text-muted-foreground")}>{done ? "✓ Exact" : over ? inr(allocated - total) + " over" : inr(total - allocated) + " left"}</span>
       </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#0e1a16]/[0.06]">
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#141716]/[0.06]">
         <m.div className={cn("h-full rounded-full", done ? "bg-positive" : over ? "bg-negative" : "bg-tint")} animate={{ width: pct + "%" }} transition={{ duration: 0.25, ease: EASE }} />
       </div>
     </div>

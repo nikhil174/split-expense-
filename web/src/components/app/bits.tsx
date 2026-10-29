@@ -17,7 +17,8 @@ export function haptic(pattern: number | number[] = 12) {
 }
 
 // Pastel initials disc; each person keeps a stable colour.
-const PASTELS: [string, string][] = [["#dff7ec", "#00895b"], ["#e3eeff", "#2f6fdb"], ["#efe7ff", "#7b4bd6"], ["#ffece1", "#d9601a"], ["#fff6d6", "#a77a00"], ["#ffe6ec", "#d0325b"], ["#e0f6f8", "#0a8fa6"]];
+// Quiet, near-neutral tones so people read as a set, not a rainbow.
+const PASTELS: [string, string][] = [["#efeee9", "#3b403d"], ["#ecefed", "#334039"], ["#eeedf0", "#3b3a44"], ["#f0ede9", "#45392f"]];
 export function PersonAvatar({ id, name, size = "md", className }: { id?: string; name: string; size?: "sm" | "md" | "lg"; className?: string }) {
   let h = 0;
   for (const c of id || name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -36,8 +37,8 @@ export function CategoryTile({ description, size = "md" }: { description: string
   const c = categoryOf(description);
   const Icon = c.icon;
   return (
-    <span aria-hidden="true" style={{ background: c.bg, color: c.fg }} className={cn("grid shrink-0 place-items-center rounded-[13px]", size === "md" ? "size-10" : "size-8 rounded-[11px]")}>
-      <Icon className={size === "md" ? "size-[19px]" : "size-4"} strokeWidth={2.2} />
+    <span aria-hidden="true" className={cn("grid shrink-0 place-items-center rounded-[13px] bg-[#f2f2ef] text-[#3b403d] ring-1 ring-[#141716]/[0.04] ring-inset", size === "md" ? "size-10" : "size-8 rounded-[11px]")}>
+      <Icon className={size === "md" ? "size-[18px]" : "size-4"} strokeWidth={1.8} />
     </span>
   );
 }
@@ -47,7 +48,7 @@ export function Money({ cents, size = "md", className, sign }: { cents: number; 
   const abs = Math.abs(cents);
   const rupees = Math.floor(abs / 100).toLocaleString("en-IN");
   const paise = String(abs % 100).padStart(2, "0");
-  const sizes = { md: "text-[16px] font-semibold", lg: "text-[26px] font-semibold", xl: "text-[36px] font-semibold", hero: "text-[44px] font-semibold" };
+  const sizes = { md: "text-[16px] font-medium", lg: "text-[26px] font-medium", xl: "text-[36px] font-medium", hero: "text-[46px] font-medium" };
   return (
     // Plain inline spans (not flex) so it reads and copies as "₹992.50".
     <span className={cn("tabular inline-block leading-none tracking-[-0.03em] whitespace-nowrap", sizes[size], className)}>
@@ -115,7 +116,7 @@ export function Segmented<T extends string>({ value, onChange, options, id, clas
   value: T; onChange: (v: T) => void; options: { value: T; label: React.ReactNode }[]; id: string; className?: string;
 }) {
   return (
-    <div role="tablist" className={cn("relative grid rounded-full bg-[#0e1a16]/[0.06] p-1", className)} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+    <div role="tablist" className={cn("relative grid rounded-full bg-[#141716]/[0.06] p-1", className)} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map(o => {
         const active = o.value === value;
         return (
@@ -142,9 +143,9 @@ export function BottomTabs<T extends string>({ value, onChange, options, id }: {
           const Icon = o.icon;
           return (
             <button key={o.value} type="button" role="tab" aria-selected={active} onClick={() => { if (!active) { haptic(6); onChange(o.value); } }}
-              className={cn("relative z-10 flex h-[52px] cursor-pointer flex-col items-center justify-center gap-0.5 rounded-[20px] text-[11.5px] font-medium transition-colors duration-200", active ? "text-primary" : "text-muted-foreground")}>
-              {active && <m.span layoutId={id} className="absolute inset-0 -z-10 rounded-[20px] bg-primary/12" transition={SPRING} />}
-              <Icon className="size-[21px]" strokeWidth={active ? 2.4 : 2} />
+              className={cn("relative z-10 flex h-[52px] cursor-pointer flex-col items-center justify-center gap-0.5 rounded-[20px] text-[11.5px] font-medium transition-colors duration-200", active ? "text-foreground" : "text-muted-foreground")}>
+              {active && <m.span layoutId={id} className="absolute inset-0 -z-10 rounded-[20px] bg-[#141716]/[0.06]" transition={SPRING} />}
+              <Icon className="size-[20px]" strokeWidth={active ? 2 : 1.6} />
               {o.label}
             </button>
           );
@@ -159,7 +160,7 @@ export function TopProgress() {
   const busy = useIsFetching() + useIsMutating() > 0;
   return (
     <div aria-hidden="true" className={cn("pointer-events-none absolute inset-x-0 bottom-0 h-[2px] overflow-hidden transition-opacity duration-300", busy ? "opacity-100" : "opacity-0")}>
-      <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-primary to-transparent" style={{ animation: "loadbar 1.1s ease-in-out infinite" }} />
+      <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-[#141716]/60 to-transparent" style={{ animation: "loadbar 1.1s ease-in-out infinite" }} />
     </div>
   );
 }
@@ -181,7 +182,7 @@ export function Page({ children, className }: { children: React.ReactNode; class
 export function EmptyState({ icon, title, children }: { icon: React.ReactNode; title: string; children?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center px-6 py-10 text-center">
-      <div className="mb-3 grid size-14 place-items-center rounded-[18px] bg-primary/10 text-primary [&_svg]:size-6">{icon}</div>
+      <div className="mb-3 grid size-12 place-items-center rounded-full bg-[#141716]/[0.04] text-foreground [&_svg]:size-5 [&_svg]:stroke-[1.7]">{icon}</div>
       <p className="title-2">{title}</p>
       {children && <div className="subhead mt-1.5 max-w-xs text-muted-foreground">{children}</div>}
     </div>
@@ -212,7 +213,7 @@ export function List({ children, className, inset = 16 }: { children: React.Reac
 }
 
 export const rowClass = "flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left";
-export const pressableRow = cn(rowClass, "cursor-pointer transition-colors duration-150 active:bg-[#0e1a16]/[0.05] [@media(hover:hover)]:hover:bg-[#0e1a16]/[0.025]");
+export const pressableRow = cn(rowClass, "cursor-pointer transition-colors duration-150 active:bg-[#141716]/[0.05] [@media(hover:hover)]:hover:bg-[#141716]/[0.025]");
 
 export const listItem = {
   initial: { opacity: 0, y: 8 },
@@ -220,17 +221,17 @@ export const listItem = {
   exit: { opacity: 0, transition: { duration: 0.15 } },
 };
 
-export const fieldClass = "h-12 w-full rounded-[16px] border border-[#0e1a16]/[0.08] bg-white px-4 text-[15px] text-foreground shadow-[0_1px_2px_rgb(16_40_32/4%)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground/70 focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15 disabled:opacity-50";
-export const searchFieldClass = "h-11 w-full rounded-full border border-[#0e1a16]/[0.06] bg-white/80 pl-10 pr-4 text-[15px] shadow-[0_1px_2px_rgb(16_40_32/4%)] outline-none placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15";
+export const fieldClass = "h-12 w-full rounded-[16px] border border-[#141716]/[0.08] bg-white px-4 text-[15px] text-foreground shadow-[0_1px_2px_rgb(16_40_32/4%)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground/70 focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15 disabled:opacity-50";
+export const searchFieldClass = "h-11 w-full rounded-full border border-[#141716]/[0.06] bg-white/80 pl-10 pr-4 text-[15px] shadow-[0_1px_2px_rgb(16_40_32/4%)] outline-none placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15";
 
 // App mark: green squircle with an arrow, and "Split".
 export function Wordmark({ large }: { large?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2">
-      <span className={cn("grid place-items-center bg-gradient-to-br from-[#14d39a] to-[#00a3a3] text-white shadow-[0_6px_16px_-4px_rgb(0_168_112/45%)]", large ? "size-[68px] rounded-[22px]" : "size-8 rounded-[10px]")}>
+      <span className={cn("grid place-items-center bg-[#141716] text-white shadow-[0_6px_16px_-8px_rgb(20_23_22/50%)]", large ? "size-[64px] rounded-[20px]" : "size-8 rounded-[10px]")}>
         <svg viewBox="0 0 24 24" className={large ? "size-8" : "size-4"} fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M6 16 18 8M11 8h7v7" /></svg>
       </span>
-      {!large && <span className="text-[18px] font-semibold tracking-[-0.02em]">Split</span>}
+      {!large && <span className="text-[18px] font-medium tracking-[-0.03em]">Split</span>}
     </span>
   );
 }
