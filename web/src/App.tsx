@@ -3,9 +3,8 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { AnimatePresence, LazyMotion } from "motion/react";
 import { LogOut } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
-import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PersonAvatar, Segmented, TopProgress } from "@/components/app/bits";
+import { PersonAvatar, Segmented, TopProgress, Wordmark } from "@/components/app/bits";
 import { AuthScreen } from "@/features/auth/AuthScreen";
 import { GroupsScreen } from "@/features/groups/GroupsScreen";
 import { GroupScreen } from "@/features/groups/GroupScreen";
@@ -42,7 +41,7 @@ export default function App() {
       <LazyMotion features={loadMotionFeatures} strict>
         <Root />
       </LazyMotion>
-      <Toaster position="top-center" richColors closeButton toastOptions={{ className: "rounded-2xl" }} />
+      <Toaster position="bottom-center" offset={{ bottom: 100 }} mobileOffset={{ bottom: 100, left: 16, right: 16 }} toastOptions={{ classNames: { toast: "!rounded-[20px] !border-0 !bg-[#1b2623]/92 !text-white !text-[14px] !shadow-[0_14px_36px_-10px_rgb(0_0_0/40%)] backdrop-blur-xl", description: "!text-white/70", success: "[&_[data-icon]]:!text-[#3ee0a6]", error: "[&_[data-icon]]:!text-[#ff7b80]" } }} />
     </QueryClientProvider>
   );
 }
@@ -50,7 +49,7 @@ export default function App() {
 function Splash() {
   return (
     <div className="grid min-h-dvh place-items-center">
-      <div className="size-10 animate-pulse rounded-xl bg-primary/80" />
+      <span className="animate-pulse"><Wordmark large /></span>
     </div>
   );
 }
@@ -83,28 +82,25 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
   const view = route.name === "admin" ? "admin" : "groups";
   const screenKey = route.name === "group" ? "group-" + route.groupId : route.name === "person" ? "person-" + route.groupId + route.memberId : route.name;
   return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 border-b bg-background/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-        <div className="mx-auto flex h-[60px] max-w-2xl items-center gap-3 px-4">
-          <button type="button" onClick={() => navigate({ name: isAdmin && view === "admin" ? "admin" : "home" })} className="flex cursor-pointer items-center gap-2" aria-label="Home">
-            <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground shadow-md shadow-primary/30">
-              <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round"><path d="M6 16 18 8M11 8h7v7" /></svg>
-            </span>
-            <span className="hidden font-bold tracking-tight sm:block">Split Expense</span>
+    <div className="min-h-dvh overflow-x-clip">
+      <header className="sticky top-0 z-30 bg-[#f3f6f5]/70 pt-[env(safe-area-inset-top)] backdrop-blur-2xl backdrop-saturate-150">
+        <div className="mx-auto flex h-[58px] max-w-2xl items-center gap-3 px-4">
+          <button type="button" onClick={() => navigate({ name: isAdmin && view === "admin" ? "admin" : "home" })} className="flex cursor-pointer items-baseline gap-1.5" aria-label="Home">
+            <Wordmark />
           </button>
-          <div className="flex-1">
+          <div className="flex flex-1 justify-end">
             {isAdmin && (
-              <Segmented id="view-switch" className="mx-auto max-w-56" value={view} onChange={v => navigate({ name: v === "admin" ? "admin" : "home" })}
-                options={[{ value: "groups", label: "My groups" }, { value: "admin", label: "Admin" }]} />
+              <Segmented id="view-switch" className="w-[164px]" value={view} onChange={v => navigate({ name: v === "admin" ? "admin" : "home" })}
+                options={[{ value: "groups", label: "Home" }, { value: "admin", label: "Admin" }]} />
             )}
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full" aria-label="Account"><PersonAvatar id={user.id} name={user.name} size="sm" /></Button>
+              <button type="button" className="cursor-pointer rounded-full transition-transform active:scale-95" aria-label="Account"><PersonAvatar id={user.id} name={user.name} size="sm" /></button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-60 rounded-[18px] border-white/80 bg-white/95 p-1.5 shadow-[0_16px_40px_-12px_rgb(16_40_32/25%)] backdrop-blur-xl">
               <DropdownMenuLabel className="font-normal">
-                <p className="font-semibold">{user.name}</p>
+                <p className="headline">{user.name}</p>
                 <p className="text-xs text-muted-foreground">{isAdmin ? "Administrator · also a member" : "Member"}</p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

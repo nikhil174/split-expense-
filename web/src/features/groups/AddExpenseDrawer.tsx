@@ -1,16 +1,28 @@
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { Check } from "lucide-react";
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Check, X } from "lucide-react";
+import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { EASE, LoadingButton, PersonAvatar, Segmented } from "@/components/app/bits";
+import { EASE, Footnote, List, LoadingButton, NativeSelect, PersonAvatar, SectionTitle, Segmented, fieldClass, haptic, pressableRow, rowClass } from "@/components/app/bits";
 import { useAddExpense, useGroup, type NewExpense } from "@/hooks/queries";
 import { inr, toCents } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 type Mode = "equal" | "manual";
+
+// Sheet header: bold title on the left, round close button on the right.
+export function SheetHeader({ title, description, disabled }: { title: string; description: string; disabled?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-5 pt-3 pb-3">
+      <div className="min-w-0">
+        <DrawerTitle className="text-[22px] leading-7 font-semibold tracking-[-0.02em]">{title}</DrawerTitle>
+        <DrawerDescription className="mt-0.5 text-[13.5px] text-muted-foreground">{description}</DrawerDescription>
+      </div>
+      <DrawerClose disabled={disabled} aria-label="Cancel" className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-[#0e1a16]/[0.06] text-foreground transition-transform active:scale-90 disabled:opacity-40"><X className="size-[18px]" strokeWidth={2.4} /></DrawerClose>
+    </div>
+  );
+}
 
 export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: string; open: boolean; onOpenChange: (o: boolean) => void }) {
   const group = useGroup(groupId);
@@ -29,8 +41,8 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
   React.useEffect(() => {
     if (!open) return;
     setDescription(""); setAmount(""); setMode("equal"); setManual({}); setError("");
-    setPaidBy(members.some(m => m.id === meId) ? meId! : members[0]?.id || "");
-    setSelected(new Set(members.map(m => m.id)));
+    setPaidBy(members.some(mm => mm.id === meId) ? meId! : members[0]?.id || "");
+    setSelected(new Set(members.map(mm => mm.id)));
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = toCents(amount);
@@ -50,89 +62,81 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
       ? { description: description.trim(), amount: amount.trim(), paidBy, splitMode: "equal", memberIds: [...selected] }
       : { description: description.trim(), amount: amount.trim(), paidBy, splitMode: "manual", allocations: Object.entries(manual).filter(([, v]) => v.trim()).map(([memberId, v]) => ({ memberId, amount: v.trim() })) };
     add.mutate(body, {
-      onSuccess: () => { toast.success(`“${body.description}” added · ${inr(total)}`); onOpenChange(false); },
+      onSuccess: () => { haptic(); toast.success(`“${body.description}” added · ${inr(total)}`); onOpenChange(false); },
       onError: err => setError(err.message),
     });
   };
 
   return (
     <Drawer open={open} onOpenChange={o => { if (!add.isPending) onOpenChange(o); }} repositionInputs={false}>
-      <DrawerContent className="mx-auto max-h-[94dvh] max-w-xl rounded-t-3xl">
-        <DrawerHeader className="pb-2 text-left">
-          <DrawerTitle className="text-xl">Add expense</DrawerTitle>
-          <DrawerDescription>Everyone in the split owes their share to whoever paid.</DrawerDescription>
-        </DrawerHeader>
+      <DrawerContent className="mx-auto max-h-[94dvh] max-w-xl rounded-t-[28px] border-0">
+        <SheetHeader title="Add expense" description="Everyone in the split owes their share to whoever paid." disabled={add.isPending} />
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="exp-desc">Description</Label>
-              <Input id="exp-desc" required maxLength={160} autoComplete="off" placeholder="Dinner, cab, groceries…" value={description} onChange={e => setDescription(e.target.value)} className="h-12 rounded-xl text-base" />
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pt-1 pb-5">
+            <div>
+              <label htmlFor="exp-desc" className="eyebrow mb-2 block px-1">Description</label>
+              <Input id="exp-desc" required maxLength={160} autoComplete="off" placeholder="Dinner, cab, groceries…" value={description} onChange={e => setDescription(e.target.value)} className={fieldClass} />
             </div>
             <div className="grid grid-cols-[1.1fr_1fr] gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="exp-amount">Total</Label>
-                <div className="flex h-12 items-center rounded-xl border border-input bg-card px-3 shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
-                  <span className="mr-1 text-lg font-semibold text-muted-foreground">₹</span>
-                  <input id="exp-amount" required inputMode="decimal" type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className="tabular h-full w-full min-w-0 bg-transparent text-lg font-semibold outline-none" />
+              <div>
+                <label htmlFor="exp-amount" className="eyebrow mb-2 block px-1">Total</label>
+                <div className="flex h-12 items-center rounded-[16px] border border-[#0e1a16]/[0.08] bg-white px-4 shadow-[0_1px_2px_rgb(16_40_32/4%)] transition-[border-color,box-shadow] focus-within:border-primary/50 focus-within:ring-[3px] focus-within:ring-primary/15">
+                  <span className="mr-1 text-[16px] text-muted-foreground">₹</span>
+                  <input id="exp-amount" required inputMode="decimal" type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className="tabular h-full w-full min-w-0 bg-transparent text-[18px] font-semibold outline-none" />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="exp-paid-by">Paid by</Label>
-                <select id="exp-paid-by" value={paidBy} onChange={e => setPaidBy(e.target.value)} className="h-12 w-full rounded-xl border border-input bg-card px-3 text-[15px] shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50">
-                  {members.map(m => <option key={m.id} value={m.id}>{label(m.id, m.name)}</option>)}
-                </select>
+              <div>
+                <label htmlFor="exp-paid-by" className="eyebrow mb-2 block px-1">Paid by</label>
+                <NativeSelect id="exp-paid-by" value={paidBy} onChange={e => setPaidBy(e.target.value)}>
+                  {members.map(mm => <option key={mm.id} value={mm.id}>{label(mm.id, mm.name)}</option>)}
+                </NativeSelect>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Split</Label>
-                {mode === "equal" && <button type="button" className="cursor-pointer text-xs font-medium text-primary" onClick={() => setSelected(n === members.length ? new Set() : new Set(members.map(m => m.id)))}>{n === members.length ? "Clear all" : "Select all"}</button>}
-              </div>
+            <div>
               <Segmented id="split-mode" value={mode} onChange={setMode} options={[{ value: "equal", label: "Equally" }, { value: "manual", label: "Exact amounts" }]} />
               <AnimatePresence mode="wait" initial={false}>
                 {mode === "equal" ? (
-                  <m.div key="equal" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18, ease: EASE }}>
-                    <div className="flex flex-wrap gap-2">
-                      {members.map(m => {
-                        const on = selected.has(m.id);
+                  <m.div key="equal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15, ease: EASE }} className="mt-4">
+                    <SectionTitle action={<button type="button" className="footnote cursor-pointer text-tint" onClick={() => setSelected(n === members.length ? new Set() : new Set(members.map(mm => mm.id)))}>{n === members.length ? "Clear all" : "Select all"}</button>}>Split between</SectionTitle>
+                    <List inset={60}>
+                      {members.map(mm => {
+                        const on = selected.has(mm.id);
                         return (
-                          <button key={m.id} type="button" role="checkbox" aria-checked={on} onClick={() => toggle(m.id)}
-                            className={cn("flex cursor-pointer items-center gap-2 rounded-full border py-1 pr-3 pl-1 text-sm font-medium transition-all active:scale-95",
-                              on ? "border-primary bg-primary/10 text-foreground" : "border-border bg-card text-muted-foreground")}>
-                            <span className="relative"><PersonAvatar id={m.id} name={m.name} size="sm" className={cn("transition-opacity", !on && "opacity-40")} />
-                              {on && <span className="absolute -right-0.5 -bottom-0.5 grid size-4 place-items-center rounded-full bg-primary text-primary-foreground ring-2 ring-card"><Check className="size-2.5" strokeWidth={3.5} /></span>}
-                            </span>
-                            {label(m.id, m.name)}
+                          <button key={mm.id} type="button" role="checkbox" aria-checked={on} onClick={() => toggle(mm.id)} className={pressableRow}>
+                            <PersonAvatar id={mm.id} name={mm.name} size="sm" />
+                            <span className="flex-1 truncate text-[15px]">{label(mm.id, mm.name)}</span>
+                            <span className={cn("grid size-[22px] place-items-center rounded-full border-2 transition-colors duration-150", on ? "border-primary bg-primary text-white" : "border-[#0e1a16]/20")}><Check className={cn("size-3.5 transition-opacity", on ? "opacity-100" : "opacity-0")} strokeWidth={3.2} /></span>
                           </button>
                         );
                       })}
-                    </div>
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      {!n ? "Choose at least one person." : total ? <><span className="tabular font-semibold text-foreground">{inr(Math.floor(total / n))}{total % n ? "–" + inr(Math.ceil(total / n)) : ""}</span> each · {n} {n === 1 ? "person" : "people"}</> : `${n} ${n === 1 ? "person" : "people"} selected`}
-                    </p>
+                    </List>
+                    <Footnote>
+                      {!n ? "Choose at least one person." : total ? <><span className="tabular text-foreground">{inr(Math.floor(total / n))}{total % n ? "–" + inr(Math.ceil(total / n)) : ""}</span> each · {n} {n === 1 ? "person" : "people"}</> : `${n} ${n === 1 ? "person" : "people"} selected`}
+                    </Footnote>
                   </m.div>
                 ) : (
-                  <m.div key="manual" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18, ease: EASE }} className="space-y-2">
-                    {members.map(m => (
-                      <div key={m.id} className="flex items-center gap-3">
-                        <PersonAvatar id={m.id} name={m.name} size="sm" />
-                        <label htmlFor={"manual-" + m.id} className="min-w-0 flex-1 truncate text-sm font-medium">{label(m.id, m.name)}</label>
-                        <div className="flex h-10 w-32 items-center rounded-lg border border-input bg-card px-2.5 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
-                          <span className="mr-1 text-muted-foreground">₹</span>
-                          <input id={"manual-" + m.id} aria-label={"Exact share for " + m.name} inputMode="decimal" type="number" min="0" step="0.01" placeholder="0.00"
-                            value={manual[m.id] || ""} onChange={e => setManual(v => ({ ...v, [m.id]: e.target.value }))} className="tabular w-full min-w-0 bg-transparent text-right outline-none" />
+                  <m.div key="manual" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15, ease: EASE }} className="mt-4">
+                    <SectionTitle>Exact shares</SectionTitle>
+                    <List inset={60}>
+                      {members.map(mm => (
+                        <div key={mm.id} className={rowClass}>
+                          <PersonAvatar id={mm.id} name={mm.name} size="sm" />
+                          <label htmlFor={"manual-" + mm.id} className="min-w-0 flex-1 truncate text-[15px]">{label(mm.id, mm.name)}</label>
+                          <span className="text-[15px] text-muted-foreground">₹</span>
+                          <input id={"manual-" + mm.id} aria-label={"Exact share for " + mm.name} inputMode="decimal" type="number" min="0" step="0.01" placeholder="0.00"
+                            value={manual[mm.id] || ""} onChange={e => setManual(v => ({ ...v, [mm.id]: e.target.value }))} className="tabular h-9 w-24 min-w-0 rounded-[12px] bg-[#0e1a16]/[0.04] px-2.5 text-right text-[15px] font-semibold text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/30" />
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </List>
                     <ManualMeter allocated={manualInvalid ? null : allocated} total={total || 0} />
                   </m.div>
                 )}
               </AnimatePresence>
             </div>
-            <AnimatePresence>{error && <m.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} role="alert" className="rounded-xl bg-negative-soft px-3 py-2.5 text-sm font-medium text-negative">{error}</m.p>}</AnimatePresence>
+            <AnimatePresence>{error && <m.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} role="alert" className="subhead rounded-[16px] bg-negative-soft px-4 py-3 text-negative">{error}</m.p>}</AnimatePresence>
           </div>
-          <div className="safe-bottom border-t bg-background/95 px-4 pt-3 backdrop-blur">
+          <div className="safe-bottom bg-[#f7f9f8]/90 px-4 pt-3 backdrop-blur-xl">
             <LoadingButton type="submit" size="xl" className="w-full" disabled={!valid} loading={add.isPending} loadingText="Saving…">
               {total ? `Save ${inr(total)} expense` : "Save expense"}
             </LoadingButton>
@@ -144,17 +148,17 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
 }
 
 function ManualMeter({ allocated, total }: { allocated: number | null; total: number }) {
-  if (allocated === null) return <p className="text-sm font-medium text-negative">Use amounts like 250 or 249.50 (at most two decimals).</p>;
+  if (allocated === null) return <p className="footnote mt-2 px-2 text-negative">Use amounts like 250 or 249.50 (at most two decimals).</p>;
   const pct = total ? Math.min(100, (allocated / total) * 100) : 0;
   const done = total > 0 && allocated === total, over = allocated > total;
   return (
-    <div className="rounded-xl bg-muted p-3">
-      <div className="flex justify-between text-sm">
-        <span className="tabular">Allocated <b>{inr(allocated)}</b> of {inr(total)}</span>
+    <div className="mt-2.5 px-2">
+      <div className="footnote flex justify-between">
+        <span className="tabular text-muted-foreground">Allocated {inr(allocated)} of {inr(total)}</span>
         <span className={cn("font-semibold", done ? "text-positive" : over ? "text-negative" : "text-muted-foreground")}>{done ? "✓ Exact" : over ? inr(allocated - total) + " over" : inr(total - allocated) + " left"}</span>
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background">
-        <m.div className={cn("h-full rounded-full", done ? "bg-positive" : over ? "bg-negative" : "bg-primary")} animate={{ width: pct + "%" }} transition={{ duration: 0.3, ease: EASE }} />
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#0e1a16]/[0.06]">
+        <m.div className={cn("h-full rounded-full", done ? "bg-positive" : over ? "bg-negative" : "bg-tint")} animate={{ width: pct + "%" }} transition={{ duration: 0.25, ease: EASE }} />
       </div>
     </div>
   );

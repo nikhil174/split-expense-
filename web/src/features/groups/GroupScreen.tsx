@@ -1,22 +1,36 @@
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronRight, HandCoins, Plus, ReceiptText, Search, Trash2, Wallet } from "lucide-react";
+import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Amount, AnimatedAmount, DateBadge, EASE, EmptyState, Page, PersonAvatar, Segmented, SectionTitle, listItem } from "@/components/app/bits";
+import {
+  AnimatedMoney, BottomTabs, CategoryTile, DateBadge, EASE, EmptyState, Footnote, List, Page, PersonAvatar, SectionTitle, haptic, listItem, pressableRow, rowClass, searchFieldClass,
+} from "@/components/app/bits";
+import { AquaCard } from "./GroupsScreen";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
 import { useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
-import type { Debt, Expense } from "@/lib/api";
+import type { Expense } from "@/lib/api";
 import { inr, shortDate } from "@/lib/money";
 import { goBack, navigate, type GroupTab } from "@/lib/route";
 import { cn } from "@/lib/utils";
+
+const CHEVRON = "size-[18px] text-[#0e1a16]/25";
+
+// Round frosted back button with the previous screen's name.
+export function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="group inline-flex max-w-full cursor-pointer items-center gap-2 text-[14px] text-muted-foreground">
+      <span className="glass grid size-9 shrink-0 place-items-center rounded-full shadow-[0_2px_8px_rgb(16_40_32/8%)] transition-transform group-active:scale-90"><ChevronLeft className="size-5 text-foreground" strokeWidth={2.4} /></span>
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
 
 export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }) {
   const group = useGroup(groupId);
@@ -27,37 +41,38 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
   const ready = !!group.data && !!mine.data;
 
   if (group.error) {
-    return <Page><EmptyState icon={<ReceiptText className="size-5" />} title="Can't open this group">{(group.error as Error).message}</EmptyState>
+    return <Page><EmptyState icon={<ReceiptText />} title="Can't open this group">{(group.error as Error).message}</EmptyState>
       <Button variant="secondary" className="mx-auto flex" onClick={() => navigate({ name: "home" })}>Back to groups</Button></Page>;
   }
 
   return (
-    <Page>
-      <section className="relative overflow-hidden rounded-3xl bg-hero p-5 text-hero-foreground shadow-xl shadow-primary/10">
-        <div className="pointer-events-none absolute -top-20 -right-12 size-56 rounded-full bg-primary/40 blur-3xl" />
-        <button type="button" onClick={() => goBack({ name: "home" })} className="-ml-1 inline-flex cursor-pointer items-center gap-1 rounded-lg px-1 py-1 text-sm text-white/70 transition-colors hover:text-white">
-          <ArrowLeft className="size-4" /> Groups
-        </button>
-        {group.data ? <h1 className="mt-2 truncate text-2xl font-bold tracking-tight">{group.data.group.name}</h1> : <Skeleton className="mt-2 h-8 w-44 bg-white/10" />}
-        <div className="mt-1 min-h-7 text-lg font-semibold">
-          {!mine.data ? <Skeleton className="h-6 w-36 bg-white/10" /> : net === 0 ? <span className="text-white/90">You are all settled up</span> : (
-            <span className={net > 0 ? "text-[oklch(0.85_0.13_160)]" : "text-[oklch(0.82_0.11_28)]"}>
-              {net > 0 ? "You are owed " : "You owe "}<AnimatedAmount cents={Math.abs(net)} />
-            </span>
+    <Page className="pb-48">
+      <BackButton label="Groups" onClick={() => goBack({ name: "home" })} />
+      {group.data ? <h1 className="page-title mt-3 px-1 break-words">{group.data.group.name}</h1> : <Skeleton className="mt-3 h-8 w-52" />}
+      {group.data && (
+        <div className="mt-2 flex items-center gap-2 px-1">
+          <div className="flex -space-x-2">{group.data.members.slice(0, 5).map(mm => <PersonAvatar key={mm.id} id={mm.id} name={mm.name} size="sm" className="ring-2 ring-[#f3f6f5]" />)}</div>
+          <span className="text-[13px] text-muted-foreground">{group.data.members.length} {group.data.members.length === 1 ? "member" : "members"}</span>
+        </div>
+      )}
+
+      <AquaCard className="mt-5">
+        <div data-testid="balance-card">
+          <p className="text-[14px] text-white/85">{!mine.data ? "Your balance" : net > 0 ? "You are owed" : net < 0 ? "You owe" : "Your balance"}</p>
+          <div className="mt-2 min-h-11">
+            {!mine.data ? <Skeleton className="h-11 w-40 bg-white/25" /> : net === 0 ? <p className="text-[28px] font-semibold">You are all settled up</p> : <AnimatedMoney cents={Math.abs(net)} size="hero" />}
+          </div>
+          {mine.data && mine.data.totalOwedToYouCents > 0 && mine.data.totalYouOweCents > 0 && (
+            <p className="mt-1.5 text-[13px] text-white/80">You owe {inr(mine.data.totalYouOweCents)} · you are owed {inr(mine.data.totalOwedToYouCents)}</p>
           )}
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-2.5">
-          <Button size="xl" disabled={!ready} onClick={() => setAdding(true)} className="bg-white text-hero shadow-lg hover:bg-white/90"><Plus className="size-5" />Add expense</Button>
-          <Button size="xl" disabled={!ready} onClick={() => setSettling(true)} variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white dark:bg-white/10"><HandCoins className="size-5" />Settle up</Button>
-        </div>
-      </section>
-
-      <Segmented id="group-tab" className="sticky top-[60px] z-20 mt-4 shadow-sm backdrop-blur" value={tab}
-        onChange={t => navigate({ name: "group", groupId, tab: t }, { replace: true })}
-        options={[{ value: "expenses", label: "Expenses" }, { value: "balances", label: "Balances" }, { value: "payments", label: "Payments" }, { value: "insights", label: "Insights" }]} />
+        <Button size="xl" disabled={!ready} onClick={() => setSettling(true)} className="mt-5 w-full bg-white text-[#007a55] shadow-[0_8px_20px_-10px_rgb(0_0_0/35%)] hover:bg-white/95">
+          <HandCoins className="size-5" />Settle up
+        </Button>
+      </AquaCard>
 
       <AnimatePresence mode="wait" initial={false}>
-        <m.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2, ease: EASE }} className="mt-4">
+        <m.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }} className="mt-7">
           {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} onAdd={() => setAdding(true)} />}
           {tab === "balances" && <BalancesTab groupId={groupId} />}
           {tab === "payments" && <PaymentsTab groupId={groupId} meId={mine.data?.memberId} />}
@@ -65,56 +80,65 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
         </m.div>
       </AnimatePresence>
 
+      {/* Extended floating action button, above the bottom bar. */}
+      <m.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 400, damping: 28 }}
+        className="fixed right-4 bottom-[calc(max(14px,env(safe-area-inset-bottom))+78px)] z-30 sm:right-[calc(50%-21rem)]">
+        <Button size="xl" disabled={!ready} onClick={() => setAdding(true)} className="h-14 rounded-[20px] px-5 shadow-[0_14px_30px_-10px_rgb(0_168_112/70%)]">
+          <Plus className="size-5" strokeWidth={2.6} />Add expense
+        </Button>
+      </m.div>
+
+      <BottomTabs id="group-tab" value={tab} onChange={t => navigate({ name: "group", groupId, tab: t }, { replace: true })}
+        options={[{ value: "expenses", label: "Expenses", icon: ReceiptText }, { value: "balances", label: "Balances", icon: Scale }, { value: "payments", label: "Payments", icon: Wallet }, { value: "insights", label: "Insights", icon: ChartPie }]} />
+
       <AddExpenseDrawer groupId={groupId} open={adding} onOpenChange={setAdding} />
       <SettleUpDrawer groupId={groupId} open={settling} onOpenChange={setSettling} />
     </Page>
   );
 }
 
-function TableSkeleton({ rows = 4 }: { rows?: number }) {
-  return <div className="space-y-3 p-4">{Array.from({ length: rows }, (_, i) => <div key={i} className="flex items-center gap-3"><Skeleton className="h-9 w-9" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/3" /></div><Skeleton className="h-4 w-16" /></div>)}</div>;
+function RowsSkeleton({ rows = 4 }: { rows?: number }) {
+  return <div>{Array.from({ length: rows }, (_, i) => <div key={i} className="flex items-center gap-3 px-4 py-3.5"><Skeleton className="size-10 rounded-[13px]" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/3" /></div><Skeleton className="h-4 w-16" /></div>)}</div>;
 }
+
+function TableHead({ cols }: { cols: [string, string?][] }) {
+  return <thead><tr className="border-b border-hairline">{cols.map(([c, cls], i) => <th key={i} scope="col" className={cn("px-2 pt-3 pb-2 text-left text-[12px] font-medium text-muted-foreground first:pl-4 last:pr-4", cls)}>{c}</th>)}</tr></thead>;
+}
+const tr = "border-b border-hairline last:border-0";
 
 // ----- Expenses -----
 function ExpensesTab({ groupId, meId, onAdd }: { groupId: string; meId?: string; onAdd: () => void }) {
   const expenses = useExpenses(groupId);
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState<string | null>(null);
-  const list = (expenses.data || []).filter(x => !query || x.description.toLowerCase().includes(query.toLowerCase()) || x.paidByName.toLowerCase().includes(query.toLowerCase()));
+  const q = query.toLowerCase();
+  const list = (expenses.data || []).filter(x => !q || x.description.toLowerCase().includes(q) || x.paidByName.toLowerCase().includes(q));
   const total = (expenses.data || []).reduce((s, x) => s + x.amountCents, 0);
   return (
-    <div className="overflow-hidden rounded-2xl border bg-card">
-      <div className="flex items-center justify-between gap-3 px-4 pt-4">
-        <h2 className="text-lg font-semibold">Expenses</h2>
-        {expenses.data && <span className="tabular text-sm text-muted-foreground">{expenses.data.length} · {inr(total)}</span>}
+    <>
+      <div className="relative mb-5">
+        <Search className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted-foreground" />
+        <Input type="search" aria-label="Search expenses" placeholder="Search by description or payer" value={query} onChange={e => setQuery(e.target.value)} className={searchFieldClass} />
       </div>
-      <div className="relative px-4 pt-3 pb-1">
-        <Search className="pointer-events-none absolute top-1/2 left-7 mt-1 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input type="search" aria-label="Search expenses" placeholder="Search by description or payer" value={query} onChange={e => setQuery(e.target.value)} className="h-10 rounded-xl pl-9" />
+      <SectionTitle action={expenses.data && expenses.data.length > 0 ? <span className="tabular text-[13px] text-muted-foreground">Total {inr(total)}</span> : undefined}>
+        {expenses.data ? `${expenses.data.length} ${expenses.data.length === 1 ? "expense" : "expenses"}` : "Expenses"}
+      </SectionTitle>
+      <div className="panel overflow-hidden">
+        {expenses.isPending || !meId ? <RowsSkeleton /> : !list.length ? (
+          expenses.data?.length ? <EmptyState icon={<Search />} title="No matches">Try a different word.</EmptyState> : (
+            <EmptyState icon={<ReceiptText />} title="No expenses yet">
+              Add the first one and we'll work out who owes whom.
+              <Button className="mt-4" onClick={onAdd}><Plus />Add expense</Button>
+            </EmptyState>
+          )
+        ) : (
+          <table className="w-full text-[14px]">
+            <TableHead cols={[["Expense", "w-full"], ["Amount", "text-right"], ["You", "text-right"]]} />
+            <tbody>{list.map(x => <ExpenseRow key={x.id} x={x} meId={meId} groupId={groupId} open={open === x.id} onToggle={() => setOpen(o => (o === x.id ? null : x.id))} />)}</tbody>
+          </table>
+        )}
       </div>
-      {expenses.isPending || !meId ? <TableSkeleton /> : !list.length ? (
-        expenses.data?.length ? <EmptyState icon={<Search className="size-5" />} title="No matches">Try a different word.</EmptyState> : (
-          <EmptyState icon={<ReceiptText className="size-5" />} title="No expenses yet">
-            Add the first one and we'll work out who owes whom.
-            <Button className="mt-4" onClick={onAdd}><Plus />Add expense</Button>
-          </EmptyState>
-        )
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-12 pl-4">Date</TableHead>
-              <TableHead>Expense</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead className="pr-4 text-right">You</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.map(x => <ExpenseRow key={x.id} x={x} meId={meId} groupId={groupId} open={open === x.id} onToggle={() => setOpen(o => (o === x.id ? null : x.id))} />)}
-          </TableBody>
-        </Table>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -122,55 +146,63 @@ function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: s
   const del = useDeleteExpense(groupId);
   const [confirm, setConfirm] = React.useState(false);
   const who = (id: string, name: string) => (id === meId ? "You" : name);
+  const d = shortDate(x.createdAt);
   return (
     <>
-      <TableRow data-state={open ? "selected" : undefined} aria-expanded={open} tabIndex={0} onClick={onToggle}
-        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-        className="cursor-pointer data-[state=selected]:bg-accent/60">
-        <TableCell className="pl-4"><DateBadge ts={x.createdAt} /></TableCell>
-        <TableCell className="max-w-0 w-full">
-          <span className="block truncate font-medium">{x.description}</span>
-          <span className="block truncate text-xs text-muted-foreground">{who(x.paidBy, x.paidByName)} paid {inr(x.amountCents)}</span>
-        </TableCell>
-        <TableCell className="tabular text-right">{inr(x.amountCents)}</TableCell>
-        <TableCell className="pr-4 text-right">
-          {x.myEffectCents > 0 ? <><span className="block text-[11px] text-positive">you lent</span><span className="tabular font-semibold text-positive">{inr(x.myEffectCents)}</span></>
-            : x.myEffectCents < 0 ? <><span className="block text-[11px] text-negative">you borrowed</span><span className="tabular font-semibold text-negative">{inr(-x.myEffectCents)}</span></>
-            : <span className="text-xs text-muted-foreground">{x.myShareCents ? "your share" : "not involved"}</span>}
-        </TableCell>
-      </TableRow>
-      <tr className="border-0">
-        <td colSpan={4} className="p-0">
+      <tr aria-expanded={open} tabIndex={0} onClick={onToggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+        className={cn("cursor-pointer transition-colors duration-150 active:bg-[#0e1a16]/[0.04]", !open && tr, open && "bg-primary/[0.05]")}>
+        <td className="w-full max-w-0 py-3 pr-2 pl-4">
+          <span className="flex items-center gap-3">
+            <CategoryTile description={x.description} />
+            <span className="min-w-0">
+              <span className="block truncate text-[15px] font-medium">{x.description}</span>
+              <span className="block truncate text-[12.5px] text-muted-foreground">{d.day} {d.month} · {who(x.paidBy, x.paidByName)} paid</span>
+            </span>
+          </span>
+        </td>
+        <td className="tabular px-2 py-3 text-right whitespace-nowrap">{inr(x.amountCents)}</td>
+        <td className="py-3 pr-4 pl-2 text-right whitespace-nowrap">
+          {x.myEffectCents > 0 ? <><span className="block text-[11.5px] text-positive">you lent</span><span className="tabular font-semibold text-positive">{inr(x.myEffectCents)}</span></>
+            : x.myEffectCents < 0 ? <><span className="block text-[11.5px] text-negative">you borrowed</span><span className="tabular font-semibold text-negative">{inr(-x.myEffectCents)}</span></>
+            : <span className="text-[12.5px] text-muted-foreground">{x.myShareCents ? "your share" : "not involved"}</span>}
+        </td>
+      </tr>
+      <tr className={open ? tr : ""}>
+        <td colSpan={3} className="p-0">
           <AnimatePresence initial={false}>
             {open && (
-              <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.25, ease: EASE }} className="overflow-hidden bg-accent/40">
-                <div className="space-y-3 px-4 py-3">
-                  <p className="text-xs text-muted-foreground">{who(x.paidBy, x.paidByName)} paid · added by {x.createdBy === meId ? "you" : x.createdByName} · {shortDate(x.createdAt).full}</p>
-                  <div className="overflow-hidden rounded-xl border bg-card">
-                    <table className="w-full text-sm">
-                      <thead><tr className="text-left text-[11px] text-muted-foreground uppercase"><th className="px-3 py-2 font-medium">Person</th><th className="px-3 py-2 text-right font-medium">Share</th><th className="px-3 py-2 text-right font-medium">Owes {x.paidBy === meId ? "you" : x.paidByName}</th></tr></thead>
+              <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: EASE }} className="overflow-hidden bg-primary/[0.05]">
+                <div className="space-y-3 px-4 pt-1 pb-4">
+                  <p className="text-[12.5px] text-muted-foreground">{who(x.paidBy, x.paidByName)} paid · added by {x.createdBy === meId ? "you" : x.createdByName} · {d.full}</p>
+                  <div className="overflow-hidden rounded-[16px] bg-white shadow-[0_1px_2px_rgb(16_40_32/5%)]">
+                    <table className="w-full text-[14px]">
+                      <TableHead cols={[["Person"], ["Share", "text-right"], ["Owes " + (x.paidBy === meId ? "you" : x.paidByName), "text-right"]]} />
                       <tbody>{x.splits.map(s => (
-                        <tr key={s.memberId} className="border-t"><td className="px-3 py-2">{who(s.memberId, s.name)}</td><td className="tabular px-3 py-2 text-right">{inr(s.amountCents)}</td><td className="tabular px-3 py-2 text-right">{s.memberId === x.paidBy ? "—" : inr(s.amountCents)}</td></tr>
+                        <tr key={s.memberId} className={tr}>
+                          <td className="px-2 py-2.5 pl-4">{who(s.memberId, s.name)}</td>
+                          <td className="tabular px-2 py-2.5 text-right">{inr(s.amountCents)}</td>
+                          <td className="tabular px-2 py-2.5 pr-4 text-right text-muted-foreground">{s.memberId === x.paidBy ? "—" : inr(s.amountCents)}</td>
+                        </tr>
                       ))}</tbody>
                     </table>
                   </div>
                   {x.canDelete && (
-                    <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={e => { e.stopPropagation(); setConfirm(true); }}><Trash2 />Delete expense</Button>
+                    <button type="button" className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-negative-soft py-2.5 text-[14px] font-medium text-negative transition-transform active:scale-[0.98]" onClick={e => { e.stopPropagation(); setConfirm(true); }}><Trash2 className="size-4" />Delete expense</button>
                   )}
                 </div>
               </m.div>
             )}
           </AnimatePresence>
           <AlertDialog open={confirm} onOpenChange={setConfirm}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete “{x.description}”?</AlertDialogTitle>
-                <AlertDialogDescription>{inr(x.amountCents)} paid by {x.paidByName}. Everyone's balances will be recalculated.</AlertDialogDescription>
+            <AlertDialogContent className="max-w-[340px] rounded-[26px] border-0 p-6">
+              <AlertDialogHeader className="text-left">
+                <AlertDialogTitle className="title-2">Delete “{x.description}”?</AlertDialogTitle>
+                <AlertDialogDescription className="text-[14px]">{inr(x.amountCents)} paid by {x.paidByName}. Everyone's balances will be recalculated.</AlertDialogDescription>
               </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Keep it</AlertDialogCancel>
-                <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" disabled={del.isPending}
-                  onClick={e => { e.preventDefault(); del.mutate(x.id, { onSuccess: () => { setConfirm(false); toast.success("Expense deleted."); } }); }}>
+              <AlertDialogFooter className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-2">
+                <AlertDialogCancel className="h-11 rounded-full border-0 bg-[#0e1a16]/[0.06] shadow-none">Cancel</AlertDialogCancel>
+                <AlertDialogAction className="h-11 rounded-full bg-negative text-white hover:bg-negative/90" disabled={del.isPending}
+                  onClick={e => { e.preventDefault(); del.mutate(x.id, { onSuccess: () => { setConfirm(false); haptic(); toast.success("Expense deleted."); } }); }}>
                   {del.isPending ? "Deleting…" : "Delete"}
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -191,66 +223,60 @@ function BalancesTab({ groupId }: { groupId: string }) {
     const net = new Map<string, { name: string; cents: number }>();
     for (const d of mine.data.owedToYou) net.set(d.fromMemberId, { name: d.fromName, cents: d.amountCents });
     for (const d of mine.data.youOwe) net.set(d.toMemberId, { name: d.toName, cents: -d.amountCents });
-    for (const m of group.data.members) if (m.id !== meId && !net.has(m.id)) net.set(m.id, { name: m.name, cents: 0 });
+    for (const mm of group.data.members) if (mm.id !== meId && !net.has(mm.id)) net.set(mm.id, { name: mm.name, cents: 0 });
     return [...net].sort((a, b) => Math.abs(b[1].cents) - Math.abs(a[1].cents) || a[1].name.localeCompare(b[1].name));
   }, [mine.data, group.data, meId]);
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <section>
         <SectionTitle>You and each person</SectionTitle>
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {!people ? <TableSkeleton rows={3} /> : !people.length ? <EmptyState icon={<Wallet className="size-5" />} title="Just you here">No one else is in this group yet.</EmptyState> : people.map(([id, p], i) => (
-            <m.button key={id} custom={i} variants={listItem} initial="initial" animate="animate" type="button"
-              onClick={() => navigate({ name: "person", groupId, memberId: id })}
-              className="flex w-full cursor-pointer items-center gap-3 border-b px-4 py-3.5 text-left transition-colors last:border-0 hover:bg-muted/60 active:bg-muted">
+        <List inset={68}>
+          {!people ? <RowsSkeleton rows={3} /> : !people.length ? <EmptyState icon={<Users />} title="Just you here">No one else is in this group yet.</EmptyState> : people.map(([id, p], i) => (
+            <m.button key={id} custom={i} variants={listItem} initial="initial" animate="animate" type="button" onClick={() => navigate({ name: "person", groupId, memberId: id })} className={pressableRow}>
               <PersonAvatar id={id} name={p.name} />
-              <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-              <span className="text-right">
-                <span className={cn("block text-[11px]", p.cents > 0 ? "text-positive" : p.cents < 0 ? "text-negative" : "text-muted-foreground")}>{p.cents > 0 ? "owes you" : p.cents < 0 ? "you owe" : "settled up"}</span>
-                {p.cents !== 0 && <Amount cents={Math.abs(p.cents)} className={p.cents > 0 ? "text-positive" : "text-negative"} />}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[16px] font-medium">{p.name}</span>
+                <span className={cn("block text-[13px]", p.cents > 0 ? "text-positive" : p.cents < 0 ? "text-negative" : "text-muted-foreground")}>{p.cents > 0 ? "owes you" : p.cents < 0 ? "you owe" : "settled up"}</span>
               </span>
-              <ChevronRight className="size-4 text-muted-foreground" />
+              {p.cents !== 0 && <span className={cn("tabular text-[16px] font-semibold", p.cents > 0 ? "text-positive" : "text-negative")}>{inr(Math.abs(p.cents))}</span>}
+              <ChevronRight className={CHEVRON} strokeWidth={2.4} />
             </m.button>
           ))}
-        </div>
-        <p className="mt-2 px-1 text-xs text-muted-foreground">Tap a person to see every expense and payment between you two.</p>
+        </List>
+        <Footnote>Tap a person to see every expense and payment between you two.</Footnote>
       </section>
 
       <section>
         <SectionTitle>Group balances</SectionTitle>
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {!balances.data ? <TableSkeleton rows={3} /> : balances.data.map(b => (
-            <div key={b.memberId} className="flex items-center gap-3 border-b px-4 py-3 last:border-0">
+        <List inset={60}>
+          {!balances.data ? <RowsSkeleton rows={3} /> : balances.data.map(b => (
+            <div key={b.memberId} className={rowClass}>
               <PersonAvatar id={b.memberId} name={b.name} size="sm" />
-              <span className="min-w-0 flex-1 truncate">{b.name}{b.memberId === meId && <span className="text-muted-foreground"> (you)</span>}</span>
-              <span className={cn("tabular text-sm font-semibold", b.balanceCents > 0 ? "text-positive" : b.balanceCents < 0 ? "text-negative" : "text-muted-foreground")}>
-                {b.balanceCents > 0 ? "gets back " + inr(b.balanceCents) : b.balanceCents < 0 ? "owes " + inr(-b.balanceCents) : inr(0) + " · settled"}
+              <span className="min-w-0 flex-1 truncate text-[15px]">{b.name}{b.memberId === meId && <span className="text-muted-foreground"> (you)</span>}</span>
+              <span className={cn("tabular rounded-full px-2.5 py-1 text-[13px] font-medium", b.balanceCents > 0 ? "bg-positive-soft text-positive" : b.balanceCents < 0 ? "bg-negative-soft text-negative" : "bg-[#0e1a16]/[0.05] text-muted-foreground")}>
+                {b.balanceCents > 0 ? "gets back " + inr(b.balanceCents) : b.balanceCents < 0 ? "owes " + inr(-b.balanceCents) : "settled"}
               </span>
             </div>
           ))}
-        </div>
+        </List>
       </section>
 
       <section>
         <SectionTitle>Who owes whom</SectionTitle>
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {!debts.data ? <TableSkeleton rows={2} /> : !debts.data.length ? <p className="px-4 py-5 text-center text-sm text-muted-foreground">Everyone is settled up 🎉</p> : debts.data.map(d => <DebtLine key={d.fromMemberId + ">" + d.toMemberId} d={d} meId={meId} />)}
-        </div>
-        <p className="mt-2 px-1 text-xs text-muted-foreground">For each expense, everyone owes their share to whoever paid. If two people owe each other, only the difference is shown.</p>
+        <List>
+          {!debts.data ? <RowsSkeleton rows={2} /> : !debts.data.length ? <p className="px-4 py-4 text-[15px] text-muted-foreground">Everyone is settled up</p> : debts.data.map(d => (
+            <div key={d.fromMemberId + ">" + d.toMemberId} className={rowClass}>
+              <span className="min-w-0 flex-1 truncate text-[15px]">
+                <span className="font-medium">{d.fromMemberId === meId ? "You" : d.fromName}</span>
+                <span className="text-muted-foreground">{d.fromMemberId === meId ? " owe " : " owes "}</span>
+                <span className="font-medium">{d.toMemberId === meId ? "you" : d.toName}</span>
+              </span>
+              <span className="tabular text-[15px] font-semibold">{inr(d.amountCents)}</span>
+            </div>
+          ))}
+        </List>
+        <Footnote>For each expense, everyone owes their share to whoever paid. If two people owe each other, only the difference is shown.</Footnote>
       </section>
-    </div>
-  );
-}
-
-function DebtLine({ d, meId }: { d: Debt; meId?: string }) {
-  return (
-    <div className="flex items-center gap-2 border-b px-4 py-3 text-sm last:border-0">
-      <span className="min-w-0 flex-1 truncate">
-        <span className="font-medium">{d.fromMemberId === meId ? "You" : d.fromName}</span>
-        <span className="text-muted-foreground">{d.fromMemberId === meId ? " owe " : " owes "}</span>
-        <span className="font-medium">{d.toMemberId === meId ? "you" : d.toName}</span>
-      </span>
-      <Amount cents={d.amountCents} />
     </div>
   );
 }
@@ -260,33 +286,34 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
   const payments = useSettlements(groupId);
   const who = (id: string, name: string) => (id === meId ? "You" : name);
   return (
-    <div className="overflow-hidden rounded-2xl border bg-card">
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h2 className="text-lg font-semibold">Payments</h2>
-        {payments.data && payments.data.length > 0 && <span className="tabular text-sm text-muted-foreground">{payments.data.length} · {inr(payments.data.reduce((s, x) => s + x.amountCents, 0))}</span>}
+    <>
+      <SectionTitle action={payments.data && payments.data.length > 0 ? <span className="tabular text-[13px] text-muted-foreground">Total {inr(payments.data.reduce((s, x) => s + x.amountCents, 0))}</span> : undefined}>
+        {payments.data ? `${payments.data.length} ${payments.data.length === 1 ? "payment" : "payments"}` : "Payments"}
+      </SectionTitle>
+      <div className="panel overflow-hidden">
+        {payments.isPending ? <RowsSkeleton /> : !payments.data?.length ? (
+          <EmptyState icon={<Wallet />} title="No payments yet">When someone pays back, it shows up here.</EmptyState>
+        ) : (
+          <table className="w-full text-[14px]">
+            <TableHead cols={[["Date", "w-12"], ["Payment"], ["Amount", "text-right"]]} />
+            <tbody>
+              {payments.data.map(s => (
+                <tr key={s.id} className={tr}>
+                  <td className="py-3 pr-1 pl-4"><DateBadge ts={s.createdAt} /></td>
+                  <td className="w-full max-w-0 px-2 py-3">
+                    <span className="block truncate text-[15px] font-medium">{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</span>
+                    <span className="block truncate text-[12.5px] text-muted-foreground">
+                      {new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}{s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
+                    </span>
+                  </td>
+                  <td className="tabular py-3 pr-4 pl-2 text-right text-[15px] font-semibold whitespace-nowrap text-positive">{inr(s.amountCents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
-      {payments.isPending ? <TableSkeleton /> : !payments.data?.length ? (
-        <EmptyState icon={<HandCoins className="size-5" />} title="No payments yet">When someone pays back, it shows up here.</EmptyState>
-      ) : (
-        <Table>
-          <TableHeader><TableRow className="hover:bg-transparent"><TableHead className="w-12 pl-4">Date</TableHead><TableHead>Payment</TableHead><TableHead className="pr-4 text-right">Amount</TableHead></TableRow></TableHeader>
-          <TableBody>
-            {payments.data.map(s => (
-              <TableRow key={s.id}>
-                <TableCell className="pl-4"><DateBadge ts={s.createdAt} /></TableCell>
-                <TableCell className="max-w-0 w-full">
-                  <span className="block truncate font-medium">{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}{s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
-                  </span>
-                </TableCell>
-                <TableCell className="tabular pr-4 text-right font-semibold text-positive">{inr(s.amountCents)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -295,36 +322,41 @@ function InsightsTab({ groupId }: { groupId: string }) {
   const dash = useDashboard(groupId), group = useGroup(groupId);
   const max = Math.max(1, ...(dash.data?.spending.map(s => s.paidCents) || [0]));
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border bg-card p-4"><p className="text-xs text-muted-foreground">Total spent</p>{dash.data ? <AnimatedAmount cents={dash.data.totalSpentCents} className="text-xl font-bold" /> : <Skeleton className="mt-1 h-6 w-24" />}</div>
-        <div className="rounded-2xl border bg-card p-4"><p className="text-xs text-muted-foreground">Expenses</p><p className="tabular text-xl font-bold">{dash.data?.expenseCount ?? "—"}</p></div>
+        <div className="panel p-4"><p className="text-[13px] text-muted-foreground">Total spent</p>{dash.data ? <AnimatedMoney cents={dash.data.totalSpentCents} size="lg" className="mt-2" /> : <Skeleton className="mt-2 h-7 w-24" />}</div>
+        <div className="panel p-4"><p className="text-[13px] text-muted-foreground">Expenses</p><p className="tabular mt-2 text-[26px] leading-none font-semibold">{dash.data?.expenseCount ?? "—"}</p></div>
       </div>
       <section>
         <SectionTitle>Who paid the most</SectionTitle>
-        <div className="space-y-4 rounded-2xl border bg-card p-4">
-          {!dash.data ? <TableSkeleton rows={3} /> : dash.data.spending.map((s, i) => (
+        <div className="panel space-y-4 p-4">
+          {!dash.data ? <RowsSkeleton rows={3} /> : dash.data.spending.map((s, i) => (
             <div key={s.memberId}>
-              <div className="flex items-baseline justify-between gap-2 text-sm"><span className="truncate font-medium">{i + 1}. {s.name}</span><span className="tabular font-semibold">{inr(s.paidCents)}</span></div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
-                <m.div className="h-full rounded-full bg-gradient-to-r from-primary to-[oklch(0.68_0.16_300)]" initial={{ width: 0 }} animate={{ width: (s.paidCents / max) * 100 + "%" }} transition={{ duration: 0.7, ease: EASE, delay: i * 0.05 }} />
+              <div className="flex items-center gap-3">
+                <PersonAvatar id={s.memberId} name={s.name} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2 text-[15px]"><span className="truncate font-medium">{s.name}</span><span className="tabular font-semibold">{inr(s.paidCents)}</span></div>
+                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[#0e1a16]/[0.06]">
+                    <m.div className="h-full rounded-full bg-[linear-gradient(90deg,#14d39a,#00a3a3)]" initial={{ width: 0 }} animate={{ width: (s.paidCents / max) * 100 + "%" }} transition={{ duration: 0.8, ease: EASE, delay: 0.05 + i * 0.06 }} />
+                  </div>
+                  <p className="mt-1 text-[12px] text-muted-foreground">Their share of expenses: {inr(s.shareCents)}</p>
+                </div>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Their share of expenses: {inr(s.shareCents)}</p>
             </div>
           ))}
         </div>
       </section>
       <section>
         <SectionTitle>People</SectionTitle>
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {group.data?.members.map(m => (
-            <div key={m.id} className="flex items-center gap-3 border-b px-4 py-3 last:border-0">
-              <PersonAvatar id={m.id} name={m.name} size="sm" />
-              <span className="flex-1 truncate">{m.name}{m.id === group.data.me.id && <span className="text-muted-foreground"> (you)</span>}</span>
-              <span className="text-xs text-muted-foreground">{m.status === "admin" ? "admin" : m.status === "pending" ? "waiting for re-approval" : ""}</span>
+        <List inset={60}>
+          {group.data?.members.map(mm => (
+            <div key={mm.id} className={rowClass}>
+              <PersonAvatar id={mm.id} name={mm.name} size="sm" />
+              <span className="flex-1 truncate text-[15px]">{mm.name}{mm.id === group.data.me.id && <span className="text-muted-foreground"> (you)</span>}</span>
+              <span className="text-[13px] text-muted-foreground">{mm.status === "admin" ? "Admin" : mm.status === "pending" ? "Awaiting re-approval" : ""}</span>
             </div>
           ))}
-        </div>
+        </List>
       </section>
     </div>
   );
