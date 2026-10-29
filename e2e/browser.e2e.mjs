@@ -154,6 +154,8 @@ try {
   await cy.getByRole("heading", { name: "Balances" }).waitFor();
   await cy.getByRole("heading", { name: "You owe" }).waitFor();
   assert.equal(await cy.getByRole("heading", { name: "Owes you" }).count(), 0);
+  // The summary card on Balances points at the people list rather than doing nothing.
+  await cy.getByRole("button", { name: /Tap a person below for details/ }).click();
   await cy.getByRole("button", { name: /Bea E2E.*₹55\.00/s }).click();
   await cy.getByRole("heading", { name: "You & Bea E2E" }).waitFor();
   assert.equal(await cy.locator("tbody tr").count(), 2, "both shared expenses listed");
