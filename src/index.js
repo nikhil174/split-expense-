@@ -131,6 +131,42 @@ function describeDebt(debt, nameOf) {
   return { fromMemberId: debt.fromMemberId, fromName: nameOf(debt.fromMemberId), toMemberId: debt.toMemberId, toName: nameOf(debt.toMemberId), amountCents: debt.amountCents, amount: rupees(debt.amountCents) };
 }
 
+// Validates an add/edit expense request body against the group's active
+// members. Returns { desc, cents, paidBy, splitRows } or { error }.
+async function parseExpense(db, gid, b) {
+  const bad = error => ({ error });
+  const desc = cleanName(b?.description);
+  if (!desc || desc.length > 160) return bad("Enter a description of up to 160 characters.");
+  let cents;
+  try { cents = parseAmountToCents(b?.amount); } catch (error) { return bad(error.message); }
+  const paidBy = textField(b?.paidBy);
+  const active = new Set((await groupMembers(db, gid)).filter(x => x.active).map(x => x.id));
+  if (!active.has(paidBy)) return bad("Payer must be an active member of this group.");
+  const splitMode = b?.splitMode ?? "equal";
+  let splitRows;
+  if (splitMode === "manual") {
+    if (!Array.isArray(b?.allocations) || b.allocations.length === 0) return bad("Enter at least one manual amount.");
+    if (b.allocations.length > MAX_SPLIT_MEMBERS) return bad("Too many split members.");
+    try {
+      const allocations = b.allocations.map(item => ({ memberId: textField(item?.memberId), amountCents: parseAmountToCents(item?.amount, { allowZero: true }) }));
+      splitRows = allocateManualSplit(cents, allocations, [...active]);
+    } catch (error) { return bad(error.message); }
+  } else if (splitMode === "equal") {
+    if (!Array.isArray(b?.memberIds) || b.memberIds.length > MAX_SPLIT_MEMBERS) return bad("Select at least one member to split this expense.");
+    if (b.memberIds.some(x => typeof x !== "string")) return bad("Split members must belong to this group.");
+    const memberIds = [...new Set(b.memberIds)];
+    if (!memberIds.length) return bad("Select at least one member to split this expense.");
+    if (memberIds.some(x => !active.has(x))) return bad("Split members must be active members of this group.");
+    splitRows = allocateEqualSplit(cents, memberIds);
+  } else {
+    return bad("Split method must be equal or manual.");
+  }
+  // Zero shares carry no meaning; keep only real allocations.
+  splitRows = splitRows.filter(row => row.amountCents > 0);
+  if (splitRows.reduce((sum, row) => sum + row.amountCents, 0) !== cents) throw new Error("Split rows do not add up to the expense total");
+  return { desc, cents, paidBy, splitRows };
+}
+
 async function api(req, env, url) {
   const db = env['split-expense'];
   const p = url.pathname, method = req.method;
@@ -468,42 +504,33 @@ async function api(req, env, url) {
     }
     if (method === "POST" && tail === "expenses") {
       if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
-      const b = await body(req);
-      const desc = cleanName(b?.description);
-      if (!desc || desc.length > 160) return fail("Enter a description of up to 160 characters.");
-      let cents;
-      try { cents = parseAmountToCents(b?.amount); } catch (error) { return fail(error.message); }
-      const paidBy = textField(b?.paidBy);
-      const active = new Set((await groupMembers(db, gid)).filter(x => x.active).map(x => x.id));
-      if (!active.has(paidBy)) return fail("Payer must be an active member of this group.");
-      const splitMode = b?.splitMode ?? "equal";
-      let splitRows;
-      if (splitMode === "manual") {
-        if (!Array.isArray(b?.allocations) || b.allocations.length === 0) return fail("Enter at least one manual amount.");
-        if (b.allocations.length > MAX_SPLIT_MEMBERS) return fail("Too many split members.");
-        try {
-          const allocations = b.allocations.map(item => ({ memberId: textField(item?.memberId), amountCents: parseAmountToCents(item?.amount, { allowZero: true }) }));
-          splitRows = allocateManualSplit(cents, allocations, [...active]);
-        } catch (error) { return fail(error.message); }
-      } else if (splitMode === "equal") {
-        if (!Array.isArray(b?.memberIds) || b.memberIds.length > MAX_SPLIT_MEMBERS) return fail("Select at least one member to split this expense.");
-        if (b.memberIds.some(x => typeof x !== "string")) return fail("Split members must belong to this group.");
-        const memberIds = [...new Set(b.memberIds)];
-        if (!memberIds.length) return fail("Select at least one member to split this expense.");
-        if (memberIds.some(x => !active.has(x))) return fail("Split members must be active members of this group.");
-        splitRows = allocateEqualSplit(cents, memberIds);
-      } else {
-        return fail("Split method must be equal or manual.");
-      }
-      // Zero shares carry no meaning; keep only real allocations.
-      splitRows = splitRows.filter(row => row.amountCents > 0);
-      if (splitRows.reduce((sum, row) => sum + row.amountCents, 0) !== cents) throw new Error("Split rows do not add up to the expense total");
+      const parsed = await parseExpense(db, gid, await body(req));
+      if (parsed.error) return fail(parsed.error);
+      const { desc, cents, paidBy, splitRows } = parsed;
       const eid = id();
       await db.batch([
         db.prepare("INSERT INTO appx_expenses(id,group_id,description,amount_cents,paid_by,created_by,created_at) VALUES(?,?,?,?,?,?,?)").bind(eid, gid, desc, cents, paidBy, u.id, Date.now()),
         ...splitRows.map(row => db.prepare("INSERT INTO appx_splits(expense_id,member_id,amount_cents) VALUES(?,?,?)").bind(eid, row.memberId, row.amountCents)),
       ]);
       return json({ ok: true, id: eid, amountCents: cents, splits: splitRows }, 201);
+    }
+    // Edit replaces the description, amount, payer and whole split; the same
+    // people who may delete an expense (its creator or the admin) may edit it.
+    const editExpense = tail.match(/^expenses\/([\w-]+)\/edit$/);
+    if (method === "POST" && editExpense) {
+      if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
+      const e = await db.prepare("SELECT id,created_by FROM appx_expenses WHERE id=? AND group_id=?").bind(editExpense[1], gid).first();
+      if (!e) return fail("Expense not found.", 404);
+      if (!isAdmin && e.created_by !== u.id) return fail("Only the person who added this expense or the admin can edit it.", 403);
+      const parsed = await parseExpense(db, gid, await body(req));
+      if (parsed.error) return fail(parsed.error);
+      const { desc, cents, paidBy, splitRows } = parsed;
+      await db.batch([
+        db.prepare("UPDATE appx_expenses SET description=?,amount_cents=?,paid_by=? WHERE id=? AND group_id=?").bind(desc, cents, paidBy, e.id, gid),
+        db.prepare("DELETE FROM appx_splits WHERE expense_id=?").bind(e.id),
+        ...splitRows.map(row => db.prepare("INSERT INTO appx_splits(expense_id,member_id,amount_cents) VALUES(?,?,?)").bind(e.id, row.memberId, row.amountCents)),
+      ]);
+      return json({ ok: true, id: e.id, amountCents: cents, splits: splitRows });
     }
     if (method === "GET" && tail === "expenses") {
       const [members, r, splits] = await Promise.all([
@@ -522,7 +549,7 @@ async function api(req, env, url) {
         const myShareCents = rows.find(row => row.memberId === u.id)?.amountCents || 0;
         // Positive: others owe me on this expense ("you lent"); negative: I owe the payer ("you borrowed").
         const myEffectCents = x.paidBy === u.id ? x.amountCents - myShareCents : -myShareCents;
-        return { ...x, amount: rupees(x.amountCents), paidByName: nameOf(x.paidBy), createdByName: nameOf(x.createdBy), splitCount: rows.length, splits: rows, myShareCents, myEffectCents, canDelete: isAdmin || x.createdBy === u.id };
+        return { ...x, amount: rupees(x.amountCents), paidByName: nameOf(x.paidBy), createdByName: nameOf(x.createdBy), splitCount: rows.length, splits: rows, myShareCents, myEffectCents, canDelete: isAdmin || x.createdBy === u.id, canEdit: isAdmin || x.createdBy === u.id };
       });
       return json({ expenses });
     }

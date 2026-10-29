@@ -113,7 +113,11 @@ try {
   await bea.getByLabel("Description").fill("Dinner");
   await bea.getByLabel("Total").fill("100");
   assert.equal(await bea.getByLabel("Paid by").inputValue(), await bea.getByLabel("Paid by").locator("option", { hasText: "(you)" }).getAttribute("value"));
-  await bea.getByRole("checkbox", { name: ADMIN }).click();
+  // Nobody is in the split until chosen.
+  assert.equal(await bea.getByRole("checkbox", { checked: true }).count(), 0, "no one pre-selected");
+  assert.ok(await bea.getByRole("button", { name: "Save ₹100.00 expense" }).isDisabled(), "cannot save without choosing people");
+  await bea.getByRole("checkbox", { name: "Bea E2E (you)" }).click();
+  await bea.getByRole("checkbox", { name: "Cy E2E" }).click();
   await bea.getByText("₹50.00 each · 2 people").waitFor();
   await slow(bea, "**/expenses");
   await bea.getByRole("button", { name: "Save ₹100.00 expense" }).click();
@@ -147,6 +151,31 @@ try {
   await bea.getByPlaceholder("Search by description or payer").fill("");
   await shot(bea, "bea-expenses");
   step("exact split: ₹5.00 + ₹4.99 blocked, exact saves; row expands; search filters");
+
+  // Edit: open Dinner, it comes back prefilled; untick Cy and the split follows.
+  const editButton = bea.getByRole("button", { name: "Edit", exact: true });
+  await bea.getByRole("row", { name: /Dinner/ }).click();
+  await bea.waitForFunction(() => [...document.querySelectorAll("button")].filter(b => b.textContent.trim() === "Edit").length === 1);
+  await editButton.click();
+  await bea.getByRole("heading", { name: "Edit expense" }).waitFor();
+  assert.equal(await bea.getByLabel("Description").inputValue(), "Dinner");
+  assert.equal(await bea.getByLabel("Total").inputValue(), "100.00");
+  assert.deepEqual((await bea.getByRole("checkbox", { checked: true }).allInnerTexts()).map(t => t.split("\n").pop()), ["Bea E2E (you)", "Cy E2E"]);
+  await bea.getByRole("checkbox", { name: "Cy E2E" }).click();
+  await bea.getByRole("button", { name: "Save changes · ₹100.00" }).click();
+  await toast(bea, "“Dinner” updated");
+  await bea.getByRole("row", { name: /Dinner/ }).filter({ hasText: "not involved" }).or(bea.getByRole("row", { name: /Dinner.*your share/s })).first().waitFor();
+  // Put Cy back so the rest of the walkthrough keeps its numbers (once the toast is out of the way).
+  await bea.locator("[data-sonner-toast]").first().waitFor({ state: "detached", timeout: 15000 });
+  const dinner = bea.locator("tr[aria-expanded]", { hasText: "Dinner" });
+  if (await dinner.getAttribute("aria-expanded") !== "true") await dinner.click();
+  await editButton.click();
+  await bea.getByRole("heading", { name: "Edit expense" }).waitFor();
+  await bea.getByRole("checkbox", { name: "Cy E2E" }).click();
+  await bea.getByRole("button", { name: "Save changes · ₹100.00" }).click();
+  await toast(bea, "“Dinner” updated");
+  assert.match((await bea.getByRole("row", { name: /Dinner/ }).first().innerText()).replace(/\s+/g, " "), /you lent ₹50\.00/i);
+  step("edit expense: prefilled; unticking a person removes them from the split; re-adding works");
 
   await cy.goto(BASE + "/#/");
   await cy.reload();
