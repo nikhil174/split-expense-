@@ -29,10 +29,10 @@ function GroupSelect({ id, value, onChange, groups }: { id: string; value: strin
 
 function Field({ label, htmlFor, children, hint }: { label: string; htmlFor: string; children: React.ReactNode; hint?: string }) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={htmlFor} className="text-[12.5px] font-medium text-muted-foreground">{label}</Label>
+    <div>
+      <Label htmlFor={htmlFor} className="eyebrow mb-1.5 block px-4">{label}</Label>
       {children}
-      {hint && <p className="text-[12.5px] leading-relaxed text-muted-foreground">{hint}</p>}
+      {hint && <p className="footnote mt-1.5 px-4 text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -61,30 +61,24 @@ export function AuthScreen() {
   };
 
   return (
-    <div className="min-h-dvh">
-      <div className="mx-auto flex min-h-dvh max-w-md flex-col px-6 pt-[max(1.75rem,env(safe-area-inset-top))] pb-10">
-        <m.header {...fade} className="flex items-center justify-between">
-          <Wordmark />
-          <span className="eyebrow">Shared expenses</span>
-        </m.header>
-
-        <m.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE, delay: 0.05 }} className="mt-14">
-          <h1 className="font-serif text-[46px] leading-[0.98] tracking-[-0.025em]">
-            Shared spending,<br /><span className="text-brass italic">settled gracefully.</span>
-          </h1>
-          <p className="mt-4 max-w-[30ch] text-[15px] leading-relaxed text-muted-foreground">Every rupee accounted for. See exactly who owes whom, and settle up in a tap.</p>
+    <div className="min-h-dvh overflow-x-clip">
+      <div className="mx-auto flex min-h-dvh max-w-md flex-col px-4 pt-[max(3rem,env(safe-area-inset-top))] pb-10">
+        <m.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.45, ease: EASE }} className="flex flex-col items-center text-center">
+          <Wordmark large />
+          <h1 className="large-title mt-5">Split Expense</h1>
+          <p className="subhead mt-2 max-w-[28ch] text-muted-foreground">Track shared spending, see exactly who owes whom, and settle up in a tap.</p>
         </m.div>
 
-        <m.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: EASE, delay: 0.12 }} className="mt-10">
+        <m.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: EASE, delay: 0.08 }} className="mt-9">
           <Segmented id="auth-tab" value={tab} onChange={setTab} options={[{ value: "signin", label: "Sign in" }, { value: "request", label: "Request access" }]} />
 
-          <div className="panel mt-4 p-5">
+          <div className="mt-6">
             <AnimatePresence mode="wait" initial={false}>
               {tab === "signin" ? (
-                <m.div key="signin" {...fade} className="space-y-5">
+                <m.div key="signin" {...fade} className="space-y-6">
                   <Segmented id="auth-mode" value={mode} onChange={setMode} options={[{ value: "member", label: "Member" }, { value: "admin", label: "Admin" }]} />
                   {mode === "member" ? (
-                    <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
+                    <form className="space-y-6" onSubmit={e => { e.preventDefault(); run(async () => {
                       await post("/api/access/signin", { name: form.name.trim(), groupId: form.groupId });
                       setForm(f => ({ ...f, name: "" }));
                       await signedIn("Welcome back.");
@@ -96,16 +90,16 @@ export function AuthScreen() {
                       <LoadingButton type="submit" size="xl" className="w-full" loading={busy} loadingText="Signing in…">Sign in</LoadingButton>
                     </form>
                   ) : (
-                    <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
+                    <form className="space-y-6" onSubmit={e => { e.preventDefault(); run(async () => {
                       await post("/api/admin/login", { name: form.adminName.trim(), pin: form.pin });
                       setForm(f => ({ ...f, pin: "" }));
                       await signedIn("Signed in as admin.");
                     }); }}>
                       <Field label="Admin name" htmlFor="admin-name">
-                        <Input id="admin-name" required minLength={2} maxLength={60} autoComplete="name" placeholder="Your saved administrator name" value={form.adminName} onChange={set("adminName")} className={fieldClass} />
+                        <Input id="admin-name" required minLength={2} maxLength={60} autoComplete="name" placeholder="Required" value={form.adminName} onChange={set("adminName")} className={fieldClass} />
                       </Field>
                       <Field label="PIN" htmlFor="admin-pin" hint="As admin you get both views: your own groups and the admin dashboard.">
-                        <Input id="admin-pin" type="password" required autoComplete="current-password" placeholder="••••" value={form.pin} onChange={set("pin")} className={cn(fieldClass, "tracking-widest")} />
+                        <Input id="admin-pin" type="password" required autoComplete="current-password" placeholder="Required" value={form.pin} onChange={set("pin")} className={fieldClass} />
                       </Field>
                       <LoadingButton type="submit" size="xl" className="w-full" loading={busy} loadingText="Signing in…">Sign in as admin</LoadingButton>
                     </form>
@@ -116,7 +110,7 @@ export function AuthScreen() {
                   {requestId ? (
                     <RequestStatus requestId={requestId} busy={busy} run={run} onReset={() => { storage.set(""); setRequestId(""); }} onEntered={() => signedIn("You're in.")} />
                   ) : (
-                    <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
+                    <form className="space-y-6" onSubmit={e => { e.preventDefault(); run(async () => {
                       const d = await post<{ requestId: string; message: string }>("/api/access/request", { name: form.requestName.trim(), groupId: form.requestGroup });
                       storage.set(d.requestId);
                       setRequestId(d.requestId);
@@ -136,7 +130,7 @@ export function AuthScreen() {
             </AnimatePresence>
           </div>
         </m.div>
-        <p className="mt-auto pt-10 text-center text-[11.5px] text-muted-foreground/80">Amounts are kept to the exact paisa.</p>
+        <p className="footnote mt-auto pt-10 text-center text-muted-foreground">Amounts are kept to the exact paisa.</p>
       </div>
     </div>
   );
@@ -152,13 +146,13 @@ function RequestStatus({ requestId, busy, run, onReset, onEntered }: {
   });
   const s = status.data?.status;
   return (
-    <div className="space-y-5 py-2 text-center">
-      <div className={cn("mx-auto grid size-12 place-items-center rounded-full ring-1", s === "approved" ? "text-positive ring-positive/40" : "text-brass ring-brass/40")}>
-        {s === "approved" ? <Check className="size-5" /> : <Clock3 className="size-5" />}
+    <div className="panel space-y-5 px-5 py-7 text-center">
+      <div className={cn("mx-auto grid size-14 place-items-center rounded-full", s === "approved" ? "bg-positive-soft text-positive" : "bg-tint-soft text-tint")}>
+        {s === "approved" ? <Check className="size-7" strokeWidth={2.5} /> : <Clock3 className="size-7" />}
       </div>
       <div>
-        <p className="font-serif text-[26px] leading-tight">{s === "approved" ? "You're approved" : s === "pending" ? "Waiting for approval" : s ? "Access " + s : "Checking…"}</p>
-        <p className="mx-auto mt-1.5 max-w-[30ch] text-[13.5px] leading-relaxed text-muted-foreground">
+        <p className="title-2">{s === "approved" ? "You're approved" : s === "pending" ? "Waiting for approval" : s ? "Access " + s : "Checking…"}</p>
+        <p className="subhead mx-auto mt-1.5 max-w-[30ch] text-muted-foreground">
           {s === "approved" ? "Continue to start your session." : s === "pending" ? "We check for you automatically. You can also ask the admin to approve you." : s ? "Request access again if you still need it." : ""}
         </p>
       </div>
@@ -167,7 +161,7 @@ function RequestStatus({ requestId, busy, run, onReset, onEntered }: {
       ) : (
         <LoadingButton size="xl" variant="secondary" className="w-full" loading={status.isFetching} loadingText="Checking…" onClick={() => status.refetch()}>Check approval</LoadingButton>
       )}
-      <Button variant="link" className="text-muted-foreground" onClick={onReset}>Request with a different name or group</Button>
+      <Button variant="link" className="text-[15px] text-tint" onClick={onReset}>Request with a different name or group</Button>
     </div>
   );
 }

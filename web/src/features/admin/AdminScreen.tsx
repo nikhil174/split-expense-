@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AnimatedMoney, DateBadge, EASE, EmptyState, LoadingButton, NativeSelect, Page, PersonAvatar, SectionTitle, UnderlineTabs, fieldClass, listItem } from "@/components/app/bits";
+import { AnimatedMoney, DateBadge, EASE, EmptyState, LoadingButton, NativeSelect, Page, PersonAvatar, SectionTitle, Segmented, fieldClass, listItem } from "@/components/app/bits";
 import { useAdminAction, useAdminDashboard, useAdminExpenses, useAdminGroups, useAdminRequests, useMergePreview } from "@/hooks/queries";
 import { post, type AccessRequest } from "@/lib/api";
 import { inr } from "@/lib/money";
@@ -29,16 +29,16 @@ export function AdminScreen({ adminName }: { adminName: string }) {
 
   return (
     <Page>
-      <p className="eyebrow inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5" />Administrator</p>
-      <h1 className="mt-1 font-serif text-[40px] leading-none tracking-[-0.02em]">Overview</h1>
-      <section className="panel mt-6 p-5">
-        <p className="eyebrow">Total recorded spend</p>
+      <p className="subhead inline-flex items-center gap-1 px-1 text-muted-foreground"><ShieldCheck className="size-4" />Administrator</p>
+      <h1 className="large-title px-1">Overview</h1>
+      <section className="panel mt-5 p-4">
+        <p className="subhead text-muted-foreground">Total recorded spend</p>
         <div className="mt-3 min-h-14">{s ? <AnimatedMoney cents={s.totalSpentCents} size="hero" /> : <Skeleton className="h-12 w-48" />}</div>
         <div className="mt-5 grid grid-cols-4 divide-x divide-hairline border-t border-hairline pt-4">
           {[["Groups", s?.groups], ["Members", s?.members], ["Pending", s?.pending], ["Expenses", s?.expenses]].map(([label, value]) => (
             <div key={label as string} className="px-1 text-center">
-              <p className="tabular font-serif text-[26px] leading-none">{value ?? "–"}</p>
-              <p className="mt-1.5 text-[11px] text-muted-foreground">{label}</p>
+              <p className="tabular font-rounded text-[24px] leading-none font-bold">{value ?? "–"}</p>
+              <p className="footnote mt-1 text-muted-foreground">{label}</p>
             </div>
           ))}
         </div>
@@ -47,20 +47,20 @@ export function AdminScreen({ adminName }: { adminName: string }) {
       <AnimatePresence>
         {duplicates.map(d => (
           <m.div key={d.id} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-            <div className="mt-4 flex items-start gap-3 rounded-2xl bg-brass-soft/70 p-4 ring-1 ring-brass/30">
-              <UserCheck className="mt-0.5 size-5 shrink-0 text-brass" />
+            <div className="panel mt-4 flex items-start gap-3 p-4">
+              <UserCheck className="mt-0.5 size-5 shrink-0 text-tint" />
               <div className="min-w-0 flex-1 text-sm">
                 <p className="font-medium">You also have a separate member entry in {d.groupName}</p>
                 <p className="mt-0.5 text-muted-foreground">“{d.name}” is treated as a different person. Merge it so you're one person with an admin view and a normal view.</p>
-                <Button size="sm" className="mt-3 rounded-full" onClick={() => setMerging(d)}>Review merge</Button>
+                <Button size="sm" className="mt-3 h-8 rounded-full px-3.5" onClick={() => setMerging(d)}>Review merge</Button>
               </div>
             </div>
           </m.div>
         ))}
       </AnimatePresence>
 
-      <div className="sticky top-[60px] z-20 -mx-5 mt-6 bg-background/85 px-5 backdrop-blur-xl"><UnderlineTabs id="admin-tab" value={tab} onChange={setTab} options={[
-        { value: "requests", label: <>Requests{pending > 0 && <span className="ml-1.5 inline-grid min-w-5 place-items-center rounded-full bg-brass px-1 text-[10.5px] font-semibold text-background">{pending}</span>}</> },
+      <div className="sticky top-[52px] z-20 -mx-4 mt-5 bg-background/80 px-4 py-2 backdrop-blur-xl backdrop-saturate-[1.8]"><Segmented id="admin-tab" value={tab} onChange={setTab} options={[
+        { value: "requests", label: <>Requests{pending > 0 && <span className="ml-1 inline-grid h-[18px] min-w-[18px] place-items-center rounded-full bg-negative px-1 text-[12px] font-semibold text-white">{pending}</span>}</> },
         { value: "groups", label: "Groups" },
         { value: "expenses", label: "Expenses" },
       ]} /></div>
@@ -78,10 +78,10 @@ export function AdminScreen({ adminName }: { adminName: string }) {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "text-brass ring-brass/40",
-  approved: "text-positive ring-positive/35",
-  revoked: "text-muted-foreground ring-border",
-  rejected: "text-negative ring-negative/35",
+  pending: "text-[#ff9500] dark:text-[#ff9f0a]",
+  approved: "text-muted-foreground",
+  revoked: "text-muted-foreground",
+  rejected: "text-negative",
 };
 
 function RequestsTab({ onMerge }: { onMerge: (r: AccessRequest) => void }) {
@@ -102,16 +102,16 @@ function RequestsTab({ onMerge }: { onMerge: (r: AccessRequest) => void }) {
       {groups.map(([title, list]) => (
         <section key={title}>
           <SectionTitle>{title}</SectionTitle>
-          <div className="panel divide-y divide-hairline overflow-hidden">
+          <div className="panel overflow-hidden [&>*:not(:last-child)]:shadow-[inset_0_-0.5px_0_var(--hairline)]">
             <AnimatePresence initial={false}>
               {list.map((r, i) => (
                 <m.div key={r.id} layout custom={i} variants={listItem} initial="initial" animate="animate" exit="exit" className="flex items-center gap-3 px-4 py-3.5">
-                  <PersonAvatar id={r.id} name={r.name} />
+                  <PersonAvatar name={r.name} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-medium">{r.name}</p>
+                    <p className="truncate text-[17px]">{r.name}</p>
                     <p className="truncate text-xs text-muted-foreground">{r.groupName || "No group"} · {new Date(r.requestedAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</p>
                   </div>
-                  <Badge variant="outline" className={cn("rounded-full border-0 bg-transparent font-normal capitalize ring-1", STATUS_STYLE[r.status])}>{r.status}</Badge>
+                  <Badge variant="outline" className={cn("border-0 bg-transparent px-0 text-[15px] font-normal capitalize", STATUS_STYLE[r.status])}>{r.status}</Badge>
                   {r.status === "pending" ? (
                     <div className="flex gap-1.5">
                       <LoadingButton size="icon-sm" variant="secondary" className="rounded-full" aria-label={"Reject " + r.name} loading={busy(r.id, "reject")} onClick={() => act.mutate({ id: r.id, action: "reject", label: r.name + " rejected." })}><X /></LoadingButton>
@@ -155,16 +155,16 @@ function GroupsTab() {
     <div className="space-y-6">
       <form className="flex gap-2" onSubmit={e => { e.preventDefault(); create.mutate(name.trim(), { onSuccess: () => setName("") }); }}>
         <Input aria-label="New group name" required minLength={2} maxLength={80} placeholder="New group, e.g. Goa Trip 2026" value={name} onChange={e => setName(e.target.value)} className={cn(fieldClass, "h-11")} />
-        <LoadingButton type="submit" className="h-11 rounded-full px-5" loading={create.isPending} loadingText="Creating…"><FolderPlus />Create</LoadingButton>
+        <LoadingButton type="submit" className="h-11 rounded-[10px] px-4 text-[17px]" loading={create.isPending} loadingText="Creating…"><FolderPlus />Create</LoadingButton>
       </form>
       <section>
         <SectionTitle>All groups</SectionTitle>
-        <div className="panel divide-y divide-hairline overflow-hidden">
+        <div className="panel overflow-hidden [&>*:not(:last-child)]:shadow-[inset_0_-0.5px_0_var(--hairline)]">
           {groups.isPending ? <div className="p-4"><Skeleton className="h-10 w-full" /></div> : !groups.data?.length ? <EmptyState icon={<FolderPlus className="size-5" />} title="No groups yet">Create the first one above.</EmptyState> : (
             <AnimatePresence initial={false}>
               {groups.data.map((g, i) => (
                 <m.div key={g.id} layout custom={i} variants={listItem} initial="initial" animate="animate" exit="exit" className="flex items-center gap-3 px-4 py-3.5">
-                  <PersonAvatar id={g.id} name={g.name} />
+                  <PersonAvatar name={g.name} />
                   <div className="min-w-0 flex-1"><p className="truncate font-medium">{g.name}</p><p className="text-xs text-muted-foreground">{g.memberCount} {g.memberCount === 1 ? "member" : "members"}</p></div>
                   <Button size="icon-sm" variant="ghost" aria-label={"Delete " + g.name} className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => setConfirm({ title: `Delete “${g.name}”?`, body: "This permanently removes its expenses, payments, members and access requests. This cannot be undone.", action: "Delete group", destructive: true, run: () => remove.mutateAsync(g) })}>
@@ -187,13 +187,13 @@ function ExpensesTab() {
   const groupNames = React.useMemo(() => [...new Map((expenses.data || []).map(x => [x.groupId, x.groupName]))], [expenses.data]);
   const rows = (expenses.data || []).filter(x => !groupId || x.groupId === groupId);
   return (
-    <div className="panel divide-y divide-hairline overflow-hidden">
+    <div className="panel overflow-hidden [&>*:not(:last-child)]:shadow-[inset_0_-0.5px_0_var(--hairline)]">
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 pb-2">
-        <NativeSelect aria-label="Filter by group" value={groupId} onChange={e => setGroupId(e.target.value)} className="h-10 min-w-0 flex-1 text-[14px]">
+        <NativeSelect aria-label="Filter by group" value={groupId} onChange={e => setGroupId(e.target.value)} className="h-10 min-w-0 flex-1 text-[15px]">
           <option value="">All groups</option>
           {groupNames.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
         </NativeSelect>
-        <span className="tabular text-[12.5px] text-muted-foreground" data-testid="admin-expense-summary">{rows.length} {rows.length === 1 ? "expense" : "expenses"} · {inr(rows.reduce((s, x) => s + x.amountCents, 0))}</span>
+        <span className="footnote tabular text-muted-foreground" data-testid="admin-expense-summary">{rows.length} {rows.length === 1 ? "expense" : "expenses"} · {inr(rows.reduce((s, x) => s + x.amountCents, 0))}</span>
       </div>
       {expenses.isPending ? <div className="space-y-2 p-4">{[0, 1, 2].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div> : !rows.length ? <EmptyState icon={<ReceiptText className="size-5" />} title="No expenses yet" /> : (
         <Table>
@@ -219,7 +219,7 @@ function ConfirmDialog({ confirm, onClose }: { confirm: Confirm | null; onClose:
   return (
     <AlertDialog open={!!confirm} onOpenChange={o => { if (!o && !busy) onClose(); }}>
       <AlertDialogContent className="rounded-2xl">
-        <AlertDialogHeader><AlertDialogTitle className="font-serif text-2xl font-normal">{confirm?.title}</AlertDialogTitle><AlertDialogDescription>{confirm?.body}</AlertDialogDescription></AlertDialogHeader>
+        <AlertDialogHeader><AlertDialogTitle className="headline">{confirm?.title}</AlertDialogTitle><AlertDialogDescription>{confirm?.body}</AlertDialogDescription></AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
           <LoadingButton variant={confirm?.destructive ? "destructive" : "default"} loading={busy} onClick={async () => {
@@ -241,7 +241,7 @@ function MergeDialog({ request, onClose }: { request: AccessRequest | null; onCl
     <AlertDialog open={!!request} onOpenChange={o => { if (!o && !merge.isPending) onClose(); }}>
       <AlertDialogContent className="rounded-2xl">
         <AlertDialogHeader>
-          <AlertDialogTitle className="font-serif text-2xl font-normal">Merge “{request?.name}” into you?</AlertDialogTitle>
+          <AlertDialogTitle className="headline">Merge “{request?.name}” into you?</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3 text-sm text-muted-foreground">
               <p>Everything this member entry did in <b className="text-foreground">{request?.groupName}</b> becomes yours. You'll be one person with two views: <b className="text-foreground">My groups</b> and <b className="text-foreground">Admin</b>.</p>

@@ -41,7 +41,7 @@ export default function App() {
       <LazyMotion features={loadMotionFeatures} strict>
         <Root />
       </LazyMotion>
-      <Toaster position="top-center" offset={14} toastOptions={{ classNames: { toast: "!rounded-2xl !border-border !bg-popover/95 !text-foreground !shadow-[0_8px_30px_oklch(0_0_0/18%)] backdrop-blur-xl", description: "!text-muted-foreground", success: "[&_[data-icon]]:!text-positive", error: "[&_[data-icon]]:!text-negative" } }} />
+      <Toaster position="top-center" offset={12} toastOptions={{ classNames: { toast: "!rounded-[14px] !border-0 !bg-popover/90 !text-foreground !text-[15px] !shadow-[0_10px_30px_rgba(0,0,0,0.15)] backdrop-blur-xl backdrop-saturate-[1.8]", description: "!text-muted-foreground", success: "[&_[data-icon]]:!text-positive", error: "[&_[data-icon]]:!text-negative" } }} />
     </QueryClientProvider>
   );
 }
@@ -82,15 +82,15 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
   const view = route.name === "admin" ? "admin" : "groups";
   const screenKey = route.name === "group" ? "group-" + route.groupId : route.name === "person" ? "person-" + route.groupId + route.memberId : route.name;
   return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 border-b border-hairline bg-background/75 pt-[env(safe-area-inset-top)] backdrop-blur-xl backdrop-saturate-150">
-        <div className="mx-auto flex h-[60px] max-w-2xl items-center gap-3 px-5">
+    <div className="min-h-dvh overflow-x-clip">
+      <header className="sticky top-0 z-30 bg-background/80 pt-[env(safe-area-inset-top)] shadow-[0_0.5px_0_var(--hairline)] backdrop-blur-xl backdrop-saturate-[1.8]">
+        <div className="mx-auto flex h-[52px] max-w-2xl items-center gap-3 px-4">
           <button type="button" onClick={() => navigate({ name: isAdmin && view === "admin" ? "admin" : "home" })} className="flex cursor-pointer items-baseline gap-1.5" aria-label="Home">
             <Wordmark />
           </button>
           <div className="flex flex-1 justify-end">
             {isAdmin && (
-              <Segmented id="view-switch" className="w-[188px]" value={view} onChange={v => navigate({ name: v === "admin" ? "admin" : "home" })}
+              <Segmented id="view-switch" className="w-[176px]" value={view} onChange={v => navigate({ name: v === "admin" ? "admin" : "home" })}
                 options={[{ value: "groups", label: "My groups" }, { value: "admin", label: "Admin" }]} />
             )}
           </div>
@@ -98,9 +98,9 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
             <DropdownMenuTrigger asChild>
               <button type="button" className="cursor-pointer rounded-full transition-transform active:scale-95" aria-label="Account"><PersonAvatar id={user.id} name={user.name} size="sm" /></button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60 rounded-xl">
+            <DropdownMenuContent align="end" className="w-60 rounded-[13px] bg-popover/90 backdrop-blur-xl">
               <DropdownMenuLabel className="font-normal">
-                <p className="font-serif text-lg leading-tight">{user.name}</p>
+                <p className="headline">{user.name}</p>
                 <p className="text-xs text-muted-foreground">{isAdmin ? "Administrator · also a member" : "Member"}</p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
