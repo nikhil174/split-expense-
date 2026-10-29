@@ -49,6 +49,13 @@ export function useAddExpense(groupId: string) {
     onSuccess: () => refreshGroup(qc, groupId),
   });
 }
+export function useEditExpense(groupId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: NewExpense & { id: string }) => post(`/api/groups/${groupId}/expenses/${id}/edit`, body),
+    onSuccess: () => refreshGroup(qc, groupId),
+  });
+}
 export function useDeleteExpense(groupId: string) {
   const qc = useQueryClient();
   return useMutation({

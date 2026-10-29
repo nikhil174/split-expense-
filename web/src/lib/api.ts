@@ -33,7 +33,7 @@ export type Split = { memberId: string; name: string; amountCents: number };
 export type Expense = {
   id: string; description: string; amountCents: number; createdAt: number; paidBy: string; paidByName: string;
   createdBy: string; createdByName: string; splitCount: number; splits: Split[];
-  myShareCents: number; myEffectCents: number; canDelete: boolean;
+  myShareCents: number; myEffectCents: number; canDelete: boolean; canEdit: boolean;
 };
 export type Debt = {
   fromMemberId: string; fromName: string; toMemberId: string; toName: string; amountCents: number;

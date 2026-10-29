@@ -1,7 +1,7 @@
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet } from "lucide-react";
+import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Pencil, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,6 +37,8 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
   const group = useGroup(groupId);
   const mine = useMine(groupId);
   const [adding, setAdding] = React.useState(false);
+  // The expense stays set while the edit sheet animates closed.
+  const [editing, setEditing] = React.useState<{ open: boolean; x: Expense | null }>({ open: false, x: null });
   const [settling, setSettling] = React.useState(false);
   const net = mine.data ? mine.data.totalOwedToYouCents - mine.data.totalYouOweCents : 0;
   const ready = !!group.data && !!mine.data;
@@ -80,7 +82,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
 
       <AnimatePresence mode="wait" initial={false}>
         <m.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }} className="mt-7">
-          {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} onAdd={() => setAdding(true)} />}
+          {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} onAdd={() => setAdding(true)} onEdit={x => setEditing({ open: true, x })} />}
           {tab === "balances" && <BalancesTab groupId={groupId} />}
           {tab === "payments" && <PaymentsTab groupId={groupId} meId={mine.data?.memberId} />}
           {tab === "insights" && <InsightsTab groupId={groupId} />}
@@ -99,6 +101,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
         options={[{ value: "expenses", label: "Expenses", icon: ReceiptText }, { value: "balances", label: "Balances", icon: Scale }, { value: "payments", label: "Payments", icon: Wallet }, { value: "insights", label: "Insights", icon: ChartPie }]} />
 
       <AddExpenseDrawer groupId={groupId} open={adding} onOpenChange={setAdding} />
+      <AddExpenseDrawer groupId={groupId} open={editing.open} onOpenChange={o => setEditing(v => ({ ...v, open: o }))} editing={editing.x} />
       <PeopleSheet open={peopleOpen} onOpenChange={setPeopleOpen} filter="all" groupId={groupId} />
       <SettleUpDrawer groupId={groupId} open={settling} onOpenChange={setSettling} />
     </Page>
@@ -115,7 +118,7 @@ function TableHead({ cols }: { cols: [string, string?][] }) {
 const tr = "border-b border-hairline last:border-0";
 
 // ----- Expenses -----
-function ExpensesTab({ groupId, meId, onAdd }: { groupId: string; meId?: string; onAdd: () => void }) {
+function ExpensesTab({ groupId, meId, onAdd, onEdit }: { groupId: string; meId?: string; onAdd: () => void; onEdit: (x: Expense) => void }) {
   const expenses = useExpenses(groupId);
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState<string | null>(null);
@@ -142,7 +145,7 @@ function ExpensesTab({ groupId, meId, onAdd }: { groupId: string; meId?: string;
         ) : (
           <table className="w-full text-[14px]">
             <TableHead cols={[["Expense", "w-full"], ["Amount", "text-right"], ["You", "text-right"]]} />
-            <tbody>{list.map(x => <ExpenseRow key={x.id} x={x} meId={meId} groupId={groupId} open={open === x.id} onToggle={() => setOpen(o => (o === x.id ? null : x.id))} />)}</tbody>
+            <tbody>{list.map(x => <ExpenseRow key={x.id} x={x} meId={meId} groupId={groupId} open={open === x.id} onToggle={() => setOpen(o => (o === x.id ? null : x.id))} onEdit={() => onEdit(x)} />)}</tbody>
           </table>
         )}
       </div>
@@ -150,7 +153,7 @@ function ExpensesTab({ groupId, meId, onAdd }: { groupId: string; meId?: string;
   );
 }
 
-function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: string; groupId: string; open: boolean; onToggle: () => void }) {
+function ExpenseRow({ x, meId, groupId, open, onToggle, onEdit }: { x: Expense; meId?: string; groupId: string; open: boolean; onToggle: () => void; onEdit: () => void }) {
   const del = useDeleteExpense(groupId);
   const [confirm, setConfirm] = React.useState(false);
   const who = (id: string, name: string) => (id === meId ? "You" : name);
@@ -194,8 +197,11 @@ function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: s
                       ))}</tbody>
                     </table>
                   </div>
-                  {x.canDelete && (
-                    <button type="button" className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[#141716]/[0.08] bg-white py-2.5 text-[14px] font-medium text-negative transition-transform active:scale-[0.98]" onClick={e => { e.stopPropagation(); setConfirm(true); }}><Trash2 className="size-4" />Delete expense</button>
+                  {(x.canEdit || x.canDelete) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {x.canEdit && <button type="button" className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[#141716]/[0.08] bg-white py-2.5 text-[14px] font-medium transition-transform active:scale-[0.98]" onClick={e => { e.stopPropagation(); onEdit(); }}><Pencil className="size-4" />Edit</button>}
+                      {x.canDelete && <button type="button" className={cn("flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[#141716]/[0.08] bg-white py-2.5 text-[14px] font-medium text-negative transition-transform active:scale-[0.98]", !x.canEdit && "col-span-2")} onClick={e => { e.stopPropagation(); setConfirm(true); }}><Trash2 className="size-4" />Delete</button>}
+                    </div>
                   )}
                 </div>
               </m.div>

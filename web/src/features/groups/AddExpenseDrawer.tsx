@@ -6,8 +6,9 @@ import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } fr
 import { Input } from "@/components/ui/input";
 import { EASE, Footnote, List, LoadingButton, NativeSelect, PersonAvatar, SectionTitle, Segmented, fieldClass, haptic, pressableRow, rowClass } from "@/components/app/bits";
 import { glitterBurst } from "@/components/app/glitter";
-import { useAddExpense, useGroup, type NewExpense } from "@/hooks/queries";
-import { inr, toCents } from "@/lib/money";
+import { useAddExpense, useEditExpense, useGroup, type NewExpense } from "@/hooks/queries";
+import type { Expense } from "@/lib/api";
+import { centsToInput, inr, toCents } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 type Mode = "equal" | "manual";
@@ -25,9 +26,12 @@ export function SheetHeader({ title, description, disabled }: { title: string; d
   );
 }
 
-export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: string; open: boolean; onOpenChange: (o: boolean) => void }) {
+// Adds a new expense, or with `editing` changes an existing one (same form,
+// prefilled; removing someone from the split is just unticking them).
+export function AddExpenseDrawer({ groupId, open, onOpenChange, editing }: { groupId: string; open: boolean; onOpenChange: (o: boolean) => void; editing?: Expense | null }) {
   const group = useGroup(groupId);
-  const add = useAddExpense(groupId);
+  const addExpense = useAddExpense(groupId), editExpense = useEditExpense(groupId);
+  const add = editing ? editExpense : addExpense;
   const members = group.data?.members || [];
   const meId = group.data?.me.id;
   const [description, setDescription] = React.useState("");
@@ -37,13 +41,30 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [manual, setManual] = React.useState<Record<string, string>>({});
   const [error, setError] = React.useState("");
+  const [dropped, setDropped] = React.useState<string[]>([]);
 
-  // Fresh form every time the sheet opens: payer = me, everyone selected.
+  // Fresh form every time the sheet opens. New: payer = me and nobody in the
+  // split until chosen. Edit: the expense as saved (equal if shares differ by
+  // at most a paisa, otherwise exact amounts).
   React.useEffect(() => {
     if (!open) return;
-    setDescription(""); setAmount(""); setMode("equal"); setManual({}); setError("");
-    setPaidBy(members.some(mm => mm.id === meId) ? meId! : members[0]?.id || "");
-    setSelected(new Set(members.map(mm => mm.id)));
+    setError("");
+    if (!editing) {
+      setDescription(""); setAmount(""); setMode("equal"); setManual({}); setDropped([]);
+      setPaidBy(members.some(mm => mm.id === meId) ? meId! : members[0]?.id || "");
+      setSelected(new Set());
+      return;
+    }
+    const active = new Set(members.map(mm => mm.id));
+    const shares = editing.splits.filter(sp => active.has(sp.memberId));
+    setDropped(editing.splits.filter(sp => !active.has(sp.memberId)).map(sp => sp.name));
+    setDescription(editing.description); setAmount(centsToInput(editing.amountCents));
+    setPaidBy(active.has(editing.paidBy) ? editing.paidBy : members.some(mm => mm.id === meId) ? meId! : members[0]?.id || "");
+    const cents = editing.splits.map(sp => sp.amountCents);
+    const equal = Math.max(...cents) - Math.min(...cents) <= 1;
+    setMode(equal ? "equal" : "manual");
+    setSelected(new Set(shares.map(sp => sp.memberId)));
+    setManual(equal ? {} : Object.fromEntries(shares.map(sp => [sp.memberId, centsToInput(sp.amountCents)])));
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = toCents(amount);
@@ -62,16 +83,15 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
     const body: NewExpense = mode === "equal"
       ? { description: description.trim(), amount: amount.trim(), paidBy, splitMode: "equal", memberIds: [...selected] }
       : { description: description.trim(), amount: amount.trim(), paidBy, splitMode: "manual", allocations: Object.entries(manual).filter(([, v]) => v.trim()).map(([memberId, v]) => ({ memberId, amount: v.trim() })) };
-    add.mutate(body, {
-      onSuccess: () => { haptic(); glitterBurst(); toast.success(`“${body.description}” added · ${inr(total)}`); onOpenChange(false); },
-      onError: err => setError(err.message),
-    });
+    const done = { onSuccess: () => { haptic(); glitterBurst(); toast.success(`“${body.description}” ${editing ? "updated" : "added"} · ${inr(total)}`); onOpenChange(false); }, onError: (err: Error) => setError(err.message) };
+    if (editing) editExpense.mutate({ ...body, id: editing.id }, done);
+    else addExpense.mutate(body, done);
   };
 
   return (
     <Drawer open={open} onOpenChange={o => { if (!add.isPending) onOpenChange(o); }} repositionInputs={false}>
       <DrawerContent className="mx-auto max-h-[94dvh] max-w-xl rounded-t-[28px] border-0">
-        <SheetHeader title="Add expense" description="Everyone in the split owes their share to whoever paid." disabled={add.isPending} />
+        <SheetHeader title={editing ? "Edit expense" : "Add expense"} description={editing ? "Change anything, or untick people to remove them from the split." : "Everyone in the split owes their share to whoever paid."} disabled={add.isPending} />
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pt-1 pb-5">
             <div>
@@ -113,7 +133,7 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
                       })}
                     </List>
                     <Footnote>
-                      {!n ? "Choose at least one person." : total ? <><span className="tabular text-foreground">{inr(Math.floor(total / n))}{total % n ? "–" + inr(Math.ceil(total / n)) : ""}</span> each · {n} {n === 1 ? "person" : "people"}</> : `${n} ${n === 1 ? "person" : "people"} selected`}
+                      {!n ? "Tap the people who share this expense." : total ? <><span className="tabular text-foreground">{inr(Math.floor(total / n))}{total % n ? "–" + inr(Math.ceil(total / n)) : ""}</span> each · {n} {n === 1 ? "person" : "people"}</> : `${n} ${n === 1 ? "person" : "people"} selected`}
                     </Footnote>
                   </m.div>
                 ) : (
@@ -135,11 +155,12 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
                 )}
               </AnimatePresence>
             </div>
+            {dropped.length > 0 && <p className="subhead rounded-[16px] bg-[#141716]/[0.035] px-4 py-3 text-muted-foreground">{dropped.join(", ")} {dropped.length === 1 ? "is" : "are"} no longer in the group, so saving removes them from this split.</p>}
             <AnimatePresence>{error && <m.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} role="alert" className="subhead rounded-[16px] bg-negative-soft px-4 py-3 text-negative">{error}</m.p>}</AnimatePresence>
           </div>
           <div className="safe-bottom bg-[#fbfbf9]/90 px-4 pt-3 backdrop-blur-xl">
             <LoadingButton type="submit" size="xl" className="w-full" disabled={!valid} loading={add.isPending} loadingText="Saving…">
-              {total ? `Save ${inr(total)} expense` : "Save expense"}
+              {editing ? (total ? `Save changes · ${inr(total)}` : "Save changes") : total ? `Save ${inr(total)} expense` : "Save expense"}
             </LoadingButton>
           </div>
         </form>

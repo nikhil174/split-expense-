@@ -139,3 +139,35 @@ test("balances list everyone I owe or who owes me across groups, matching group 
   assert.deepEqual(bea.people.map(x => [x.name, x.netCents]), [["Alex Admin", -4500], ["Cy", 500]]);
   assert.equal((await call(f.env, "/api/balances")).status, 401);
 });
+
+test("creator or admin can edit an expense: amount, payer and who is in the split; balances follow", async t => {
+  const f = await fixture(t);
+  const { ids } = f;
+  const e = await f.add("Bea", { description: "Dinner", amount: "90", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy, ids.admin] });
+  const edit = (who, body, eid = e.data.id) => call(f.env, `${f.G}/expenses/${eid}/edit`, { method: "POST", cookie: f.cookies[who] ?? f.adminCookie, body });
+  const net = async (who, other) => (await f.get(who, "/with/" + other)).data.netCents;
+  assert.equal(await net("Bea", ids.Cy), 3000);
+
+  // Cy did not add it, so Cy cannot edit it.
+  assert.equal((await edit("Cy", { description: "Dinner", amount: "1", paidBy: ids.Cy, memberIds: [ids.Cy] })).status, 403);
+  // Remove Cy from the split and change the amount.
+  const r = await edit("Bea", { description: "Dinner (no Cy)", amount: "100", paidBy: ids.Bea, memberIds: [ids.Bea, ids.admin] });
+  assert.equal(r.status, 200);
+  const x = (await f.get("Bea", "/expenses")).data.expenses.find(y => y.id === e.data.id);
+  assert.deepEqual([x.description, x.amountCents, x.splits.map(s => [s.name, s.amountCents]).sort(), x.canEdit], ["Dinner (no Cy)", 10000, [["Alex Admin", 5000], ["Bea", 5000]], true]);
+  assert.equal(await net("Bea", ids.Cy), 0);
+  assert.equal(await net("Bea", ids.admin), 5000);
+  // The admin can edit anyone's expense, including switching to exact amounts and a new payer.
+  assert.equal((await edit("admin", { description: "Dinner", amount: "100", paidBy: ids.Cy, splitMode: "manual", allocations: [{ memberId: ids.Bea, amount: "70" }, { memberId: ids.Cy, amount: "30" }] })).status, 200);
+  assert.equal(await net("Bea", ids.Cy), -7000);
+  assert.equal(await net("Bea", ids.admin), 0);
+  // Edits are validated exactly like new expenses and touch nothing on failure.
+  assert.equal((await edit("Bea", { description: "Dinner", amount: "100", paidBy: ids.Bea, splitMode: "manual", allocations: [{ memberId: ids.Bea, amount: "60" }] })).status, 400);
+  assert.equal((await edit("Bea", { description: "Dinner", amount: "100", paidBy: ids.Bea, memberIds: [] })).status, 400);
+  assert.equal(await net("Bea", ids.Cy), -7000);
+  assert.equal(f.raw.prepare("SELECT COUNT(*) AS n FROM appx_splits").get().n, 2);
+  // Unknown expense, or one from another group, is not found.
+  assert.equal((await edit("Bea", { description: "x", amount: "1", paidBy: ids.Bea, memberIds: [ids.Bea] }, "nope")).status, 404);
+  const other = await setupGroup(f.env, "Other group", ["Zed"], { adminCookie: f.adminCookie });
+  assert.equal((await call(f.env, `/api/groups/${other.groupId}/expenses/${e.data.id}/edit`, { method: "POST", cookie: f.adminCookie, body: { description: "x", amount: "1", paidBy: "admin", memberIds: ["admin"] } })).status, 404);
+});
