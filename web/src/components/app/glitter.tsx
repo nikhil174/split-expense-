@@ -99,74 +99,111 @@ export function glitterBurst({ x, y, strong = false }: { x?: number; y?: number;
 
 const TOUCHABLE = 'button, a[href], [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="radio"], [role="checkbox"], summary';
 
-// Touch ripple: a small, soft gold ripple around the finger on whatever was
-// pressed, with a pinch of gold dust. Drawn in a fixed overlay clipped to
-// the element's shape, so it never affects layout or catches taps. Uses the
-// Web Animations API; with reduced motion on it is a brief glow only.
+// Touch ripple, ColorOS style: starts wherever the finger lands (empty space
+// too) and follows the press. A quick tap leaves a tiny, faint ripple; holding
+// grows it until release, then it fades with a pinch of gold dust. On buttons,
+// rows and tabs it is clipped to the element's shape. Drawn in a fixed overlay
+// that ignores pointer events, so it never shifts layout or blocks taps. Uses
+// the Web Animations API; with reduced motion on it is a brief glow only.
 export function installTouchWave() {
   if (typeof document === "undefined") return () => {};
+  const MAX = 64, MIN = 14, GROW_MS = 900;
   const onDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
     const el = (e.target as Element | null)?.closest?.(TOUCHABLE) as HTMLElement | null;
-    if (!el || el.matches(":disabled, [aria-disabled='true'], [data-disabled]")) return;
-    const rect = el.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
+    // Disabled controls give no feedback (and browsers don't report their release).
+    if (el?.matches(":disabled, [aria-disabled='true'], [data-disabled]")) return;
+    const rect = el?.getBoundingClientRect();
+    if (el && (!rect?.width || !rect.height)) return;
     const still = reducedMotion();
-    const x = e.clientX - rect.left, y = e.clientY - rect.top;
-    const reach = Math.hypot(Math.max(x, rect.width - x), Math.max(y, rect.height - y));
+    const start = performance.now();
 
+    // Clipped to the pressed element, or a free square around the finger.
+    const box = rect ?? new DOMRect(e.clientX - MAX, e.clientY - MAX, MAX * 2, MAX * 2);
+    const x = e.clientX - box.left, y = e.clientY - box.top;
     const layer = document.createElement("div");
     layer.setAttribute("aria-hidden", "true");
-    layer.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;border-radius:${getComputedStyle(el).borderRadius};overflow:hidden;pointer-events:none;z-index:2147483000;isolation:isolate`;
+    layer.style.cssText = `position:fixed;left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px;${el ? `border-radius:${getComputedStyle(el).borderRadius};overflow:hidden;` : ""}pointer-events:none;z-index:2147483000;isolation:isolate`;
     const circle = (r: number, css: string) => {
       const c = document.createElement("div");
       c.style.cssText = `position:absolute;left:${x - r}px;top:${y - r}px;width:${r * 2}px;height:${r * 2}px;border-radius:999px;${css}`;
       layer.appendChild(c);
       return c;
     };
-    // A small, soft ripple around the finger (never the whole element),
-    // slightly stronger on dark ink buttons so the gold still reads.
-    const bg = getComputedStyle(el).backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [255, 255, 255, 0];
-    const dark = (bg[3] ?? 1) > 0.5 && bg[0] * 0.299 + bg[1] * 0.587 + bg[2] * 0.114 < 90;
-    const a = dark ? [26, 10, 40] : [16, 6, 28];
-    const R = Math.min(reach, 46);
-    const glow = circle(R, `background:radial-gradient(circle, rgb(226 186 98 / ${a[0]}%) 0%, rgb(226 186 98 / ${a[1]}%) 55%, transparent 72%)`);
+    // Slightly stronger on dark ink buttons so the gold still reads.
+    const bg = el ? getComputedStyle(el).backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [] : [];
+    const dark = bg.length >= 3 && (bg[3] ?? 1) > 0.5 && bg[0] * 0.299 + bg[1] * 0.587 + bg[2] * 0.114 < 90;
+    const a = dark ? [26, 10, 40] : [17, 6, 30];
+    const glow = circle(MAX, `background:radial-gradient(circle, rgb(226 186 98 / ${a[0]}%) 0%, rgb(226 186 98 / ${a[1]}%) 55%, transparent 72%)`);
+    const ring = still ? null : circle(MAX, `border:1px solid rgb(214 168 72 / ${a[2]}%)`);
     document.body.appendChild(layer);
 
-    let done = 560;
-    if (still) {
-      glow.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: 500, fill: "forwards" });
-    } else {
-      const ease = "cubic-bezier(0.22, 0.8, 0.3, 1)";
-      glow.animate([{ transform: "scale(0.35)", opacity: 1 }, { transform: "scale(1)", opacity: 0 }], { duration: 520, easing: ease, fill: "forwards" });
-      const ring = circle(Math.min(reach, 52), `border:1px solid rgb(214 168 72 / ${a[2]}%)`);
-      ring.animate([{ transform: "scale(0.3)", opacity: 1 }, { transform: "scale(1)", opacity: 0 }], { duration: 560, easing: ease, fill: "forwards" });
-      // A pinch of gold dust that stays close to the finger.
-      for (let i = 0; i < 4; i++) {
-        const angle = (i / 4) * Math.PI * 2 + Math.random() * 1.2;
-        const dist = R * (0.45 + Math.random() * 0.4);
-        const size = 1.5 + Math.random();
-        const color = CHAMPAGNE[i % 3];
-        const s = circle(size / 2, `background:${color}`);
-        const delay = 40 + Math.random() * 60, duration = 420 + Math.random() * 120;
-        s.animate([
-          { transform: "translate(0,0)", opacity: 0 },
-          { opacity: 0.85, offset: 0.3 },
-          { transform: `translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px)`, opacity: 0 },
-        ], { duration, delay, easing: ease, fill: "forwards" });
-        done = Math.max(done, delay + duration);
-      }
-    }
-    // Follow the element while it moves (press scale, page slide-in).
-    const end = performance.now() + done + 80;
+    const ease = "cubic-bezier(0.22, 0.8, 0.3, 1)";
+    const from = MIN / MAX;
+    const grow = still
+      ? [glow.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, fill: "forwards" })]
+      : [glow, ring!].map(c => c.animate([{ transform: `scale(${from})`, opacity: 0.6 }, { transform: "scale(1)", opacity: 1 }], { duration: GROW_MS, easing: ease, fill: "forwards" }));
+
+    // Follow a pressed element while it moves (press scale, page slide-in).
+    let alive = true;
     const follow = () => {
-      if (performance.now() > end || !el.isConnected) return layer.remove();
-      const r = el.getBoundingClientRect();
-      layer.style.left = r.left + "px"; layer.style.top = r.top + "px";
-      layer.style.width = r.width + "px"; layer.style.height = r.height + "px";
+      if (!alive) return;
+      if (el?.isConnected) {
+        const r = el.getBoundingClientRect();
+        layer.style.left = r.left + "px"; layer.style.top = r.top + "px";
+        layer.style.width = r.width + "px"; layer.style.height = r.height + "px";
+      }
       requestAnimationFrame(follow);
     };
-    requestAnimationFrame(follow);
+    if (el) requestAnimationFrame(follow);
+
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onUp, true);
+      window.removeEventListener("pointermove", onMove, true);
+      const t = Math.min(1, (performance.now() - start) / GROW_MS);
+      // How far the ripple got, on the same ease-out curve, used for the fade.
+      const scale = from + (1 - from) * (1 - Math.pow(1 - t, 3));
+      grow.forEach(g => g.pause());
+      let done = 320;
+      if (still) {
+        glow.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: "forwards" });
+      } else {
+        const end = Math.min(1, scale * 1.25);
+        const fade = (c: HTMLElement, o: number) => c.animate([{ transform: `scale(${scale})`, opacity: o }, { transform: `scale(${end})`, opacity: 0 }], { duration: 320, easing: ease, fill: "forwards" });
+        grow.forEach(g => g.cancel());
+        fade(glow, 1); fade(ring!, 1);
+        // A pinch of gold dust: more and further the longer the press.
+        const specks = 2 + Math.round(t * 4), R = MAX * scale;
+        for (let i = 0; i < specks; i++) {
+          const angle = (i / specks) * Math.PI * 2 + Math.random() * 1.2;
+          const dist = R * (0.5 + Math.random() * 0.5);
+          const size = 1.5 + Math.random();
+          const sp = circle(size / 2, `background:${CHAMPAGNE[i % 3]}`);
+          const duration = 380 + Math.random() * 140;
+          sp.animate([
+            { transform: "translate(0,0)", opacity: 0 },
+            { opacity: 0.85, offset: 0.3 },
+            { transform: `translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px)`, opacity: 0 },
+          ], { duration, easing: ease, fill: "forwards" });
+          done = Math.max(done, duration);
+        }
+      }
+      window.setTimeout(() => { alive = false; layer.remove(); }, done + 60);
+    };
+    const onUp = (ev: PointerEvent) => { if (ev.pointerId === e.pointerId) release(); };
+    // A scroll or drag isn't a press: let the ripple go.
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId === e.pointerId && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) > 10) release();
+    };
+    window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("pointercancel", onUp, true);
+    window.addEventListener("pointermove", onMove, { capture: true, passive: true });
+    // Safety net if the release is never seen (e.g. the page lost focus).
+    window.setTimeout(release, 5000);
   };
   document.addEventListener("pointerdown", onDown, { passive: true, capture: true });
   return () => document.removeEventListener("pointerdown", onDown, { capture: true });
