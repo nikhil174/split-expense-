@@ -29,6 +29,14 @@ Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 - Net balance = paid − own shares + repayments made − repayments received. It always equals (owed to you − you owe) over the pairwise debts, and group balances sum to zero.
 - Repayments: a normal member can only record a payment from their own account, to an active member, for at most the exact outstanding amount (re-checked atomically inside the INSERT). The admin can record any payment, including to/from removed members, so those debts can still be cleared.
 
+## Group screen (mobile-first, Splitwise-style)
+- Header shows your overall position in the group ("You are owed ₹X" / "You owe ₹X" / settled) with **+ Add expense** and **Settle up**, both opening bottom sheets.
+- **Expenses** tab: a table (date, expense, amount, and what it means for you: "you lent" / "you borrowed" / "not involved"). Tap a row to see the split breakdown, who added it, and a delete button (for the person who added it, or the admin). Includes search.
+- **Balances** tab: you and each person (tap for a drill-down), overall group balances, and who owes whom.
+- **Person drill-down** (`GET /api/groups/:id/with/:memberId`): every shared expense and payment between you and that person, with the effect of each and a running balance that ends at the current debt. From here you can pay them, or the screen shows that you are waiting for them to record their payment.
+- **Payments** tab: repayment history table. **Insights** tab: who spent the most, plus the member list.
+- The group list shows your balance in each group.
+
 ## Membership policy (as implemented)
 - Members who are approved (even if their 3-hour window lapsed) or pending re-approval stay selectable as payer/split members; acting in the app still requires an active session.
 - Revoked, removed or deleted members are not selectable for new expenses or member-recorded payments. Their `appx_group_members` row is kept so historical expenses, splits, settlements and balances still show their name.

@@ -114,3 +114,32 @@ export function validateSettlement({ debts, fromMemberId, toMemberId, amountCent
   if (amountCents > due) throw new SettlementError("Payment exceeds the amount currently owed (₹" + (due / 100).toFixed(2) + ").", 409);
   return amountCents;
 }
+
+// Person-to-person drill-down between `me` and `other`, in the same direct
+// attribution model. Positive amounts mean `other` owes `me` more.
+//   shares:      [{ expenseId, description, paidBy, memberId, amountCents, totalCents, createdAt }]
+//                split rows (amountCents is that member's share)
+//   settlements: [{ id, fromMemberId, toMemberId, amountCents, createdAt }]
+// Returns { netCents, items } with items newest first, each carrying the
+// running balance after it. netCents always equals the netted pairwise debt.
+export function pairwiseActivity({ shares = [], settlements = [], me, other }) {
+  const items = [];
+  for (const row of shares) {
+    const cents = assertCents(row.amountCents);
+    if (cents === 0) continue;
+    if (row.paidBy === me && row.memberId === other) {
+      items.push({ type: "expense", id: row.expenseId, description: row.description, paidBy: me, totalCents: row.totalCents, shareCents: cents, effectCents: cents, createdAt: row.createdAt });
+    } else if (row.paidBy === other && row.memberId === me) {
+      items.push({ type: "expense", id: row.expenseId, description: row.description, paidBy: other, totalCents: row.totalCents, shareCents: cents, effectCents: -cents, createdAt: row.createdAt });
+    }
+  }
+  for (const s of settlements) {
+    const cents = assertCents(s.amountCents);
+    if (s.fromMemberId === me && s.toMemberId === other) items.push({ type: "payment", id: s.id, fromMemberId: me, toMemberId: other, amountCents: cents, effectCents: cents, createdAt: s.createdAt });
+    else if (s.fromMemberId === other && s.toMemberId === me) items.push({ type: "payment", id: s.id, fromMemberId: other, toMemberId: me, amountCents: cents, effectCents: -cents, createdAt: s.createdAt });
+  }
+  items.sort((a, b) => a.createdAt - b.createdAt || String(a.id).localeCompare(String(b.id)));
+  let running = 0;
+  for (const item of items) { running += item.effectCents; item.runningCents = running; }
+  return { netCents: running, items: items.reverse() };
+}

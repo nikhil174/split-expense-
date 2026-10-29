@@ -1,6 +1,6 @@
 import { allocateEqualSplit, allocateManualSplit } from "./split-logic.js";
 import { parseAmountToCents } from "./money.js";
-import { computeBalances, computePairwiseDebts, debtsForMember, validateSettlement, SettlementError } from "./settlement-logic.js";
+import { computeBalances, computePairwiseDebts, debtsForMember, pairwiseActivity, validateSettlement, SettlementError } from "./settlement-logic.js";
 
 const SESSION_MS = 3 * 60 * 60 * 1000;
 const INVITE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -340,7 +340,12 @@ async function api(req, env, url) {
     return json({ ok: true }, 200, { "set-cookie": setCookie("split_session", "", 0) });
   }
   if (method === "GET" && p === "/api/groups") {
-    const r = await db.prepare("SELECT g.id,g.name FROM appx_groups g JOIN appx_group_members m ON m.group_id=g.id WHERE m.member_id=? ORDER BY g.created_at DESC").bind(u.id).all();
+    const r = await db.prepare("SELECT g.id,g.name,"
+      + "COALESCE((SELECT SUM(amount_cents) FROM appx_expenses WHERE group_id=g.id AND paid_by=?1),0)"
+      + "-COALESCE((SELECT SUM(s.amount_cents) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=g.id AND s.member_id=?1),0)"
+      + "+COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND from_member_id=?1),0)"
+      + "-COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND to_member_id=?1),0) AS myBalanceCents "
+      + "FROM appx_groups g JOIN appx_group_members m ON m.group_id=g.id WHERE m.member_id=?1 ORDER BY g.created_at DESC").bind(u.id).all();
     return json({ groups: r.results });
   }
   if (method === "POST" && p === "/api/groups") return fail("Only an administrator can create groups.", 403);
@@ -418,8 +423,51 @@ async function api(req, env, url) {
       return json({ ok: true, id: eid, amountCents: cents, splits: splitRows }, 201);
     }
     if (method === "GET" && tail === "expenses") {
-      const r = await db.prepare("SELECT e.id,e.description,e.amount_cents AS amountCents,e.created_at AS createdAt,e.paid_by AS paidBy,COALESCE(p.name,'" + FORMER_MEMBER + "') AS paidByName,(SELECT COUNT(*) FROM appx_splits s WHERE s.expense_id=e.id) AS splitCount FROM appx_expenses e LEFT JOIN appx_group_members p ON p.group_id=e.group_id AND p.member_id=e.paid_by WHERE e.group_id=? ORDER BY e.created_at DESC LIMIT 300").bind(gid).all();
-      return json({ expenses: r.results.map(x => ({ ...x, amount: rupees(x.amountCents) })) });
+      const [members, r, splits] = await Promise.all([
+        groupMembers(db, gid),
+        db.prepare("SELECT id,description,amount_cents AS amountCents,created_at AS createdAt,paid_by AS paidBy,created_by AS createdBy FROM appx_expenses WHERE group_id=? ORDER BY created_at DESC LIMIT 300").bind(gid).all(),
+        db.prepare("SELECT s.expense_id AS expenseId,s.member_id AS memberId,s.amount_cents AS amountCents FROM appx_splits s WHERE s.expense_id IN (SELECT id FROM appx_expenses WHERE group_id=? ORDER BY created_at DESC LIMIT 300)").bind(gid).all(),
+      ]);
+      const nameOf = nameLookup(members);
+      const byExpense = new Map();
+      for (const row of splits.results) {
+        if (!byExpense.has(row.expenseId)) byExpense.set(row.expenseId, []);
+        byExpense.get(row.expenseId).push({ memberId: row.memberId, name: nameOf(row.memberId), amountCents: row.amountCents });
+      }
+      const expenses = r.results.map(x => {
+        const rows = (byExpense.get(x.id) || []).sort((a, b) => b.amountCents - a.amountCents || a.name.localeCompare(b.name));
+        const myShareCents = rows.find(row => row.memberId === u.id)?.amountCents || 0;
+        // Positive: others owe me on this expense ("you lent"); negative: I owe the payer ("you borrowed").
+        const myEffectCents = x.paidBy === u.id ? x.amountCents - myShareCents : -myShareCents;
+        return { ...x, amount: rupees(x.amountCents), paidByName: nameOf(x.paidBy), createdByName: nameOf(x.createdBy), splitCount: rows.length, splits: rows, myShareCents, myEffectCents, canDelete: isAdmin || x.createdBy === u.id };
+      });
+      return json({ expenses });
+    }
+    const deleteExpense = tail.match(/^expenses\/([\w-]+)\/delete$/);
+    if (method === "POST" && deleteExpense) {
+      if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
+      const e = await db.prepare("SELECT id,created_by FROM appx_expenses WHERE id=? AND group_id=?").bind(deleteExpense[1], gid).first();
+      if (!e) return fail("Expense not found.", 404);
+      if (!isAdmin && e.created_by !== u.id) return fail("Only the person who added this expense or the admin can delete it.", 403);
+      await db.batch([
+        db.prepare("DELETE FROM appx_splits WHERE expense_id=?").bind(e.id),
+        db.prepare("DELETE FROM appx_expenses WHERE id=? AND group_id=?").bind(e.id, gid),
+      ]);
+      return json({ ok: true, deleted: true });
+    }
+    const withMember = tail.match(/^with\/([\w-]+)$/);
+    if (method === "GET" && withMember) {
+      const other = withMember[1];
+      const members = await groupMembers(db, gid);
+      const nameOf = nameLookup(members);
+      if (other === u.id || !members.some(x => x.id === other)) return fail("Choose another member of this group.", 404);
+      const [shares, settlements] = await Promise.all([
+        db.prepare("SELECT e.id AS expenseId,e.description,e.paid_by AS paidBy,e.amount_cents AS totalCents,e.created_at AS createdAt,s.member_id AS memberId,s.amount_cents AS amountCents FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?1 AND ((e.paid_by=?2 AND s.member_id=?3) OR (e.paid_by=?3 AND s.member_id=?2))").bind(gid, u.id, other).all(),
+        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt FROM appx_settlements WHERE group_id=?1 AND ((from_member_id=?2 AND to_member_id=?3) OR (from_member_id=?3 AND to_member_id=?2))").bind(gid, u.id, other).all(),
+      ]);
+      const activity = pairwiseActivity({ shares: shares.results, settlements: settlements.results, me: u.id, other });
+      const otherMember = members.find(x => x.id === other);
+      return json({ me: { id: u.id, name: u.name }, other: { id: other, name: nameOf(other), active: otherMember.active }, netCents: activity.netCents, items: activity.items });
     }
     if (method === "GET" && tail === "settlements") {
       const r = await db.prepare("SELECT s.id,s.from_member_id AS fromMemberId,COALESCE(f.name,'" + FORMER_MEMBER + "') AS fromName,s.to_member_id AS toMemberId,COALESCE(t.name,'" + FORMER_MEMBER + "') AS toName,s.amount_cents AS amountCents,s.created_at AS createdAt,COALESCE(c.name,'" + FORMER_MEMBER + "') AS recordedByName FROM appx_settlements s LEFT JOIN appx_group_members f ON f.group_id=s.group_id AND f.member_id=s.from_member_id LEFT JOIN appx_group_members t ON t.group_id=s.group_id AND t.member_id=s.to_member_id LEFT JOIN appx_group_members c ON c.group_id=s.group_id AND c.member_id=s.created_by WHERE s.group_id=? ORDER BY s.created_at DESC LIMIT 200").bind(gid).all();
