@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { makeEnv, call, setupGroup, ADMIN } from "./helpers/d1.js";
 
 test("every group route requires an active session and membership of that group", async t => {
@@ -100,9 +100,12 @@ test("expense and settlement writes are rate limited per member", async t => {
 });
 
 test("no secrets or test credentials are shipped in client code or config", async () => {
-  const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  const web = new URL("../web/", import.meta.url);
+  const files = (await readdir(web, { recursive: true })).filter(f => /\.(tsx?|html|css)$/.test(f));
+  assert.ok(files.length > 10, "frontend sources found");
+  const sources = await Promise.all(files.map(f => readFile(new URL(f, web), "utf8")));
   const toml = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
-  for (const text of [html, toml]) {
+  for (const text of [...sources, toml]) {
     assert.ok(!/SESSION_SECRET\s*=|ADMIN_PIN\s*=/.test(text));
     assert.ok(!text.includes(ADMIN.pin));
   }

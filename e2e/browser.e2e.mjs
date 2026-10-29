@@ -1,9 +1,10 @@
 // Browser end-to-end test against a running Worker (local `wrangler dev`).
 // Not part of `npm test`; run with `npm run test:e2e` after starting
 // `npx wrangler dev --local` with ADMIN_PIN set in .dev.vars.
-//   E2E_BASE_URL   default http://127.0.0.1:8787
-//   E2E_ADMIN_PIN  must match the running Worker's ADMIN_PIN
-//   E2E_SHOTS_DIR  optional directory for screenshots
+//   E2E_BASE_URL    default http://127.0.0.1:8787
+//   E2E_ADMIN_PIN   must match the running Worker's ADMIN_PIN
+//   E2E_ADMIN_NAME  admin name (default "E2E Admin"; the first admin login saves it)
+//   E2E_SHOTS_DIR   optional directory for screenshots
 // Never point this at production: it creates groups, members and payments.
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -13,19 +14,19 @@ const { chromium, devices } = createRequire(import.meta.url)("playwright");
 
 const BASE = process.env.E2E_BASE_URL || "http://127.0.0.1:8787";
 const PIN = process.env.E2E_ADMIN_PIN;
+const ADMIN = process.env.E2E_ADMIN_NAME || "E2E Admin";
 const SHOTS = process.env.E2E_SHOTS_DIR;
 if (!PIN) throw new Error("Set E2E_ADMIN_PIN");
 if (/workers\.dev|split-expense\./.test(BASE) && !process.env.E2E_ALLOW_REMOTE) throw new Error("Refusing to run write tests against a deployed Worker");
 
 const GROUP = "E2E Trip " + Date.now().toString(36);
 const browser = await chromium.launch();
-const phone = { ...devices["Pixel 7"] };
-const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }); };
-const notice = page => page.locator("#notice");
 const step = name => console.log("✓", name);
+const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
+const slow = (page, pattern) => page.route(pattern, async route => { if (route.request().method() === "POST") await new Promise(r => setTimeout(r, 1200)); await route.continue(); });
 
 async function newPage() {
-  const context = await browser.newContext(phone);
+  const context = await browser.newContext(devices["Pixel 7"]);
   const page = await context.newPage();
   page.on("pageerror", e => { throw new Error("Page error: " + e.message); });
   await page.goto(BASE + "/");
@@ -35,181 +36,183 @@ async function noHorizontalOverflow(page, label) {
   const { sw, cw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
   assert.ok(sw <= cw, `${label}: page overflows horizontally (${sw} > ${cw})`);
 }
-async function adminLogin(page) {
-  await page.click("#modeAdmin");
-  await page.fill("#adminName", "E2E Admin");
-  await page.fill("#pin", PIN);
-  await page.click("#adminLogin button");
-  await page.locator("#adminPanel").waitFor();
-}
-async function requestAccess(page, name) {
-  await page.click("#tabRequest");
-  await page.fill("#name", name);
-  await page.selectOption("#requestGroup", { label: GROUP });
-  await page.click("#requestForm button");
-  await assert.doesNotReject(notice(page).filter({ hasText: "submitted" }).waitFor());
+const toast = (page, text) => page.locator("[data-sonner-toast]", { hasText: text }).first().waitFor();
+const heroStatus = page => page.locator("section").first().innerText();
+
+async function adminSignIn(page) {
+  await page.getByRole("tab", { name: "Admin", exact: true }).click();
+  await page.getByLabel("Admin name").fill(ADMIN);
+  await page.getByLabel("PIN").fill(PIN);
+  await page.getByRole("button", { name: "Sign in as admin" }).click();
+  await page.getByRole("tab", { name: "My groups", exact: true }).waitFor();
 }
 async function memberSignIn(page, name) {
-  await page.goto(BASE + "/");
-  await page.selectOption("#memberSigninGroup", { label: GROUP });
-  await page.fill("#memberSigninName", name);
-  await page.click("#memberLogin button");
-  await page.locator("#groups .group").first().waitFor();
-  assert.equal(await page.locator("#groups .group .open-hint").first().textContent(), "Open dashboard →");
-  await page.locator("#groups .group", { hasText: GROUP }).click();
-  await page.locator("#groupTitle", { hasText: GROUP }).waitFor();
-  await page.locator("#openAddExpense:not([disabled])").waitFor(); // group data finished loading
-  assert.ok(await page.locator("#groupsCard").isHidden(), "opening a group replaces the list view");
+  await page.getByLabel("Group").selectOption({ label: GROUP });
+  await page.getByLabel("Your approved name").fill(name);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("heading", { name: "Your groups" }).waitFor();
 }
-const text = async (page, sel) => (await page.locator(sel).innerText()).replace(/\s+/g, " ");
+async function openGroup(page) {
+  await page.getByRole("button", { name: new RegExp(GROUP) }).click();
+  await page.getByRole("heading", { name: GROUP }).waitFor();
+  await page.locator("button:enabled", { hasText: "Add expense" }).first().waitFor();
+}
 
 try {
   const admin = await newPage();
-  await adminLogin(admin);
-  await admin.fill("#adminGroupName", GROUP);
-  await admin.click("#adminCreateGroup button");
-  await notice(admin).filter({ hasText: "Group created" }).waitFor();
-  step("admin signed in and created group");
+  await adminSignIn(admin);
+  await admin.getByRole("tab", { name: "Admin", exact: true }).click();
+  await admin.getByRole("tab", { name: "Groups", exact: true }).click();
+  await admin.getByLabel("New group name").fill(GROUP);
+  await admin.getByRole("button", { name: "Create" }).click();
+  await toast(admin, "created");
+  step("admin signed in (one identity, two views) and created a group");
 
   const bea = await newPage(), cy = await newPage();
-  await requestAccess(bea, "Bea E2E");
-  await requestAccess(cy, "Cy E2E");
-  await admin.goto(BASE + "/");
-  await adminLogin(admin);
-  for (const name of ["Bea E2E", "Cy E2E"]) {
-    await admin.locator("#requests .item", { hasText: name }).filter({ hasText: GROUP }).filter({ hasText: "pending" }).getByRole("button", { name: "Approve" }).click();
-    await admin.locator("#requests .item", { hasText: name }).filter({ hasText: GROUP }).filter({ hasText: "approved" }).waitFor();
+  for (const [page, name] of [[bea, "Bea E2E"], [cy, "Cy E2E"]]) {
+    await page.getByRole("tab", { name: "Request access", exact: true }).click();
+    await page.getByLabel("Your name").waitFor();
+    await page.getByLabel("Group").selectOption({ label: GROUP });
+    await page.getByLabel("Your name").fill(name);
+    await page.getByRole("button", { name: "Request access" }).click();
+    await page.getByText("Waiting for approval").waitFor();
   }
-  step("members requested access and admin approved them");
+  // The admin's own name is reserved: no second "person".
+  const dup = await newPage();
+  await dup.getByRole("tab", { name: "Request access", exact: true }).click();
+  await dup.getByLabel("Your name").waitFor();
+  await dup.getByLabel("Group").selectOption({ label: GROUP });
+  await dup.getByLabel("Your name").fill(ADMIN);
+  await dup.getByRole("button", { name: "Request access" }).click();
+  await toast(dup, "administrator's name");
+  await dup.context().close();
 
-  await memberSignIn(bea, "Bea E2E");
-  await noHorizontalOverflow(bea, "group page");
-  assert.match(await text(bea, "#expenseEmpty"), /No expenses yet/);
-  await bea.click("#openAddExpense");
-  assert.equal(await bea.inputValue("#paidBy"), await bea.locator("#paidBy option", { hasText: "(you)" }).getAttribute("value"), "payer defaults to me");
-  await bea.fill("#desc", "Dinner");
-  await bea.fill("#amount", "100");
-  await bea.locator("#splitMembers label", { hasText: "E2E Admin" }).locator("input").uncheck();
-  assert.match(await text(bea, "#equalPreview"), /₹50\.00 per person · 2 people/);
-  // Slow the server down to check the loading state and double-tap protection.
-  await bea.route("**/expenses", async route => { if (route.request().method() === "POST") await new Promise(r => setTimeout(r, 1200)); await route.continue(); });
-  await bea.click("#saveExpense");
-  assert.equal(await bea.getAttribute("#saveExpense", "aria-busy"), "true", "save button shows busy");
-  assert.equal(await bea.textContent("#saveExpense"), "Saving…");
-  assert.ok(await bea.locator("#saveExpense").isDisabled(), "save button disabled while saving");
-  assert.ok(await bea.evaluate(() => document.body.classList.contains("is-loading")), "progress bar visible");
-  await shot(bea, "bea-saving");
-  await bea.locator("#saveExpense").click({ force: true, timeout: 500 }).catch(() => {});
-  await bea.evaluate(() => document.getElementById("expenseForm").requestSubmit(document.getElementById("saveExpense")));
-  await notice(bea).filter({ hasText: /Dinner” saved\.$/ }).waitFor();
-  await bea.unroute("**/expenses");
-  assert.equal(await bea.inputValue("#desc"), "", "form cleared after success");
-  assert.equal(await bea.locator("#expenseRows tr.exp-row", { hasText: "Dinner" }).count(), 1, "double tap did not create a duplicate");
-  assert.ok(!(await bea.locator("#saveExpense").isDisabled()), "button re-enabled after finishing");
-  assert.ok(!(await bea.locator("#expenseDialog").evaluate(d => d.open)), "dialog closes after saving");
-  const dinnerRow = bea.locator("#expenseRows tr.exp-row", { hasText: "Dinner" });
-  assert.match((await dinnerRow.innerText()).replace(/\s+/g, " "), /Dinner You paid ₹100\.00 ₹100\.00 you lent ₹50\.00/);
-  assert.match(await text(bea, "#groupStatus"), /You are owed ₹50\.00/);
-  step("equal split via dialog: expense table shows 'you lent ₹50.00'");
+  await admin.getByRole("tab", { name: /Requests/ }).click();
+  for (const name of ["Bea E2E", "Cy E2E"]) {
+    await admin.getByRole("button", { name: "Approve " + name }).click();
+    await toast(admin, name + " approved");
+  }
+  await shot(admin, "admin-requests");
+  step("members requested access; admin's own name refused; admin approved both");
 
-  await bea.click("#openAddExpense");
-  await bea.click("#splitManualMode");
-  await bea.fill("#desc", "Snacks");
-  await bea.fill("#amount", "10");
-  const manualFor = async name => bea.locator("#manualSplitMembers .manual-split-amount").nth(await bea.locator("#manualSplitMembers label").evaluateAll((ls, n) => ls.findIndex(l => l.textContent.startsWith(n)), name));
-  await (await manualFor("Bea")).fill("5.00");
-  await (await manualFor("Cy")).fill("4.99");
-  assert.match(await text(bea, "#manualSplitTotal"), /Allocated: ₹9\.99 \/ ₹10\.00 · ₹0\.01 left/);
-  await bea.click("#saveExpense");
-  await bea.locator("#expenseDialog .dialog-err", { hasText: "add up exactly" }).waitFor();
-  await (await manualFor("Cy")).fill("5.00");
-  assert.match(await text(bea, "#manualSplitTotal"), /Allocated: ₹10\.00 \/ ₹10\.00 ✓/);
-  await bea.click("#saveExpense");
-  await notice(bea).filter({ hasText: /Snacks” saved\.$/ }).waitFor();
-  assert.equal(await bea.locator("#expenseRows tr.exp-row").count(), 2);
-  await bea.locator("#expenseRows tr.exp-row", { hasText: "Snacks" }).click();
-  const detail = bea.locator("#expenseRows tr.exp-detail:not(.hidden)");
-  assert.match((await detail.innerText()).replace(/\s+/g, " "), /You paid ₹10\.00 · added by you .*Cy E2E ₹5\.00 ₹5\.00/);
-  await bea.fill("#expenseSearch", "dinn");
-  assert.equal(await bea.locator("#expenseRows tr.exp-row").count(), 1);
-  await bea.fill("#expenseSearch", "");
-  step("manual split: ₹5.00 + ₹4.99 rejected inside the dialog; row expands to show the split; search filters");
-  await shot(bea, "bea-expenses");
-
+  // Bea continues from the request screen, Cy signs in by name.
+  await bea.getByRole("button", { name: "Check approval" }).click();
+  await bea.getByRole("button", { name: "Continue" }).click();
+  await bea.getByRole("heading", { name: "Your groups" }).waitFor();
+  await cy.getByRole("button", { name: "Request with a different name or group" }).click();
+  await cy.getByRole("tab", { name: "Sign in", exact: true }).click();
+  await cy.getByLabel("Your approved name").waitFor();
   await memberSignIn(cy, "Cy E2E");
-  assert.match(await text(cy, "#groupStatus"), /You owe ₹55\.00/);
-  assert.match((await cy.locator("#expenseRows tr.exp-row", { hasText: "Dinner" }).innerText()).replace(/\s+/g, " "), /you borrowed ₹50\.00/);
-  await cy.click(".g-tabs .tab[data-tab=balances]");
-  assert.match(await text(cy, "#personList"), /Bea E2E you owe ₹55\.00/);
-  await cy.locator("#personList .person-row", { hasText: "Bea E2E" }).click();
-  await cy.locator("#personTitle", { hasText: "You and Bea E2E" }).waitFor();
-  assert.match(await text(cy, "#personStatus"), /You owe Bea E2E ₹55\.00/);
-  assert.equal(await cy.locator("#personRows tr").count(), 2);
-  await shot(cy, "cy-person");
+  await bea.reload();
+  await bea.getByRole("heading", { name: "Your groups" }).waitFor();
+  step("approved member continued; session survives a reload");
+
+  await openGroup(bea);
+  await noHorizontalOverflow(bea, "group page");
+  await bea.getByRole("button", { name: "Add expense" }).first().click();
+  await bea.getByLabel("Description").fill("Dinner");
+  await bea.getByLabel("Total").fill("100");
+  assert.equal(await bea.getByLabel("Paid by").inputValue(), await bea.getByLabel("Paid by").locator("option", { hasText: "(you)" }).getAttribute("value"));
+  await bea.getByRole("checkbox", { name: ADMIN }).click();
+  await bea.getByText("₹50.00 each · 2 people").waitFor();
+  await slow(bea, "**/expenses");
+  await bea.getByRole("button", { name: "Save ₹100.00 expense" }).click();
+  const saving = bea.getByRole("button", { name: "Saving…" });
+  await saving.waitFor();
+  assert.ok(await saving.isDisabled(), "save disabled while in flight");
+  await toast(bea, "“Dinner” added");
+  await bea.unroute("**/expenses");
+  const dinnerRow = bea.getByRole("row", { name: /Dinner/ });
+  await dinnerRow.waitFor();
+  assert.match((await dinnerRow.innerText()).replace(/\s+/g, " "), /Dinner You paid ₹100\.00 ₹100\.00 you lent ₹50\.00/);
+  step("equal split: busy button while saving, table shows 'you lent ₹50.00'");
+
+  await bea.getByRole("button", { name: "Add expense" }).first().click();
+  assert.equal(await bea.getByLabel("Description").inputValue(), "", "form is fresh each time");
+  await bea.getByLabel("Description").fill("Snacks");
+  await bea.getByLabel("Total").fill("10");
+  await bea.getByRole("tab", { name: "Exact amounts", exact: true }).click();
+  await bea.getByLabel("Exact share for Bea E2E").fill("5.00");
+  await bea.getByLabel("Exact share for Cy E2E").fill("4.99");
+  await bea.getByText("₹0.01 left").waitFor();
+  assert.ok(await bea.getByRole("button", { name: "Save ₹10.00 expense" }).isDisabled(), "mismatched exact split cannot be saved");
+  await bea.getByLabel("Exact share for Cy E2E").fill("5");
+  await bea.getByText("✓ Exact").waitFor();
+  await bea.getByRole("button", { name: "Save ₹10.00 expense" }).click();
+  await toast(bea, "“Snacks” added");
+  await bea.getByRole("row", { name: /Snacks/ }).click();
+  await bea.getByRole("cell", { name: "Cy E2E", exact: true }).waitFor();
+  await bea.getByPlaceholder("Search by description or payer").fill("dinn");
+  await bea.getByRole("row", { name: /Snacks/ }).waitFor({ state: "detached" });
+  await bea.getByPlaceholder("Search by description or payer").fill("");
+  await shot(bea, "bea-expenses");
+  step("exact split: ₹5.00 + ₹4.99 blocked, exact saves; row expands; search filters");
+
+  await cy.reload();
+  await openGroup(cy);
+  assert.match(await heroStatus(cy), /You owe ₹55\.00/);
+  assert.match((await cy.getByRole("row", { name: /Dinner/ }).innerText()).replace(/\s+/g, " "), /you borrowed ₹50\.00/);
+  await cy.getByRole("tab", { name: "Balances", exact: true }).click();
+  await cy.getByRole("button", { name: /Bea E2E.*you owe.*₹55\.00/s }).click();
+  await cy.getByRole("heading", { name: "You and Bea E2E" }).waitFor();
+  await cy.getByText("You owe Bea E2E ₹55.00").waitFor();
+  assert.equal(await cy.locator("tbody tr").count(), 2);
   await noHorizontalOverflow(cy, "person drill-down");
+  await shot(cy, "cy-person");
   step("person drill-down lists both shared expenses with a running balance");
 
   await cy.getByRole("button", { name: "Pay Bea E2E" }).click();
-  assert.equal(await cy.inputValue("#settleAmount"), "55.00", "amount is prefilled with the full debt");
-  assert.equal(await cy.textContent("#recordPayment"), "Record ₹55.00 payment");
-  assert.match(await text(cy, "#settleHint"), /clears the full amount/);
-  await cy.fill("#settleAmount", "60");
-  assert.match(await text(cy, "#settleHint"), /more than the ₹55\.00 owed/);
-  assert.ok(await cy.locator("#recordPayment").isDisabled(), "cannot overpay");
-  await cy.click("#settleHalf");
-  assert.equal(await cy.inputValue("#settleAmount"), "27.50");
-  await cy.click("#settleOther");
-  await cy.fill("#settleAmount", "20");
-  assert.match(await text(cy, "#settleHint"), /Partial payment · ₹35\.00 will still be owed/);
-  await shot(cy, "cy-settle-sheet");
-  await cy.route("**/settlements", async route => { if (route.request().method() === "POST") await new Promise(r => setTimeout(r, 1200)); await route.continue(); });
-  await cy.click("#recordPayment");
-  assert.equal(await cy.getAttribute("#recordPayment", "aria-busy"), "true", "pay button shows busy");
-  await cy.evaluate(() => document.getElementById("settlementForm").requestSubmit(document.getElementById("recordPayment")));
-  await notice(cy).filter({ hasText: /₹35\.00 is still owed\.$/ }).waitFor();
+  const amount = cy.getByLabel("Amount paid");
+  await amount.waitFor();
+  assert.equal(await amount.inputValue(), "55.00", "prefilled with the full debt");
+  await amount.fill("60");
+  await cy.getByText("That's more than the ₹55.00 owed.").waitFor();
+  assert.ok(await cy.getByRole("button", { name: "Record payment" }).isDisabled());
+  await cy.getByRole("button", { name: /^Half/ }).click();
+  assert.equal(await amount.inputValue(), "27.50");
+  await cy.getByRole("button", { name: "Other amount" }).click();
+  await amount.fill("20");
+  await cy.getByText("Partial payment · ₹35.00 will still be owed after this.").waitFor();
+  await shot(cy, "cy-settle");
+  await slow(cy, "**/settlements");
+  await cy.getByRole("button", { name: "Record ₹20.00 payment" }).click();
+  await cy.getByRole("button", { name: "Recording payment…" }).waitFor();
+  await toast(cy, "Recorded ₹20.00 from Cy E2E to Bea E2E");
   await cy.unroute("**/settlements");
-  await cy.locator("#personStatus", { hasText: "₹35.00" }).waitFor();
-  assert.equal(await cy.locator("#personRows tr").count(), 3);
-  assert.match(await text(cy, "#personRows"), /You paid Bea E2E/);
-  step("partial repayment ₹20 from the drill-down → Cy now owes ₹35; overpay disabled; half chip works");
+  await cy.getByText("You owe Bea E2E ₹35.00").waitFor();
+  assert.equal(await cy.locator("tbody tr").count(), 3);
+  step("partial repayment ₹20 from the drill-down; overpay blocked; Half works; busy while recording");
 
-  await cy.click("#openSettle");
-  assert.equal(await cy.inputValue("#settleAmount"), "35.00", "header Settle up goes straight to the only debt, prefilled");
-  await cy.click("#recordPayment");
-  await notice(cy).filter({ hasText: /All settled between them ✓$/ }).waitFor();
-  await cy.locator("#personStatus", { hasText: "You are settled up" }).waitFor();
-  await cy.click("#backToBalances");
-  assert.match(await text(cy, "#balances"), /Cy E2E \(you\) ₹0\.00 · settled/);
-  assert.match(await text(cy, "#whoOwesWhom"), /Everyone is settled up/);
-  assert.match(await text(cy, "#groupStatus"), /You are all settled up/);
-  await cy.click(".g-tabs .tab[data-tab=payments]");
-  assert.equal(await cy.locator("#settlementHistory tr").count(), 2);
-  assert.match(await text(cy, "#settlementHistory"), /You paid Bea E2E/);
-  step("header Settle up prefills the remaining ₹35.00 and clears the debt; payments table shows both");
-  await shot(cy, "cy-payments");
-  await noHorizontalOverflow(cy, "payments tab");
+  await cy.goBack();
+  await cy.getByRole("heading", { name: GROUP }).waitFor();
+  step("Android/browser back returns from the person to the group");
+  await cy.getByRole("button", { name: "Settle up" }).click();
+  assert.equal(await cy.getByLabel("Amount paid").inputValue(), "35.00", "only debt opens straight to payment, prefilled");
+  await cy.getByRole("button", { name: "Record ₹35.00 payment" }).click();
+  await toast(cy, "All settled between them");
+  await cy.getByText("You are all settled up").waitFor();
+  await cy.getByRole("tab", { name: "Payments", exact: true }).click();
+  await cy.locator("tbody tr").nth(1).waitFor();
+  assert.equal(await cy.locator("tbody tr").count(), 2);
+  assert.match(await cy.locator("tbody").innerText(), /You paid Bea E2E/);
+  await cy.getByRole("tab", { name: "Balances", exact: true }).click();
+  await cy.getByText("Everyone is settled up").waitFor();
+  await noHorizontalOverflow(cy, "balances");
+  step("header Settle up clears the rest; payments table shows both; everyone settled");
 
-  await bea.reload();
-  await memberSignIn(bea, "Bea E2E");
-  assert.match(await text(bea, "#groupStatus"), /You are all settled up/);
-  await bea.click(".g-tabs .tab[data-tab=insights]");
-  assert.match(await text(bea, "#groupTotalSpent"), /₹110\.00/);
-  await bea.click("#backToGroups");
-  assert.ok(await bea.locator("#groupsCard").isVisible() && await bea.locator("#groupPanel").isHidden());
-  assert.match(await text(bea, "#groups"), /settled up/);
-  step("creditor view refreshed; back to groups shows per-group status");
-  await admin.goto(BASE + "/");
-  await adminLogin(admin);
-  await admin.locator("#dashboardRecent table tbody tr").first().waitFor();
-  assert.match(await text(admin, "#dashboardRecent"), /Snacks .*₹10\.00/);
-  await admin.click("#dashExpensesTab");
-  await admin.locator("#dashboardExpensesList table").waitFor();
-  await admin.selectOption("#adminExpenseGroup", { label: GROUP });
-  assert.equal(await admin.locator("#dashboardExpensesList tbody tr").count(), 2);
-  assert.match(await text(admin, "#adminExpenseSummary"), /2 expenses · ₹110\.00/);
+  await admin.getByRole("tab", { name: "My groups", exact: true }).click();
+  await openGroup(admin);
+  await admin.getByRole("tab", { name: "Insights", exact: true }).click();
+  const people = await admin.locator("section", { hasText: "People" }).last().innerText();
+  assert.equal(people.split(ADMIN).length - 1, 1, "admin appears once in the group");
+  assert.match(people, new RegExp(ADMIN + " \\(you\\)"));
+  await admin.getByRole("tab", { name: "Admin", exact: true }).click();
+  await admin.getByRole("tab", { name: "Expenses", exact: true }).click();
+  await admin.getByLabel("Filter by group").selectOption({ label: GROUP });
+  assert.match(await admin.getByTestId("admin-expense-summary").innerText(), /2 expenses · ₹110\.00/);
   await noHorizontalOverflow(admin, "admin dashboard");
   await shot(admin, "admin-expenses");
-  step("admin dashboard shows recent and all expenses as tables with a group filter");
+  step("admin is one person in the group and switches between My groups and Admin");
   console.log("E2E PASSED");
 } finally {
   await browser.close();
