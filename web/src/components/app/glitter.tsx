@@ -96,3 +96,77 @@ export function glitterBurst({ x, y, strong = false }: { x?: number; y?: number;
   document.body.appendChild(layer);
   window.setTimeout(() => layer.remove(), 1400);
 }
+
+const TOUCHABLE = 'button, a[href], [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="radio"], [role="checkbox"], summary';
+
+// Touch wave: a soft gold ripple that spreads from the finger across whatever
+// was pressed, shedding a little gold dust. Drawn in a fixed overlay clipped to
+// the element's shape, so it never affects layout or catches taps. Uses the
+// Web Animations API; with reduced motion on it is a brief glow only.
+export function installTouchWave() {
+  if (typeof document === "undefined") return () => {};
+  const onDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    const el = (e.target as Element | null)?.closest?.(TOUCHABLE) as HTMLElement | null;
+    if (!el || el.matches(":disabled, [aria-disabled='true'], [data-disabled]")) return;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const still = reducedMotion();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    const reach = Math.hypot(Math.max(x, rect.width - x), Math.max(y, rect.height - y));
+
+    const layer = document.createElement("div");
+    layer.setAttribute("aria-hidden", "true");
+    layer.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;border-radius:${getComputedStyle(el).borderRadius};overflow:hidden;pointer-events:none;z-index:2147483000;isolation:isolate`;
+    const circle = (r: number, css: string) => {
+      const c = document.createElement("div");
+      c.style.cssText = `position:absolute;left:${x - r}px;top:${y - r}px;width:${r * 2}px;height:${r * 2}px;border-radius:999px;${css}`;
+      layer.appendChild(c);
+      return c;
+    };
+    // Brighter on dark surfaces (ink buttons) so the gold still reads.
+    const bg = getComputedStyle(el).backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [255, 255, 255, 0];
+    const dark = (bg[3] ?? 1) > 0.5 && bg[0] * 0.299 + bg[1] * 0.587 + bg[2] * 0.114 < 90;
+    const a = dark ? [48, 22, 85] : [34, 16, 65];
+    const glow = circle(Math.min(reach, 150), `background:radial-gradient(circle, rgb(226 186 98 / ${a[0]}%) 0%, rgb(226 186 98 / ${a[1]}%) 45%, transparent 70%)`);
+    document.body.appendChild(layer);
+
+    let done = 800;
+    if (still) {
+      glow.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: 600, fill: "forwards" });
+    } else {
+      const ease = "cubic-bezier(0.2, 0.7, 0.2, 1)";
+      glow.animate([{ transform: "scale(0.15)", opacity: 1 }, { opacity: 0.9, offset: 0.45 }, { transform: "scale(1)", opacity: 0 }], { duration: 720, easing: ease, fill: "forwards" });
+      const ring = circle(reach, `border:2px solid rgb(214 168 72 / ${a[2]}%);box-shadow:0 0 8px rgb(228 192 108 / 35%)`);
+      ring.animate([{ transform: "scale(0.05)", opacity: 1 }, { opacity: 0.8, offset: 0.5 }, { transform: "scale(1)", opacity: 0 }], { duration: 760, easing: ease, fill: "forwards" });
+      // Gold dust riding the wave outwards.
+      const specks = Math.min(12, 6 + Math.round(reach / 50));
+      for (let i = 0; i < specks; i++) {
+        const angle = (i / specks) * Math.PI * 2 + Math.random() * 0.6;
+        const dist = Math.min(reach, 160) * (0.35 + Math.random() * 0.5);
+        const size = 2 + Math.random() * 2.5;
+        const color = CHAMPAGNE[i % 3];
+        const s = circle(size / 2, `background:${color};box-shadow:0 0 ${size * 2}px ${color}`);
+        const delay = Math.random() * 90, duration = 520 + Math.random() * 260;
+        s.animate([
+          { transform: "translate(0,0) scale(0.6)", opacity: 0 },
+          { opacity: 1, offset: 0.2 },
+          { transform: `translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px) scale(1)`, opacity: 0 },
+        ], { duration, delay, easing: ease, fill: "forwards" });
+        done = Math.max(done, delay + duration);
+      }
+    }
+    // Follow the element while it moves (press scale, page slide-in).
+    const end = performance.now() + done + 80;
+    const follow = () => {
+      if (performance.now() > end || !el.isConnected) return layer.remove();
+      const r = el.getBoundingClientRect();
+      layer.style.left = r.left + "px"; layer.style.top = r.top + "px";
+      layer.style.width = r.width + "px"; layer.style.height = r.height + "px";
+      requestAnimationFrame(follow);
+    };
+    requestAnimationFrame(follow);
+  };
+  document.addEventListener("pointerdown", onDown, { passive: true, capture: true });
+  return () => document.removeEventListener("pointerdown", onDown, { capture: true });
+}
