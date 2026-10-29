@@ -234,8 +234,8 @@ export function Wordmark({ large }: { large?: boolean }) {
           <svg viewBox="0 0 24 24" className={large ? "size-8" : "size-4"} fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M6 16 18 8M11 8h7v7" /></svg>
         </span>
         <Sparkles className={large ? "-inset-3" : "-inset-1.5"} glints={large
-          ? [{ x: "88%", y: "-4%", size: 12, delay: 0.3 }, { x: "-6%", y: "80%", size: 7, delay: 1.9, opacity: 0.7 }, { x: "100%", y: "62%", size: 5, delay: 2.8, opacity: 0.6 }]
-          : [{ x: "86%", y: "-6%", size: 7, delay: 0.6 }]} />
+          ? [{ x: "86%", y: "-8%", size: 18, delay: 0.3 }, { x: "-10%", y: "78%", size: 10, delay: 1.9 }, { x: "102%", y: "60%", size: 8, delay: 2.8, opacity: 0.8 }]
+          : [{ x: "84%", y: "-14%", size: 11, delay: 0.6 }, { x: "-12%", y: "74%", size: 6, delay: 2.1, opacity: 0.8 }]} />
       </span>
       {!large && <span className="text-[18px] font-medium tracking-[-0.03em]">Split It</span>}
     </span>

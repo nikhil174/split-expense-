@@ -2,7 +2,7 @@ import { m } from "motion/react";
 import { ChevronRight, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedMoney, EASE, EmptyState, List, Page, PersonAvatar, SectionTitle, listItem, pressableRow } from "@/components/app/bits";
-import { Sheen, Sparkles } from "@/components/app/glitter";
+import { GlitterDust, Sheen, Sparkles } from "@/components/app/glitter";
 import { useGroups } from "@/hooks/queries";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
@@ -18,8 +18,9 @@ export function AquaCard({ children, className }: { children: React.ReactNode; c
   return (
     <m.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
       className={cn("panel relative overflow-hidden p-5", className)}>
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_100%_0%,rgb(201_168_106/9%),transparent_60%)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_100%_0%,rgb(214_170_80/14%),transparent_60%)]" />
       <Sheen />
+      <GlitterDust />
       <Sparkles />
       <div className="relative">{children}</div>
     </m.section>

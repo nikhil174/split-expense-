@@ -3,16 +3,24 @@ import { cn } from "@/lib/utils";
 
 // Champagne four-point star used for every glint.
 const STAR = "M12 0C12.6 6.2 17.8 11.4 24 12C17.8 12.6 12.6 17.8 12 24C11.4 17.8 6.2 12.6 0 12C6.2 11.4 11.4 6.2 12 0Z";
-const CHAMPAGNE = ["#c9a86a", "#e3cc98", "#b08d4f"];
+const CHAMPAGNE = ["#c99a3e", "#e4c06c", "#b3842f"];
 
 type Glint = { x: string; y: string; size: number; delay: number; duration?: number; opacity?: number };
 const CARD_GLINTS: Glint[] = [
-  { x: "84%", y: "12%", size: 15, delay: 0, duration: 3.2 },
-  { x: "93%", y: "36%", size: 8, delay: 1.1, opacity: 0.8 },
-  { x: "72%", y: "7%", size: 7, delay: 1.9, opacity: 0.75 },
-  { x: "64%", y: "26%", size: 5, delay: 2.6, opacity: 0.65 },
-  { x: "90%", y: "62%", size: 6, delay: 0.6, opacity: 0.6 },
+  { x: "82%", y: "10%", size: 22, delay: 0, duration: 3.2 },
+  { x: "92%", y: "38%", size: 12, delay: 1.1 },
+  { x: "68%", y: "6%", size: 10, delay: 1.9 },
+  { x: "58%", y: "24%", size: 7, delay: 2.6, opacity: 0.8 },
+  { x: "88%", y: "64%", size: 9, delay: 0.6, opacity: 0.85 },
+  { x: "74%", y: "44%", size: 6, delay: 3.0, opacity: 0.75 },
 ];
+
+// Fine glitter dust: tiny gold specks scattered over the top-right of a card.
+// Positions come from a fixed seed so they don't jump between renders.
+const DUST = Array.from({ length: 26 }, (_, i) => {
+  const r = (n: number) => ((Math.sin(i * 12.9898 + n * 78.233) * 43758.5453) % 1 + 1) % 1;
+  return { x: 42 + r(1) * 56 + "%", y: 2 + r(2) * 52 + "%", size: 1.5 + r(3) * 2, delay: r(4) * 4, duration: 2.4 + r(5) * 2.4, color: CHAMPAGNE[i % 3] };
+});
 
 const reducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -32,13 +40,25 @@ export function Sparkles({ glints = CARD_GLINTS, className }: { glints?: Glint[]
   );
 }
 
+export function GlitterDust() {
+  const [still] = React.useState(reducedMotion);
+  return (
+    <div aria-hidden="true" data-glitter-dust="" className="pointer-events-none absolute inset-0">
+      {DUST.map((d, i) => (
+        <span key={i} className={cn("absolute rounded-full", !still && "glint")}
+          style={{ left: d.x, top: d.y, width: d.size, height: d.size, background: d.color, boxShadow: `0 0 ${d.size * 2}px ${d.color}`, opacity: still ? 0.55 : undefined, ["--glint-d" as string]: d.delay + "s", ["--glint-t" as string]: d.duration + "s", ["--glint-o" as string]: 1 }} />
+      ))}
+    </div>
+  );
+}
+
 // A soft band of champagne light that drifts across a card now and then.
 export function Sheen() {
   const [still] = React.useState(reducedMotion);
   if (still) return null;
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
-      <div className="sheen absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-[#e3cc98]/[0.28] to-transparent" />
+      <div className="sheen absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-[#f0d58c]/[0.4] to-transparent" />
     </div>
   );
 }
