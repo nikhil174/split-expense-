@@ -136,21 +136,29 @@ try {
   step("person drill-down lists both shared expenses with a running balance");
 
   await cy.getByRole("button", { name: "Pay Bea E2E" }).click();
-  assert.equal(await cy.locator("#settleDebt option").count(), 1, "Cy can only record her own payment");
+  assert.equal(await cy.inputValue("#settleAmount"), "55.00", "amount is prefilled with the full debt");
+  assert.equal(await cy.textContent("#recordPayment"), "Record ₹55.00 payment");
+  assert.match(await text(cy, "#settleHint"), /clears the full amount/);
   await cy.fill("#settleAmount", "60");
-  assert.equal(await cy.$eval("#settleAmount", e => e.validity.rangeOverflow), true, "browser blocks paying more than owed");
+  assert.match(await text(cy, "#settleHint"), /more than the ₹55\.00 owed/);
+  assert.ok(await cy.locator("#recordPayment").isDisabled(), "cannot overpay");
+  await cy.click("#settleHalf");
+  assert.equal(await cy.inputValue("#settleAmount"), "27.50");
+  await cy.click("#settleOther");
   await cy.fill("#settleAmount", "20");
+  assert.match(await text(cy, "#settleHint"), /Partial payment · ₹35\.00 will still be owed/);
+  await shot(cy, "cy-settle-sheet");
   await cy.click("#recordPayment");
-  await notice(cy).filter({ hasText: "Payment of ₹20.00 from Cy E2E to Bea E2E recorded" }).waitFor();
+  await notice(cy).filter({ hasText: "Recorded ₹20.00 from Cy E2E to Bea E2E. ₹35.00 is still owed." }).waitFor();
   await cy.locator("#personStatus", { hasText: "₹35.00" }).waitFor();
   assert.equal(await cy.locator("#personRows tr").count(), 3);
   assert.match(await text(cy, "#personRows"), /You paid Bea E2E/);
-  step("partial repayment ₹20 from the drill-down → Cy now owes ₹35");
+  step("partial repayment ₹20 from the drill-down → Cy now owes ₹35; overpay disabled; half chip works");
 
-  await cy.getByRole("button", { name: "Pay Bea E2E" }).click();
-  await cy.click("#settleFull");
-  assert.equal(await cy.inputValue("#settleAmount"), "35.00");
+  await cy.click("#openSettle");
+  assert.equal(await cy.inputValue("#settleAmount"), "35.00", "header Settle up goes straight to the only debt, prefilled");
   await cy.click("#recordPayment");
+  await notice(cy).filter({ hasText: "All settled" }).waitFor();
   await cy.locator("#personStatus", { hasText: "You are settled up" }).waitFor();
   await cy.click("#backToBalances");
   assert.match(await text(cy, "#balances"), /Cy E2E \(you\) ₹0\.00 · settled/);
@@ -159,7 +167,7 @@ try {
   await cy.click(".g-tabs .tab[data-tab=payments]");
   assert.equal(await cy.locator("#settlementHistory tr").count(), 2);
   assert.match(await text(cy, "#settlementHistory"), /You paid Bea E2E/);
-  step("settle full amount fills ₹35.00 exactly and clears the debt; payments table shows both");
+  step("header Settle up prefills the remaining ₹35.00 and clears the debt; payments table shows both");
   await shot(cy, "cy-payments");
   await noHorizontalOverflow(cy, "payments tab");
 
@@ -172,6 +180,18 @@ try {
   assert.ok(await bea.locator("#groupsCard").isVisible() && await bea.locator("#groupPanel").isHidden());
   assert.match(await text(bea, "#groups"), /settled up/);
   step("creditor view refreshed; back to groups shows per-group status");
+  await admin.goto(BASE + "/");
+  await adminLogin(admin);
+  await admin.locator("#dashboardRecent table tbody tr").first().waitFor();
+  assert.match(await text(admin, "#dashboardRecent"), /Snacks .*₹10\.00/);
+  await admin.click("#dashExpensesTab");
+  await admin.locator("#dashboardExpensesList table").waitFor();
+  await admin.selectOption("#adminExpenseGroup", { label: GROUP });
+  assert.equal(await admin.locator("#dashboardExpensesList tbody tr").count(), 2);
+  assert.match(await text(admin, "#adminExpenseSummary"), /2 expenses · ₹110\.00/);
+  await noHorizontalOverflow(admin, "admin dashboard");
+  await shot(admin, "admin-expenses");
+  step("admin dashboard shows recent and all expenses as tables with a group filter");
   console.log("E2E PASSED");
 } finally {
   await browser.close();
