@@ -150,33 +150,46 @@ try {
 
   await cy.goto(BASE + "/#/");
   await cy.reload();
-  await cy.getByRole("button", { name: /Overall, you owe.*₹55\.00.*See 1 person/s }).click();
-  await cy.getByRole("heading", { name: "Balances" }).waitFor();
-  await cy.getByRole("heading", { name: "You owe" }).waitFor();
-  assert.equal(await cy.getByRole("heading", { name: "Owes you" }).count(), 0);
-  await cy.getByRole("button", { name: /Bea E2E.*₹55\.00/s }).click();
-  await cy.getByRole("heading", { name: "You & Bea E2E" }).waitFor();
-  assert.equal(await cy.locator("tbody tr").count(), 2, "both shared expenses listed");
-  await cy.goBack();
-  await cy.getByRole("heading", { name: "Balances" }).waitFor();
-  await noHorizontalOverflow(cy, "balances by person");
-  await shot(cy, "cy-balances");
-  await cy.goBack();
-  step("home balance card opens balances by person; tapping a person shows your shared expenses");
+  // "You owe" on the Home card opens a popup (not a page) of the people you owe.
+  await cy.getByRole("button", { name: /You owe.*₹55\.00/s }).click();
+  const sheet = cy.getByRole("dialog");
+  await sheet.getByRole("heading", { name: "You owe" }).waitFor();
+  assert.equal(new URL(cy.url()).hash, "#/", "stays on Home");
+  await sheet.getByRole("button", { name: /Bea E2E.*₹55\.00/s }).click();
+  await sheet.getByText("You & Bea E2E").waitFor();
+  await sheet.getByText("You owe Bea E2E ₹55.00").waitFor();
+  await sheet.getByText("Dinner").waitFor();
+  assert.equal(await sheet.locator("li").count(), 2, "both shared expenses listed in the popup");
+  await noHorizontalOverflow(cy, "people popup");
+  await shot(cy, "cy-people-popup");
+  await sheet.getByRole("button", { name: "You owe", exact: true }).click();
+  await sheet.getByRole("button", { name: /Bea E2E/ }).waitFor();
+  await cy.keyboard.press("Escape");
+  await sheet.waitFor({ state: "detached" });
+  // "Owed to you" shows only that side.
+  await cy.getByRole("button", { name: /Owed to you/ }).click();
+  await cy.getByRole("dialog").getByText("Nobody owes you right now.").waitFor();
+  await cy.keyboard.press("Escape");
+  await cy.getByRole("dialog").waitFor({ state: "detached" });
+  step("Home: You owe / Owed to you open a popup of people; tapping one shows your shared expenses in the popup");
 
   await openGroup(cy);
   assert.match((await heroStatus(cy)).replace(/\s+/g, " "), /you owe ₹55\.00/i);
   assert.match((await cy.getByRole("row", { name: /Dinner/ }).innerText()).replace(/\s+/g, " "), /you borrowed ₹50\.00/i);
-  // Tapping the group's balance card opens its Balances tab.
+  // Tapping the group's balance opens the same popup, limited to this group.
   await cy.getByTestId("balance-card").click();
-  await cy.getByRole("tab", { name: "Balances", exact: true, selected: true }).waitFor();
+  await cy.getByRole("dialog").getByRole("button", { name: /Bea E2E.*₹55\.00/s }).click();
+  await cy.getByRole("dialog").getByText("You & Bea E2E").waitFor();
+  await cy.keyboard.press("Escape");
+  await cy.getByRole("dialog").waitFor({ state: "detached" });
+  await cy.getByRole("tab", { name: "Balances", exact: true }).click();
   await cy.getByRole("button", { name: /Bea E2E.*you owe.*₹55\.00/s }).click();
   await cy.getByRole("heading", { name: "You & Bea E2E" }).waitFor();
   await cy.getByText("You owe Bea E2E ₹55.00").waitFor();
   assert.equal(await cy.locator("tbody tr").count(), 2);
   await noHorizontalOverflow(cy, "person drill-down");
   await shot(cy, "cy-person");
-  step("group balance card opens Balances; person drill-down lists both shared expenses with a running balance");
+  step("group balance opens the people popup; person drill-down lists both shared expenses with a running balance");
 
   await cy.getByRole("button", { name: "Pay Bea E2E" }).click();
   const amount = cy.getByLabel("Amount paid");
