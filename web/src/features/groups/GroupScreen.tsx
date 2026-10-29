@@ -11,7 +11,8 @@ import {
 import {
   AnimatedMoney, BottomTabs, CategoryTile, DateBadge, EASE, EmptyState, Footnote, List, Page, PersonAvatar, SectionTitle, haptic, listItem, pressableRow, rowClass, searchFieldClass,
 } from "@/components/app/bits";
-import { AquaCard } from "./GroupsScreen";
+import { AquaCard, cardTap } from "./GroupsScreen";
+import { PeopleSheet } from "./PeopleSheet";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
 import { useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
@@ -39,7 +40,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
   const [settling, setSettling] = React.useState(false);
   const net = mine.data ? mine.data.totalOwedToYouCents - mine.data.totalYouOweCents : 0;
   const ready = !!group.data && !!mine.data;
-  const tabsRef = React.useRef<HTMLDivElement>(null);
+  const [peopleOpen, setPeopleOpen] = React.useState(false);
 
   if (group.error) {
     return <Page><EmptyState icon={<ReceiptText />} title="Can't open this group">{(group.error as Error).message}</EmptyState>
@@ -58,10 +59,9 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
       )}
 
       <AquaCard className="mt-5">
-        {/* Tapping the balance jumps to this group's Balances tab, where each
-            person opens everything shared with them. */}
-        <button type="button" className="block w-full cursor-pointer text-left transition-transform duration-150 active:scale-[0.985]"
-          onClick={() => { navigate({ name: "group", groupId, tab: "balances" }, { replace: true }); requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })); }}>
+        {/* Tapping the balance opens a sheet of who owes whom in this group;
+            each person there shows everything shared with them. */}
+        <button type="button" className={cardTap} onClick={() => setPeopleOpen(true)}>
         <div data-testid="balance-card">
           <p className="eyebrow">{!mine.data ? "Your balance" : net > 0 ? "You are owed" : net < 0 ? "You owe" : "Your balance"}</p>
           <div className="mt-2 min-h-11">
@@ -78,7 +78,6 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
         </Button>
       </AquaCard>
 
-      <div ref={tabsRef} className="scroll-mt-20">
       <AnimatePresence mode="wait" initial={false}>
         <m.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }} className="mt-7">
           {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} onAdd={() => setAdding(true)} />}
@@ -87,7 +86,6 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
           {tab === "insights" && <InsightsTab groupId={groupId} />}
         </m.div>
       </AnimatePresence>
-      </div>
 
       {/* Extended floating action button, above the bottom bar. */}
       <m.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 400, damping: 28 }}
@@ -101,6 +99,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
         options={[{ value: "expenses", label: "Expenses", icon: ReceiptText }, { value: "balances", label: "Balances", icon: Scale }, { value: "payments", label: "Payments", icon: Wallet }, { value: "insights", label: "Insights", icon: ChartPie }]} />
 
       <AddExpenseDrawer groupId={groupId} open={adding} onOpenChange={setAdding} />
+      <PeopleSheet open={peopleOpen} onOpenChange={setPeopleOpen} filter="all" groupId={groupId} />
       <SettleUpDrawer groupId={groupId} open={settling} onOpenChange={setSettling} />
     </Page>
   );
