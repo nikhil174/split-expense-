@@ -29,13 +29,19 @@ Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 - Net balance = paid − own shares + repayments made − repayments received. It always equals (owed to you − you owe) over the pairwise debts, and group balances sum to zero.
 - Repayments: a normal member can only record a payment from their own account, to an active member, for at most the exact outstanding amount (re-checked atomically inside the INSERT). The admin can record any payment, including to/from removed members, so those debts can still be cleared.
 
-## Group screen (mobile-first, Splitwise-style)
-- Header shows your overall position in the group ("You are owed ₹X" / "You owe ₹X" / settled) with **+ Add expense** and **Settle up**, both opening bottom sheets.
-- **Expenses** tab: a table (date, expense, amount, and what it means for you: "you lent" / "you borrowed" / "not involved"). Tap a row to see the split breakdown, who added it, and a delete button (for the person who added it, or the admin). Includes search.
-- **Balances** tab: you and each person (tap for a drill-down), overall group balances, and who owes whom.
-- **Person drill-down** (`GET /api/groups/:id/with/:memberId`): every shared expense and payment between you and that person, with the effect of each and a running balance that ends at the current debt. From here you can pay them, or the screen shows that you are waiting for them to record their payment.
-- **Payments** tab: repayment history table. **Insights** tab: who spent the most, plus the member list.
-- The group list shows your balance in each group.
+## Frontend
+- React 19 + TypeScript + Tailwind CSS v4 + shadcn/ui (Radix primitives), in `web/`. Built by Vite into `dist/`, which the Worker serves.
+- `wrangler.toml` has `[build] command = "npm run build"`, so `wrangler dev` and `wrangler deploy` (including Cloudflare's Git-triggered deploys) build the app first.
+- Data: TanStack Query. Every write refreshes the affected screens, and a progress bar under the top bar shows while requests are in flight. Buttons show a spinner and are disabled until the request finishes.
+- Feel: Motion for page/tab/list transitions and animated amounts (its animation features load after first paint), vaul bottom sheets for Add expense and Settle up, sonner toasts. Follows the phone's light/dark setting.
+- Navigation uses hash routes (`#/`, `#/admin`, `#/g/:id`, `#/g/:id/p/:memberId`), so the Android back button works.
+- Group screen: hero with your position, **Add expense** / **Settle up**, tabs for Expenses (table, tap a row for the split, search, delete), Balances (you and each person → drill-down, group balances, who owes whom), Payments (table) and Insights.
+- Person drill-down (`GET /api/groups/:id/with/:memberId`): every shared expense and payment between you and that person with a running balance that ends at the current debt.
+
+## One admin, two views
+- The administrator is one person. An admin session always acts as the `admin` member in every group, and the top bar switches between **My groups** (normal-user view) and **Admin** (dashboard, requests, groups, all expenses).
+- The admin's saved name is reserved: nobody can request access or do the passwordless member sign-in with it.
+- Older data may contain a separate member entry for the admin (same person, two identities). The Admin view flags it, and **Review merge → Merge into me** folds it into the admin: expenses paid, shares (added together on the same expense) and payments move over, payments between the two entries are dropped, and everyone else's balance is unchanged (`GET /api/admin/requests/:id/merge-preview`, `POST /api/admin/requests/:id/merge-into-admin`).
 
 ## Membership policy (as implemented)
 - Members who are approved (even if their 3-hour window lapsed) or pending re-approval stay selectable as payer/split members; acting in the app still requires an active session.
@@ -66,4 +72,5 @@ The D1 binding is named `split-expense` (see `wrangler.toml`).
 
 ## Tests
 - `npm test` runs the unit, property, migration and API tests (`node --test`, Node 22+). API tests run the real Worker against an in-memory SQLite D1 double with every migration applied and foreign keys enforced.
+- `npm run build` type-checks and builds the web app; `npm run dev:web` runs Vite with the API proxied to a local `wrangler dev` on port 8787.
 - `npm run test:e2e` runs a Playwright browser test on a Pixel 7 viewport against a **local** `wrangler dev`. Start it with `npx wrangler d1 migrations apply split_expense_db --local` then `npx wrangler dev --local`, with a throwaway `ADMIN_PIN` in `.dev.vars`, and pass `E2E_ADMIN_PIN`. You need Playwright installed. The test refuses to run against a deployed Worker.

@@ -89,14 +89,20 @@ async function admin(req, env) {
   const row = await env['split-expense'].prepare("SELECT expires_at FROM appx_admin_sessions WHERE token_hash=?").bind(h).first();
   return !!row && row.expires_at > Date.now();
 }
+async function adminName(db) {
+  const r = await db.prepare("SELECT setting_value AS name FROM appx_settings WHERE setting_key='admin_name'").first();
+  return r?.name || null;
+}
+const sameName = (a, b) => !!a && !!b && cleanName(a).toLowerCase() === cleanName(b).toLowerCase();
+// The administrator is one person: with an admin session they always act as
+// the "admin" member in every group (their normal-user view), even if an
+// older member cookie is also present on the device.
 async function requireUser(req, env) {
-  const u = await session(req, env);
-  if (u) return u;
   if (await admin(req, env)) {
-    const r = await env['split-expense'].prepare("SELECT setting_value AS name FROM appx_settings WHERE setting_key='admin_name'").first();
-    if (r?.name) return { id: "admin", name: r.name, role: "admin" };
+    const name = await adminName(env['split-expense']);
+    if (name) return { id: "admin", name, role: "admin" };
   }
-  return null;
+  return await session(req, env);
 }
 
 // Every member row ever added to the group (including revoked/removed members,
@@ -138,6 +144,7 @@ async function api(req, env, url) {
     const name = cleanName(b?.name);
     const groupId = textField(b?.groupId);
     if (name.length < 2 || name.length > 60) return fail("Enter a name between 2 and 60 characters.");
+    if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Sign in with Admin login to use the app as yourself.", 409);
     const g = await db.prepare("SELECT id FROM appx_groups WHERE id=?").bind(groupId).first();
     if (!g) return fail("Choose an existing group before requesting access.");
     const existing = await db.prepare("SELECT id,status,expires_at FROM appx_access_requests WHERE group_id=? AND lower(display_name)=lower(?) ORDER BY requested_at DESC LIMIT 1").bind(groupId, name).first();
@@ -274,6 +281,49 @@ async function api(req, env, url) {
       ]);
       return json({ ok: true, deleted: true });
     }
+    // "This member is me": fold a separate member entry of the administrator
+    // (same person, created before the admin identity existed) into the admin
+    // member of that group. Shares on the same expense are added together,
+    // payments between the two entries are dropped (they were to oneself), and
+    // balances stay zero-sum. The preview lists what will move.
+    const merge = p.match(/^\/api\/admin\/requests\/([\w-]+)\/(merge-preview|merge-into-admin)$/);
+    if (merge) {
+      const [, rid, action] = merge;
+      const r = await db.prepare("SELECT id,display_name AS name,group_id AS groupId FROM appx_access_requests WHERE id=?").bind(rid).first();
+      if (!r || !r.groupId) return fail("Member request not found.", 404);
+      const gid = r.groupId;
+      const name = await adminName(db);
+      if (!name) return fail("Set the administrator name by signing in first.", 409);
+      if (method === "GET" && action === "merge-preview") {
+        const [counts, ledger] = await Promise.all([
+          db.prepare("SELECT (SELECT COUNT(*) FROM appx_expenses WHERE group_id=?1 AND paid_by=?2) AS expensesPaid,(SELECT COUNT(*) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?1 AND s.member_id=?2) AS shares,(SELECT COUNT(*) FROM appx_settlements WHERE group_id=?1 AND (from_member_id=?2 OR to_member_id=?2)) AS payments,(SELECT COUNT(*) FROM appx_settlements WHERE group_id=?1 AND ((from_member_id=?2 AND to_member_id='admin') OR (from_member_id='admin' AND to_member_id=?2))) AS paymentsWithAdmin,(SELECT name FROM appx_groups WHERE id=?1) AS groupName").bind(gid, rid).first(),
+          loadLedger(db, gid),
+        ]);
+        const balances = computeBalances(ledger);
+        return json({ memberName: r.name, adminName: name, ...counts, memberBalanceCents: balances.get(rid) || 0, adminBalanceCents: balances.get("admin") || 0 });
+      }
+      if (method === "POST" && action === "merge-into-admin") {
+        const inGroup = "(SELECT id FROM appx_expenses WHERE group_id=?)";
+        await db.batch([
+          db.prepare("INSERT OR IGNORE INTO appx_group_members(group_id,member_id,name) VALUES(?,'admin',?)").bind(gid, name),
+          db.prepare("UPDATE appx_splits SET amount_cents=amount_cents+(SELECT x.amount_cents FROM appx_splits x WHERE x.expense_id=appx_splits.expense_id AND x.member_id=?) WHERE member_id='admin' AND expense_id IN (SELECT expense_id FROM appx_splits WHERE member_id=?) AND expense_id IN " + inGroup).bind(rid, rid, gid),
+          db.prepare("DELETE FROM appx_splits WHERE member_id=? AND expense_id IN (SELECT expense_id FROM appx_splits WHERE member_id='admin') AND expense_id IN " + inGroup).bind(rid, gid),
+          db.prepare("UPDATE appx_splits SET member_id='admin' WHERE member_id=? AND expense_id IN " + inGroup).bind(rid, gid),
+          db.prepare("UPDATE appx_expenses SET paid_by='admin' WHERE group_id=? AND paid_by=?").bind(gid, rid),
+          db.prepare("UPDATE appx_expenses SET created_by='admin' WHERE group_id=? AND created_by=?").bind(gid, rid),
+          db.prepare("DELETE FROM appx_settlements WHERE group_id=?1 AND ((from_member_id=?2 AND to_member_id='admin') OR (from_member_id='admin' AND to_member_id=?2))").bind(gid, rid),
+          db.prepare("UPDATE appx_settlements SET from_member_id='admin' WHERE group_id=? AND from_member_id=?").bind(gid, rid),
+          db.prepare("UPDATE appx_settlements SET to_member_id='admin' WHERE group_id=? AND to_member_id=?").bind(gid, rid),
+          db.prepare("UPDATE appx_settlements SET created_by='admin' WHERE group_id=? AND created_by=?").bind(gid, rid),
+          db.prepare("UPDATE appx_invites SET created_by='admin' WHERE group_id=? AND created_by=?").bind(gid, rid),
+          db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(rid),
+          db.prepare("DELETE FROM appx_group_members WHERE group_id=? AND member_id=?").bind(gid, rid),
+          db.prepare("DELETE FROM appx_access_requests WHERE id=?").bind(rid),
+        ]);
+        return json({ ok: true, merged: true });
+      }
+      return fail("Not found.", 404);
+    }
     const removeMember = p.match(/^\/api\/admin\/requests\/([\w-]+)\/remove$/);
     if (method === "POST" && removeMember) {
       const rid = removeMember[1];
@@ -291,6 +341,15 @@ async function api(req, env, url) {
       return json({ ok: true }, 200, { "set-cookie": setCookie("split_admin", "", 0) });
     }
     return fail("Not found.", 404);
+  }
+  if (method === "GET" && p === "/api/me") {
+    const isAdmin = await admin(req, env);
+    const member = await session(req, env);
+    const name = isAdmin ? await adminName(db) : null;
+    return json({
+      admin: isAdmin && name ? { id: "admin", name } : null,
+      member: member ? { id: member.id, name: member.name } : null,
+    });
   }
   if (method === "GET" && p === "/api/access/status") {
     const u = await session(req, env);
@@ -315,6 +374,7 @@ async function api(req, env, url) {
     if (await rateLimited(db, "signin", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
     const b = await body(req), name = cleanName(b?.name), gid = textField(b?.groupId);
     if (name.length < 2 || name.length > 60 || !gid) return fail("Enter your name and choose a group.");
+    if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Use Admin login (name + PIN) to sign in as yourself.", 403);
     const r = await db.prepare("SELECT id,status,expires_at FROM appx_access_requests WHERE group_id=? AND lower(display_name)=lower(?) ORDER BY requested_at DESC LIMIT 1").bind(gid, name).first();
     if (!r) return fail("No access request found for that name in this group. Request access first.", 403);
     if (r.status === "pending") return fail("Your access request is waiting for admin approval.", 403);

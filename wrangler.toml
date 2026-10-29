@@ -6,8 +6,13 @@ keep_vars = true
 [secrets]
 required = ["ADMIN_PIN", "SESSION_SECRET"]
 
+# Builds the React app (web/) into dist/ before `wrangler dev` / `wrangler deploy`,
+# including Cloudflare's Git-triggered deploys.
+[build]
+command = "npm run build"
+
 [assets]
-directory = "./public"
+directory = "./dist"
 binding = "ASSETS"
 run_worker_first = true
 
