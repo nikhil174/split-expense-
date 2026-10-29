@@ -58,6 +58,7 @@ async function memberSignIn(page, name) {
   assert.equal(await page.locator("#groups .group .open-hint").first().textContent(), "Open dashboard →");
   await page.locator("#groups .group", { hasText: GROUP }).click();
   await page.locator("#groupTitle", { hasText: GROUP }).waitFor();
+  await page.locator("#openAddExpense:not([disabled])").waitFor(); // group data finished loading
   assert.ok(await page.locator("#groupsCard").isHidden(), "opening a group replaces the list view");
 }
 const text = async (page, sel) => (await page.locator(sel).innerText()).replace(/\s+/g, " ");
@@ -76,8 +77,8 @@ try {
   await admin.goto(BASE + "/");
   await adminLogin(admin);
   for (const name of ["Bea E2E", "Cy E2E"]) {
-    await admin.locator("#requests .item", { hasText: name }).filter({ hasText: "pending" }).getByRole("button", { name: "Approve" }).click();
-    await admin.locator("#requests .item", { hasText: name }).filter({ hasText: "approved" }).waitFor();
+    await admin.locator("#requests .item", { hasText: name }).filter({ hasText: GROUP }).filter({ hasText: "pending" }).getByRole("button", { name: "Approve" }).click();
+    await admin.locator("#requests .item", { hasText: name }).filter({ hasText: GROUP }).filter({ hasText: "approved" }).waitFor();
   }
   step("members requested access and admin approved them");
 
@@ -90,8 +91,21 @@ try {
   await bea.fill("#amount", "100");
   await bea.locator("#splitMembers label", { hasText: "E2E Admin" }).locator("input").uncheck();
   assert.match(await text(bea, "#equalPreview"), /₹50\.00 per person · 2 people/);
+  // Slow the server down to check the loading state and double-tap protection.
+  await bea.route("**/expenses", async route => { if (route.request().method() === "POST") await new Promise(r => setTimeout(r, 1200)); await route.continue(); });
   await bea.click("#saveExpense");
-  await notice(bea).filter({ hasText: "Dinner” saved" }).waitFor();
+  assert.equal(await bea.getAttribute("#saveExpense", "aria-busy"), "true", "save button shows busy");
+  assert.equal(await bea.textContent("#saveExpense"), "Saving…");
+  assert.ok(await bea.locator("#saveExpense").isDisabled(), "save button disabled while saving");
+  assert.ok(await bea.evaluate(() => document.body.classList.contains("is-loading")), "progress bar visible");
+  await shot(bea, "bea-saving");
+  await bea.locator("#saveExpense").click({ force: true, timeout: 500 }).catch(() => {});
+  await bea.evaluate(() => document.getElementById("expenseForm").requestSubmit(document.getElementById("saveExpense")));
+  await notice(bea).filter({ hasText: /Dinner” saved\.$/ }).waitFor();
+  await bea.unroute("**/expenses");
+  assert.equal(await bea.inputValue("#desc"), "", "form cleared after success");
+  assert.equal(await bea.locator("#expenseRows tr.exp-row", { hasText: "Dinner" }).count(), 1, "double tap did not create a duplicate");
+  assert.ok(!(await bea.locator("#saveExpense").isDisabled()), "button re-enabled after finishing");
   assert.ok(!(await bea.locator("#expenseDialog").evaluate(d => d.open)), "dialog closes after saving");
   const dinnerRow = bea.locator("#expenseRows tr.exp-row", { hasText: "Dinner" });
   assert.match((await dinnerRow.innerText()).replace(/\s+/g, " "), /Dinner You paid ₹100\.00 ₹100\.00 you lent ₹50\.00/);
@@ -111,7 +125,7 @@ try {
   await (await manualFor("Cy")).fill("5.00");
   assert.match(await text(bea, "#manualSplitTotal"), /Allocated: ₹10\.00 \/ ₹10\.00 ✓/);
   await bea.click("#saveExpense");
-  await notice(bea).filter({ hasText: "Snacks” saved" }).waitFor();
+  await notice(bea).filter({ hasText: /Snacks” saved\.$/ }).waitFor();
   assert.equal(await bea.locator("#expenseRows tr.exp-row").count(), 2);
   await bea.locator("#expenseRows tr.exp-row", { hasText: "Snacks" }).click();
   const detail = bea.locator("#expenseRows tr.exp-detail:not(.hidden)");
@@ -148,8 +162,12 @@ try {
   await cy.fill("#settleAmount", "20");
   assert.match(await text(cy, "#settleHint"), /Partial payment · ₹35\.00 will still be owed/);
   await shot(cy, "cy-settle-sheet");
+  await cy.route("**/settlements", async route => { if (route.request().method() === "POST") await new Promise(r => setTimeout(r, 1200)); await route.continue(); });
   await cy.click("#recordPayment");
-  await notice(cy).filter({ hasText: "Recorded ₹20.00 from Cy E2E to Bea E2E. ₹35.00 is still owed." }).waitFor();
+  assert.equal(await cy.getAttribute("#recordPayment", "aria-busy"), "true", "pay button shows busy");
+  await cy.evaluate(() => document.getElementById("settlementForm").requestSubmit(document.getElementById("recordPayment")));
+  await notice(cy).filter({ hasText: /₹35\.00 is still owed\.$/ }).waitFor();
+  await cy.unroute("**/settlements");
   await cy.locator("#personStatus", { hasText: "₹35.00" }).waitFor();
   assert.equal(await cy.locator("#personRows tr").count(), 3);
   assert.match(await text(cy, "#personRows"), /You paid Bea E2E/);
@@ -158,7 +176,7 @@ try {
   await cy.click("#openSettle");
   assert.equal(await cy.inputValue("#settleAmount"), "35.00", "header Settle up goes straight to the only debt, prefilled");
   await cy.click("#recordPayment");
-  await notice(cy).filter({ hasText: "All settled" }).waitFor();
+  await notice(cy).filter({ hasText: /All settled between them ✓$/ }).waitFor();
   await cy.locator("#personStatus", { hasText: "You are settled up" }).waitFor();
   await cy.click("#backToBalances");
   assert.match(await text(cy, "#balances"), /Cy E2E \(you\) ₹0\.00 · settled/);
