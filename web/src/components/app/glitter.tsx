@@ -133,7 +133,7 @@ export function installTouchWave() {
     // Slightly stronger on dark ink buttons so the gold still reads.
     const bg = el ? getComputedStyle(el).backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [] : [];
     const dark = bg.length >= 3 && (bg[3] ?? 1) > 0.5 && bg[0] * 0.299 + bg[1] * 0.587 + bg[2] * 0.114 < 90;
-    const a = dark ? [26, 10, 40] : [17, 6, 30];
+    const a = dark ? [34, 14, 55] : [28, 11, 45];
     const glow = circle(MAX, `background:radial-gradient(circle, rgb(226 186 98 / ${a[0]}%) 0%, rgb(226 186 98 / ${a[1]}%) 55%, transparent 72%)`);
     const ring = still ? null : circle(MAX, `border:1px solid rgb(214 168 72 / ${a[2]}%)`);
     document.body.appendChild(layer);
@@ -142,7 +142,7 @@ export function installTouchWave() {
     const from = MIN / MAX;
     const grow = still
       ? [glow.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, fill: "forwards" })]
-      : [glow, ring!].map(c => c.animate([{ transform: `scale(${from})`, opacity: 0.6 }, { transform: "scale(1)", opacity: 1 }], { duration: GROW_MS, easing: ease, fill: "forwards" }));
+      : [glow, ring!].map(c => c.animate([{ transform: `scale(${from})`, opacity: 1 }, { transform: "scale(1)", opacity: 1 }], { duration: GROW_MS, easing: ease, fill: "forwards" }));
 
     // Follow a pressed element while it moves (press scale, page slide-in).
     let alive = true;
@@ -168,16 +168,18 @@ export function installTouchWave() {
       // How far the ripple got, on the same ease-out curve, used for the fade.
       const scale = from + (1 - from) * (1 - Math.pow(1 - t, 3));
       grow.forEach(g => g.pause());
-      let done = 320;
+      let done = 560;
       if (still) {
-        glow.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: "forwards" });
+        glow.animate([{ opacity: 1 }, { opacity: 1, offset: 0.4 }, { opacity: 0 }], { duration: 500, fill: "forwards" });
       } else {
-        const end = Math.min(1, scale * 1.25);
-        const fade = (c: HTMLElement, o: number) => c.animate([{ transform: `scale(${scale})`, opacity: o }, { transform: `scale(${end})`, opacity: 0 }], { duration: 320, easing: ease, fill: "forwards" });
+        // A tap is over in well under 100ms, so on release the ripple still
+        // blooms to a small visible size and holds briefly before fading.
+        const end = Math.min(1, Math.max(scale * 1.3, 0.55));
+        const fade = (c: HTMLElement, o: number) => c.animate([{ transform: `scale(${scale})`, opacity: o }, { opacity: o, offset: 0.45 }, { transform: `scale(${end})`, opacity: 0 }], { duration: 520, easing: ease, fill: "forwards" });
         grow.forEach(g => g.cancel());
         fade(glow, 1); fade(ring!, 1);
         // A pinch of gold dust: more and further the longer the press.
-        const specks = 2 + Math.round(t * 4), R = MAX * scale;
+        const specks = 2 + Math.round(t * 4), R = MAX * end;
         for (let i = 0; i < specks; i++) {
           const angle = (i / specks) * Math.PI * 2 + Math.random() * 1.2;
           const dist = R * (0.5 + Math.random() * 0.5);
