@@ -84,8 +84,8 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                               <span className="block truncate text-[15px] font-medium">{iPay ? "Pay " + d.toName : `${d.fromName} pays ${d.toMemberId === meId ? "you" : d.toName}`}</span>
                               <span className="subhead block text-muted-foreground">{iPay ? "You owe" : d.fromName + " owes"} {inr(d.amountCents)}</span>
                             </span>
-                            <span className={cn("tabular text-[15px] font-semibold", iPay ? "text-negative" : d.toMemberId === meId ? "text-positive" : "text-muted-foreground")}>{inr(d.amountCents)}</span>
-                            <ChevronRight className="size-[18px] text-[#0e1a16]/25" strokeWidth={2.4} />
+                            <span className={cn("tabular text-[15px] font-medium", iPay ? "text-negative" : d.toMemberId === meId ? "text-positive" : "text-muted-foreground")}>{inr(d.amountCents)}</span>
+                            <ChevronRight className="size-[18px] text-[#141716]/25" strokeWidth={2.4} />
                           </button>
                         );
                       })}
@@ -96,35 +96,35 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
             ) : (
               <m.form key="pay" onSubmit={submit} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={{ duration: 0.25, ease: IOS_EASE }} className="px-4 pt-1">
                 {options.length > 1 && (
-                  <button type="button" onClick={() => choose(null)} className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[#0e1a16]/[0.05] py-1.5 pr-3 pl-2 text-[13.5px] font-medium transition-transform active:scale-95"><ChevronLeft className="size-4" strokeWidth={2.4} />Choose someone else</button>
+                  <button type="button" onClick={() => choose(null)} className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[#141716]/[0.05] py-1.5 pr-3 pl-2 text-[13.5px] font-medium transition-transform active:scale-95"><ChevronLeft className="size-4" strokeWidth={2.4} />Choose someone else</button>
                 )}
                 <div className="flex items-center justify-center gap-4 pt-4 pb-3">
                   <PersonAvatar id={debt.fromMemberId} name={debt.fromName} size="lg" />
-                  <span className="grid size-9 place-items-center rounded-full bg-primary/10 text-primary"><ArrowRight className="size-[18px]" strokeWidth={2.4} /></span>
+                  <span className="grid size-9 place-items-center rounded-full bg-[#141716]/[0.05] text-foreground"><ArrowRight className="size-[18px]" strokeWidth={1.8} /></span>
                   <PersonAvatar id={debt.toMemberId} name={debt.toName} size="lg" />
                 </div>
                 <p className="title-2 text-center">{debt.fromMemberId === meId ? "You" : debt.fromName} {debt.fromMemberId === meId ? "pay" : "pays"} {debt.toMemberId === meId ? "you" : debt.toName}</p>
                 <p className="subhead mt-1 text-center text-muted-foreground">{debt.fromMemberId === meId ? "You owe" : debt.fromName + " owes"} <span className="tabular text-foreground">{inr(debt.amountCents)}</span> in total</p>
 
                 <label htmlFor="settle-amount" className="sr-only">Amount paid</label>
-                <div className={cn("mt-6 flex h-[84px] items-center justify-center rounded-[24px] border bg-white px-5 shadow-[0_1px_2px_rgb(16_40_32/5%)] transition-[border-color,box-shadow] focus-within:ring-[3px]", over ? "border-negative/50 ring-[3px] ring-negative/15" : "border-[#0e1a16]/[0.08] focus-within:border-primary/50 focus-within:ring-primary/15")}>
+                <div className={cn("mt-6 flex h-[84px] items-center justify-center rounded-[24px] border bg-white px-5 shadow-[0_1px_2px_rgb(16_40_32/5%)] transition-[border-color,box-shadow] focus-within:ring-[3px]", over ? "border-negative/50 ring-[3px] ring-negative/15" : "border-[#141716]/[0.08] focus-within:border-primary/50 focus-within:ring-primary/15")}>
                   <span className="mr-1 text-[30px] font-medium text-muted-foreground">₹</span>
                   <input id="settle-amount" autoFocus inputMode="decimal" type="number" min="0.01" step="0.01" value={amount} onChange={e => { setAmount(e.target.value); setError(""); }}
-                    className="tabular h-full w-full min-w-0 bg-transparent text-[44px] leading-none font-semibold tracking-[-0.03em] outline-none" placeholder="0.00" />
+                    className="tabular h-full w-full min-w-0 bg-transparent text-[44px] leading-none font-medium tracking-[-0.03em] outline-none" placeholder="0.00" />
                 </div>
                 <div className="mt-3 flex flex-wrap justify-center gap-2">
                   {[["Full", debt.amountCents], ...(debt.amountCents >= 2 ? [["Half", Math.floor(debt.amountCents / 2)] as const] : [])].map(([labelText, c]) => (
                     <button key={labelText} type="button" onClick={() => { setAmount(centsToInput(c as number)); setError(""); }}
-                      className={cn("cursor-pointer rounded-full px-4 py-2 text-[14px] font-medium transition-[background-color,transform] duration-150 active:scale-95", cents === c ? "bg-primary text-white shadow-[0_6px_14px_-6px_rgb(0_168_112/60%)]" : "bg-white text-foreground ring-1 ring-[#0e1a16]/[0.08]")}>
+                      className={cn("cursor-pointer rounded-full px-4 py-2 text-[14px] font-medium transition-[background-color,transform] duration-150 active:scale-95", cents === c ? "bg-primary text-white" : "bg-white text-foreground ring-1 ring-[#141716]/[0.08]")}>
                       {labelText} · {inr(c as number)}
                     </button>
                   ))}
-                  <button type="button" onClick={() => { setAmount(""); document.getElementById("settle-amount")?.focus(); }} className="cursor-pointer rounded-full bg-white px-4 py-2 text-[14px] font-medium text-foreground ring-1 ring-[#0e1a16]/[0.08] transition-transform active:scale-95">Other amount</button>
+                  <button type="button" onClick={() => { setAmount(""); document.getElementById("settle-amount")?.focus(); }} className="cursor-pointer rounded-full bg-white px-4 py-2 text-[14px] font-medium text-foreground ring-1 ring-[#141716]/[0.08] transition-transform active:scale-95">Other amount</button>
                 </div>
                 <p aria-live="polite" className={cn("footnote mt-4 min-h-5 text-center", over || error ? "text-negative" : left === 0 ? "text-positive" : "text-muted-foreground")}>
                   {error || (!amount.trim() ? "Enter how much was paid." : !cents ? "Enter an amount like 250 or 249.50." : over ? `That's more than the ${inr(debt.amountCents)} owed.` : left === 0 ? "This clears the full amount ✓" : `Partial payment · ${inr(left!)} will still be owed after this.`)}
                 </p>
-                <div className="safe-bottom sticky bottom-0 -mx-4 mt-4 bg-[#f7f9f8]/90 px-4 pt-3 backdrop-blur-xl">
+                <div className="safe-bottom sticky bottom-0 -mx-4 mt-4 bg-[#fbfbf9]/90 px-4 pt-3 backdrop-blur-xl">
                   <LoadingButton type="submit" size="xl" className="w-full" disabled={!cents || over} loading={pay.isPending} loadingText="Recording payment…">
                     {cents && !over ? `Record ${inr(cents)} payment` : "Record payment"}
                   </LoadingButton>

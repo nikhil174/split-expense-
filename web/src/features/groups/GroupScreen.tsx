@@ -20,7 +20,7 @@ import { inr, shortDate } from "@/lib/money";
 import { goBack, navigate, type GroupTab } from "@/lib/route";
 import { cn } from "@/lib/utils";
 
-const CHEVRON = "size-[18px] text-[#0e1a16]/25";
+const CHEVRON = "size-[18px] text-[#141716]/25";
 
 // Round frosted back button with the previous screen's name.
 export function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -51,22 +51,22 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
       {group.data ? <h1 className="page-title mt-3 px-1 break-words">{group.data.group.name}</h1> : <Skeleton className="mt-3 h-8 w-52" />}
       {group.data && (
         <div className="mt-2 flex items-center gap-2 px-1">
-          <div className="flex -space-x-2">{group.data.members.slice(0, 5).map(mm => <PersonAvatar key={mm.id} id={mm.id} name={mm.name} size="sm" className="ring-2 ring-[#f3f6f5]" />)}</div>
+          <div className="flex -space-x-2">{group.data.members.slice(0, 5).map(mm => <PersonAvatar key={mm.id} id={mm.id} name={mm.name} size="sm" className="ring-2 ring-[#f7f7f5]" />)}</div>
           <span className="text-[13px] text-muted-foreground">{group.data.members.length} {group.data.members.length === 1 ? "member" : "members"}</span>
         </div>
       )}
 
       <AquaCard className="mt-5">
         <div data-testid="balance-card">
-          <p className="text-[14px] text-white/85">{!mine.data ? "Your balance" : net > 0 ? "You are owed" : net < 0 ? "You owe" : "Your balance"}</p>
+          <p className="eyebrow">{!mine.data ? "Your balance" : net > 0 ? "You are owed" : net < 0 ? "You owe" : "Your balance"}</p>
           <div className="mt-2 min-h-11">
-            {!mine.data ? <Skeleton className="h-11 w-40 bg-white/25" /> : net === 0 ? <p className="text-[28px] font-semibold">You are all settled up</p> : <AnimatedMoney cents={Math.abs(net)} size="hero" />}
+            {!mine.data ? <Skeleton className="h-11 w-40" /> : net === 0 ? <p className="text-[28px] font-medium tracking-[-0.02em]">You are all settled up</p> : <AnimatedMoney cents={Math.abs(net)} size="hero" className={net > 0 ? "text-positive" : "text-negative"} />}
           </div>
           {mine.data && mine.data.totalOwedToYouCents > 0 && mine.data.totalYouOweCents > 0 && (
-            <p className="mt-1.5 text-[13px] text-white/80">You owe {inr(mine.data.totalYouOweCents)} · you are owed {inr(mine.data.totalOwedToYouCents)}</p>
+            <p className="mt-1.5 text-[13px] text-muted-foreground">You owe {inr(mine.data.totalYouOweCents)} · you are owed {inr(mine.data.totalOwedToYouCents)}</p>
           )}
         </div>
-        <Button size="xl" disabled={!ready} onClick={() => setSettling(true)} className="mt-5 w-full bg-white text-[#007a55] shadow-[0_8px_20px_-10px_rgb(0_0_0/35%)] hover:bg-white/95">
+        <Button size="xl" variant="secondary" disabled={!ready} onClick={() => setSettling(true)} className="mt-5 w-full">
           <HandCoins className="size-5" />Settle up
         </Button>
       </AquaCard>
@@ -83,7 +83,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
       {/* Extended floating action button, above the bottom bar. */}
       <m.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 400, damping: 28 }}
         className="fixed right-4 bottom-[calc(max(14px,env(safe-area-inset-bottom))+78px)] z-30 sm:right-[calc(50%-21rem)]">
-        <Button size="xl" disabled={!ready} onClick={() => setAdding(true)} className="h-14 rounded-[20px] px-5 shadow-[0_14px_30px_-10px_rgb(0_168_112/70%)]">
+        <Button size="xl" disabled={!ready} onClick={() => setAdding(true)} className="h-[52px] px-5 shadow-[0_12px_28px_-10px_rgb(20_23_22/55%)]">
           <Plus className="size-5" strokeWidth={2.6} />Add expense
         </Button>
       </m.div>
@@ -150,7 +150,7 @@ function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: s
   return (
     <>
       <tr aria-expanded={open} tabIndex={0} onClick={onToggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-        className={cn("cursor-pointer transition-colors duration-150 active:bg-[#0e1a16]/[0.04]", !open && tr, open && "bg-primary/[0.05]")}>
+        className={cn("cursor-pointer transition-colors duration-150 active:bg-[#141716]/[0.04]", !open && tr, open && "bg-[#141716]/[0.025]")}>
         <td className="w-full max-w-0 py-3 pr-2 pl-4">
           <span className="flex items-center gap-3">
             <CategoryTile description={x.description} />
@@ -162,8 +162,8 @@ function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: s
         </td>
         <td className="tabular px-2 py-3 text-right whitespace-nowrap">{inr(x.amountCents)}</td>
         <td className="py-3 pr-4 pl-2 text-right whitespace-nowrap">
-          {x.myEffectCents > 0 ? <><span className="block text-[11.5px] text-positive">you lent</span><span className="tabular font-semibold text-positive">{inr(x.myEffectCents)}</span></>
-            : x.myEffectCents < 0 ? <><span className="block text-[11.5px] text-negative">you borrowed</span><span className="tabular font-semibold text-negative">{inr(-x.myEffectCents)}</span></>
+          {x.myEffectCents > 0 ? <><span className="block text-[11.5px] text-positive">you lent</span><span className="tabular font-medium text-positive">{inr(x.myEffectCents)}</span></>
+            : x.myEffectCents < 0 ? <><span className="block text-[11.5px] text-negative">you borrowed</span><span className="tabular font-medium text-negative">{inr(-x.myEffectCents)}</span></>
             : <span className="text-[12.5px] text-muted-foreground">{x.myShareCents ? "your share" : "not involved"}</span>}
         </td>
       </tr>
@@ -171,7 +171,7 @@ function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: s
         <td colSpan={3} className="p-0">
           <AnimatePresence initial={false}>
             {open && (
-              <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: EASE }} className="overflow-hidden bg-primary/[0.05]">
+              <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: EASE }} className="overflow-hidden bg-[#141716]/[0.025]">
                 <div className="space-y-3 px-4 pt-1 pb-4">
                   <p className="text-[12.5px] text-muted-foreground">{who(x.paidBy, x.paidByName)} paid · added by {x.createdBy === meId ? "you" : x.createdByName} · {d.full}</p>
                   <div className="overflow-hidden rounded-[16px] bg-white shadow-[0_1px_2px_rgb(16_40_32/5%)]">
@@ -187,7 +187,7 @@ function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: s
                     </table>
                   </div>
                   {x.canDelete && (
-                    <button type="button" className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-negative-soft py-2.5 text-[14px] font-medium text-negative transition-transform active:scale-[0.98]" onClick={e => { e.stopPropagation(); setConfirm(true); }}><Trash2 className="size-4" />Delete expense</button>
+                    <button type="button" className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[#141716]/[0.08] bg-white py-2.5 text-[14px] font-medium text-negative transition-transform active:scale-[0.98]" onClick={e => { e.stopPropagation(); setConfirm(true); }}><Trash2 className="size-4" />Delete expense</button>
                   )}
                 </div>
               </m.div>
@@ -200,7 +200,7 @@ function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: s
                 <AlertDialogDescription className="text-[14px]">{inr(x.amountCents)} paid by {x.paidByName}. Everyone's balances will be recalculated.</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-2">
-                <AlertDialogCancel className="h-11 rounded-full border-0 bg-[#0e1a16]/[0.06] shadow-none">Cancel</AlertDialogCancel>
+                <AlertDialogCancel className="h-11 rounded-full border-0 bg-[#141716]/[0.06] shadow-none">Cancel</AlertDialogCancel>
                 <AlertDialogAction className="h-11 rounded-full bg-negative text-white hover:bg-negative/90" disabled={del.isPending}
                   onClick={e => { e.preventDefault(); del.mutate(x.id, { onSuccess: () => { setConfirm(false); haptic(); toast.success("Expense deleted."); } }); }}>
                   {del.isPending ? "Deleting…" : "Delete"}
@@ -238,7 +238,7 @@ function BalancesTab({ groupId }: { groupId: string }) {
                 <span className="block truncate text-[16px] font-medium">{p.name}</span>
                 <span className={cn("block text-[13px]", p.cents > 0 ? "text-positive" : p.cents < 0 ? "text-negative" : "text-muted-foreground")}>{p.cents > 0 ? "owes you" : p.cents < 0 ? "you owe" : "settled up"}</span>
               </span>
-              {p.cents !== 0 && <span className={cn("tabular text-[16px] font-semibold", p.cents > 0 ? "text-positive" : "text-negative")}>{inr(Math.abs(p.cents))}</span>}
+              {p.cents !== 0 && <span className={cn("tabular text-[16px] font-medium", p.cents > 0 ? "text-positive" : "text-negative")}>{inr(Math.abs(p.cents))}</span>}
               <ChevronRight className={CHEVRON} strokeWidth={2.4} />
             </m.button>
           ))}
@@ -253,7 +253,7 @@ function BalancesTab({ groupId }: { groupId: string }) {
             <div key={b.memberId} className={rowClass}>
               <PersonAvatar id={b.memberId} name={b.name} size="sm" />
               <span className="min-w-0 flex-1 truncate text-[15px]">{b.name}{b.memberId === meId && <span className="text-muted-foreground"> (you)</span>}</span>
-              <span className={cn("tabular rounded-full px-2.5 py-1 text-[13px] font-medium", b.balanceCents > 0 ? "bg-positive-soft text-positive" : b.balanceCents < 0 ? "bg-negative-soft text-negative" : "bg-[#0e1a16]/[0.05] text-muted-foreground")}>
+              <span className={cn("tabular rounded-full px-2.5 py-1 text-[13px] font-medium", b.balanceCents > 0 ? "bg-positive-soft text-positive" : b.balanceCents < 0 ? "bg-negative-soft text-negative" : "bg-[#141716]/[0.05] text-muted-foreground")}>
                 {b.balanceCents > 0 ? "gets back " + inr(b.balanceCents) : b.balanceCents < 0 ? "owes " + inr(-b.balanceCents) : "settled"}
               </span>
             </div>
@@ -271,7 +271,7 @@ function BalancesTab({ groupId }: { groupId: string }) {
                 <span className="text-muted-foreground">{d.fromMemberId === meId ? " owe " : " owes "}</span>
                 <span className="font-medium">{d.toMemberId === meId ? "you" : d.toName}</span>
               </span>
-              <span className="tabular text-[15px] font-semibold">{inr(d.amountCents)}</span>
+              <span className="tabular text-[15px] font-medium">{inr(d.amountCents)}</span>
             </div>
           ))}
         </List>
@@ -306,7 +306,7 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
                       {new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}{s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
                     </span>
                   </td>
-                  <td className="tabular py-3 pr-4 pl-2 text-right text-[15px] font-semibold whitespace-nowrap text-positive">{inr(s.amountCents)}</td>
+                  <td className="tabular py-3 pr-4 pl-2 text-right text-[15px] font-medium whitespace-nowrap">{inr(s.amountCents)}</td>
                 </tr>
               ))}
             </tbody>
@@ -325,7 +325,7 @@ function InsightsTab({ groupId }: { groupId: string }) {
     <div className="space-y-7">
       <div className="grid grid-cols-2 gap-3">
         <div className="panel p-4"><p className="text-[13px] text-muted-foreground">Total spent</p>{dash.data ? <AnimatedMoney cents={dash.data.totalSpentCents} size="lg" className="mt-2" /> : <Skeleton className="mt-2 h-7 w-24" />}</div>
-        <div className="panel p-4"><p className="text-[13px] text-muted-foreground">Expenses</p><p className="tabular mt-2 text-[26px] leading-none font-semibold">{dash.data?.expenseCount ?? "—"}</p></div>
+        <div className="panel p-4"><p className="text-[13px] text-muted-foreground">Expenses</p><p className="tabular mt-2 text-[26px] leading-none font-medium">{dash.data?.expenseCount ?? "—"}</p></div>
       </div>
       <section>
         <SectionTitle>Who paid the most</SectionTitle>
@@ -335,9 +335,9 @@ function InsightsTab({ groupId }: { groupId: string }) {
               <div className="flex items-center gap-3">
                 <PersonAvatar id={s.memberId} name={s.name} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2 text-[15px]"><span className="truncate font-medium">{s.name}</span><span className="tabular font-semibold">{inr(s.paidCents)}</span></div>
-                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[#0e1a16]/[0.06]">
-                    <m.div className="h-full rounded-full bg-[linear-gradient(90deg,#14d39a,#00a3a3)]" initial={{ width: 0 }} animate={{ width: (s.paidCents / max) * 100 + "%" }} transition={{ duration: 0.8, ease: EASE, delay: 0.05 + i * 0.06 }} />
+                  <div className="flex items-baseline justify-between gap-2 text-[15px]"><span className="truncate font-medium">{s.name}</span><span className="tabular font-medium">{inr(s.paidCents)}</span></div>
+                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#141716]/[0.06]">
+                    <m.div className="h-full rounded-full bg-[#141716]" initial={{ width: 0 }} animate={{ width: (s.paidCents / max) * 100 + "%" }} transition={{ duration: 0.8, ease: EASE, delay: 0.05 + i * 0.06 }} />
                   </div>
                   <p className="mt-1 text-[12px] text-muted-foreground">Their share of expenses: {inr(s.shareCents)}</p>
                 </div>

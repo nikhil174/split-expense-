@@ -620,7 +620,14 @@ export default {
         return json({ error: "Server error. Check Worker logs.", detail: env.ENVIRONMENT === "development" ? String(e) : undefined }, 500);
       }
     }
-    if (env.ASSETS) return env.ASSETS.fetch(req);
+    if (env.ASSETS) {
+      const res = await env.ASSETS.fetch(req);
+      // Hashed build files never change, so cache them for a year; the HTML
+      // shell must always be revalidated so a new deploy shows up immediately.
+      const headers = new Headers(res.headers);
+      headers.set("cache-control", url.pathname.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache");
+      return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+    }
     return new Response("Split Expense API is running. Configure the static assets binding.", { status: 200, headers: { "content-type": "text/plain" } });
   },
 };
