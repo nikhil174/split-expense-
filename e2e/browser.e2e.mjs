@@ -37,14 +37,14 @@ async function noHorizontalOverflow(page, label) {
   assert.ok(sw <= cw, `${label}: page overflows horizontally (${sw} > ${cw})`);
 }
 const toast = (page, text) => page.locator("[data-sonner-toast]", { hasText: text }).first().waitFor();
-const heroStatus = page => page.locator("section.panel").first().innerText();
+const heroStatus = page => page.getByTestId("balance-card").innerText();
 
 async function adminSignIn(page) {
   await page.getByRole("tab", { name: "Admin", exact: true }).click();
   await page.getByLabel("Admin name").fill(ADMIN);
   await page.getByLabel("PIN").fill(PIN);
   await page.getByRole("button", { name: "Sign in as admin" }).click();
-  await page.getByRole("tab", { name: "My groups", exact: true }).waitFor();
+  await page.getByRole("tab", { name: "Home", exact: true }).waitFor();
 }
 async function memberSignIn(page, name) {
   await page.getByLabel("Group").selectOption({ label: GROUP });
@@ -124,7 +124,7 @@ try {
   await bea.unroute("**/expenses");
   const dinnerRow = bea.getByRole("row", { name: /Dinner/ });
   await dinnerRow.waitFor();
-  assert.match((await dinnerRow.innerText()).replace(/\s+/g, " "), /Dinner You paid ₹100\.00 you lent ₹50\.00/i);
+  assert.match((await dinnerRow.innerText()).replace(/\s+/g, " "), /Dinner.*You paid ₹100\.00 you lent ₹50\.00/i);
   step("equal split: busy button while saving, table shows 'you lent ₹50.00'");
 
   await bea.getByRole("button", { name: "Add expense" }).first().click();
@@ -200,7 +200,7 @@ try {
   await noHorizontalOverflow(cy, "balances");
   step("header Settle up clears the rest; payments table shows both; everyone settled");
 
-  await admin.getByRole("tab", { name: "My groups", exact: true }).click();
+  await admin.getByRole("tab", { name: "Home", exact: true }).click();
   await openGroup(admin);
   await admin.getByRole("tab", { name: "Insights", exact: true }).click();
   const people = await admin.locator("section", { hasText: "People" }).last().innerText();

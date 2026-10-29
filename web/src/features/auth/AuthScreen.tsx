@@ -30,9 +30,9 @@ function GroupSelect({ id, value, onChange, groups }: { id: string; value: strin
 function Field({ label, htmlFor, children, hint }: { label: string; htmlFor: string; children: React.ReactNode; hint?: string }) {
   return (
     <div>
-      <Label htmlFor={htmlFor} className="eyebrow mb-1.5 block px-4">{label}</Label>
+      <Label htmlFor={htmlFor} className="eyebrow mb-2 block px-1">{label}</Label>
       {children}
-      {hint && <p className="footnote mt-1.5 px-4 text-muted-foreground">{hint}</p>}
+      {hint && <p className="footnote mt-2 px-1 text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -65,20 +65,20 @@ export function AuthScreen() {
       <div className="mx-auto flex min-h-dvh max-w-md flex-col px-4 pt-[max(3rem,env(safe-area-inset-top))] pb-10">
         <m.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.45, ease: EASE }} className="flex flex-col items-center text-center">
           <Wordmark large />
-          <h1 className="large-title mt-5">Split Expense</h1>
-          <p className="subhead mt-2 max-w-[28ch] text-muted-foreground">Track shared spending, see exactly who owes whom, and settle up in a tap.</p>
+          <h1 className="mt-5 text-[32px] leading-[38px] font-semibold tracking-[-0.025em]">Split Expense</h1>
+          <p className="mt-2 max-w-[30ch] text-[15px] text-muted-foreground">Track shared spending, see exactly who owes whom, and settle up in a tap.</p>
         </m.div>
 
         <m.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: EASE, delay: 0.08 }} className="mt-9">
           <Segmented id="auth-tab" value={tab} onChange={setTab} options={[{ value: "signin", label: "Sign in" }, { value: "request", label: "Request access" }]} />
 
-          <div className="mt-6">
+          <div className="panel mt-4 p-5">
             <AnimatePresence mode="wait" initial={false}>
               {tab === "signin" ? (
-                <m.div key="signin" {...fade} className="space-y-6">
+                <m.div key="signin" {...fade} className="space-y-5">
                   <Segmented id="auth-mode" value={mode} onChange={setMode} options={[{ value: "member", label: "Member" }, { value: "admin", label: "Admin" }]} />
                   {mode === "member" ? (
-                    <form className="space-y-6" onSubmit={e => { e.preventDefault(); run(async () => {
+                    <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
                       await post("/api/access/signin", { name: form.name.trim(), groupId: form.groupId });
                       setForm(f => ({ ...f, name: "" }));
                       await signedIn("Welcome back.");
@@ -90,7 +90,7 @@ export function AuthScreen() {
                       <LoadingButton type="submit" size="xl" className="w-full" loading={busy} loadingText="Signing in…">Sign in</LoadingButton>
                     </form>
                   ) : (
-                    <form className="space-y-6" onSubmit={e => { e.preventDefault(); run(async () => {
+                    <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
                       await post("/api/admin/login", { name: form.adminName.trim(), pin: form.pin });
                       setForm(f => ({ ...f, pin: "" }));
                       await signedIn("Signed in as admin.");
@@ -110,7 +110,7 @@ export function AuthScreen() {
                   {requestId ? (
                     <RequestStatus requestId={requestId} busy={busy} run={run} onReset={() => { storage.set(""); setRequestId(""); }} onEntered={() => signedIn("You're in.")} />
                   ) : (
-                    <form className="space-y-6" onSubmit={e => { e.preventDefault(); run(async () => {
+                    <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
                       const d = await post<{ requestId: string; message: string }>("/api/access/request", { name: form.requestName.trim(), groupId: form.requestGroup });
                       storage.set(d.requestId);
                       setRequestId(d.requestId);
@@ -146,7 +146,7 @@ function RequestStatus({ requestId, busy, run, onReset, onEntered }: {
   });
   const s = status.data?.status;
   return (
-    <div className="panel space-y-5 px-5 py-7 text-center">
+    <div className="space-y-5 py-3 text-center">
       <div className={cn("mx-auto grid size-14 place-items-center rounded-full", s === "approved" ? "bg-positive-soft text-positive" : "bg-tint-soft text-tint")}>
         {s === "approved" ? <Check className="size-7" strokeWidth={2.5} /> : <Clock3 className="size-7" />}
       </div>

@@ -1,13 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/inter";
-
-@custom-variant dark (&:is(.dark *));
+@import "@fontsource-variable/outfit";
 
 @theme inline {
-  /* San Francisco on Apple devices; Inter (the closest open match) elsewhere. */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter Variable", "Helvetica Neue", Roboto, sans-serif;
-  --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Inter Variable", sans-serif;
+  --font-sans: "Outfit Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -38,74 +34,43 @@
   --color-negative-soft: var(--negative-soft);
   --color-tint: var(--tint);
   --color-tint-soft: var(--tint-soft);
-  --color-surface: var(--surface);
   --color-hairline: var(--hairline);
 }
 
 /*
- * iOS 17 system colours. Light: systemGroupedBackground #F2F2F7 with white
- * cells; Dark: true black with #1C1C1E cells. Tint = systemBlue; money uses
- * systemGreen (owed to you) and systemRed (you owe).
+ * "Aqua" — light only, inspired by ColorOS's Aquamorphic design: a soft
+ * mineral background with drifting colour, frosted white cards, one fresh
+ * green accent and coral for money you owe. Generous radii, soft shadows.
  */
 :root {
-  --radius: 0.625rem;
-  --background: #f2f2f7;
-  --surface: #ffffff;
-  --foreground: #000000;
-  --card: #ffffff;
-  --card-foreground: #000000;
+  color-scheme: light;
+  --radius: 0.875rem;
+  --background: #f3f6f5;
+  --foreground: #0e1a16;
+  --card: rgb(255 255 255 / 86%);
+  --card-foreground: #0e1a16;
   --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #007aff;
+  --popover-foreground: #0e1a16;
+  --primary: #00a870;
   --primary-foreground: #ffffff;
-  --secondary: rgb(0 122 255 / 12%);
-  --secondary-foreground: #007aff;
-  --muted: rgb(118 118 128 / 12%);
-  --muted-foreground: rgb(60 60 67 / 60%);
-  --accent: rgb(0 122 255 / 10%);
-  --accent-foreground: #007aff;
-  --destructive: #ff3b30;
-  --border: rgb(60 60 67 / 18%);
-  --hairline: rgb(60 60 67 / 29%);
-  --input: rgb(60 60 67 / 18%);
-  --ring: rgb(0 122 255 / 50%);
-  --tint: #007aff;
-  --tint-soft: rgb(0 122 255 / 12%);
-  --positive: #248a3d;
-  --positive-soft: rgb(52 199 89 / 14%);
-  --negative: #ff3b30;
-  --negative-soft: rgb(255 59 48 / 12%);
-  --separator-opaque: #c6c6c8;
-}
-
-.dark {
-  --background: #000000;
-  --surface: #1c1c1e;
-  --foreground: #ffffff;
-  --card: #1c1c1e;
-  --card-foreground: #ffffff;
-  --popover: #2c2c2e;
-  --popover-foreground: #ffffff;
-  --primary: #0a84ff;
-  --primary-foreground: #ffffff;
-  --secondary: rgb(10 132 255 / 18%);
-  --secondary-foreground: #0a84ff;
-  --muted: rgb(118 118 128 / 24%);
-  --muted-foreground: rgb(235 235 245 / 60%);
-  --accent: rgb(10 132 255 / 16%);
-  --accent-foreground: #0a84ff;
-  --destructive: #ff453a;
-  --border: rgb(84 84 88 / 50%);
-  --hairline: rgb(84 84 88 / 65%);
-  --input: rgb(84 84 88 / 50%);
-  --ring: rgb(10 132 255 / 55%);
-  --tint: #0a84ff;
-  --tint-soft: rgb(10 132 255 / 18%);
-  --positive: #30d158;
-  --positive-soft: rgb(48 209 88 / 16%);
-  --negative: #ff453a;
-  --negative-soft: rgb(255 69 58 / 16%);
-  --separator-opaque: #38383a;
+  --secondary: rgb(0 168 112 / 10%);
+  --secondary-foreground: #00895b;
+  --muted: rgb(14 26 22 / 5%);
+  --muted-foreground: #687773;
+  --accent: rgb(0 168 112 / 8%);
+  --accent-foreground: #00895b;
+  --destructive: #f0454c;
+  --border: rgb(14 26 22 / 7%);
+  --hairline: rgb(14 26 22 / 7%);
+  --input: rgb(14 26 22 / 10%);
+  --ring: rgb(0 168 112 / 40%);
+  --tint: #00a870;
+  --tint-soft: rgb(0 168 112 / 10%);
+  --positive: #00a870;
+  --positive-soft: rgb(0 168 112 / 10%);
+  --negative: #f0454c;
+  --negative-soft: rgb(240 69 76 / 9%);
+  --shadow-card: 0 1px 2px rgb(16 40 32 / 4%), 0 10px 30px -12px rgb(16 40 32 / 12%);
 }
 
 @layer base {
@@ -117,32 +82,45 @@
     text-size-adjust: 100%;
   }
   body {
-    @apply bg-background text-foreground antialiased;
-    font-size: 17px;
-    line-height: 1.294;
-    letter-spacing: -0.024em;
-    font-feature-settings: "cv11", "ss03";
+    @apply text-foreground antialiased;
+    font-size: 15px;
+    line-height: 1.45;
     overscroll-behavior-y: none;
+    /* Drifting aqua / sky / lilac light behind frosted cards. */
+    background:
+      radial-gradient(55% 38% at 0% 0%, #d4f5e7 0%, transparent 70%),
+      radial-gradient(45% 32% at 100% 6%, #dbeaff 0%, transparent 70%),
+      radial-gradient(60% 40% at 90% 100%, #ece6ff 0%, transparent 70%),
+      radial-gradient(50% 35% at 0% 90%, #e2f7f3 0%, transparent 70%),
+      var(--background);
+    background-attachment: fixed;
   }
-  ::selection { background: rgb(0 122 255 / 25%); }
+  ::selection { background: rgb(0 168 112 / 22%); }
   button, [role="button"], a { touch-action: manipulation; }
 }
 
 @utility tabular { font-variant-numeric: tabular-nums; }
 @utility safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
-/* iOS grouped-table section header (footnote, uppercase, secondary label). */
-@utility eyebrow { font-size: 13px; font-weight: 400; letter-spacing: -0.006em; line-height: 18px; text-transform: uppercase; color: var(--muted-foreground); }
-/* iOS inset-grouped cell container: white (dark: #1C1C1E) on the grouped background, 10px corners, no border. */
+/* Section label: small, grey, sentence case. */
+@utility eyebrow { font-size: 13px; font-weight: 500; color: var(--muted-foreground); }
+/* Frosted card. */
 @utility panel {
   background: var(--card);
-  border-radius: 10px;
+  border-radius: 22px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid rgb(255 255 255 / 70%);
 }
-/* iOS type scale */
-@utility large-title { font-size: 34px; line-height: 41px; font-weight: 700; letter-spacing: 0.011em; }
-@utility title-2 { font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -0.012em; }
-@utility headline { font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.024em; }
-@utility subhead { font-size: 15px; line-height: 20px; letter-spacing: -0.014em; }
-@utility footnote { font-size: 13px; line-height: 18px; letter-spacing: -0.006em; }
+@utility glass {
+  background: rgb(255 255 255 / 72%);
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid rgb(255 255 255 / 75%);
+}
+@utility page-title { font-size: 28px; line-height: 34px; font-weight: 650; letter-spacing: -0.02em; }
+@utility title-2 { font-size: 20px; line-height: 26px; font-weight: 600; letter-spacing: -0.015em; }
+@utility headline { font-size: 16px; line-height: 22px; font-weight: 600; }
+@utility subhead { font-size: 14px; line-height: 19px; }
+@utility footnote { font-size: 12.5px; line-height: 17px; }
 @utility no-scrollbar {
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }

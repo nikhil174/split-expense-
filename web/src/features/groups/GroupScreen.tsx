@@ -1,7 +1,7 @@
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, HandCoins, Plus, ReceiptText, Search, Trash2, Users } from "lucide-react";
+import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,8 +9,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  AnimatedMoney, DateBadge, EASE, EmptyState, Footnote, List, Page, PersonAvatar, SectionTitle, Segmented, haptic, listItem, pressableRow, rowClass, searchFieldClass,
+  AnimatedMoney, BottomTabs, CategoryTile, DateBadge, EASE, EmptyState, Footnote, List, Page, PersonAvatar, SectionTitle, haptic, listItem, pressableRow, rowClass, searchFieldClass,
 } from "@/components/app/bits";
+import { AquaCard } from "./GroupsScreen";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
 import { useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
@@ -19,13 +20,14 @@ import { inr, shortDate } from "@/lib/money";
 import { goBack, navigate, type GroupTab } from "@/lib/route";
 import { cn } from "@/lib/utils";
 
-const CHEVRON = "size-[18px] text-[#c4c4c7] dark:text-[#5a5a5e]";
+const CHEVRON = "size-[18px] text-[#0e1a16]/25";
 
-// iOS back button: tint chevron + previous title.
+// Round frosted back button with the previous screen's name.
 export function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="-ml-2 inline-flex max-w-full cursor-pointer items-center text-[17px] text-tint transition-opacity active:opacity-50">
-      <ChevronLeft className="size-7 shrink-0" strokeWidth={2.2} /><span className="-ml-0.5 truncate">{label}</span>
+    <button type="button" onClick={onClick} className="group inline-flex max-w-full cursor-pointer items-center gap-2 text-[14px] text-muted-foreground">
+      <span className="glass grid size-9 shrink-0 place-items-center rounded-full shadow-[0_2px_8px_rgb(16_40_32/8%)] transition-transform group-active:scale-90"><ChevronLeft className="size-5 text-foreground" strokeWidth={2.4} /></span>
+      <span className="truncate">{label}</span>
     </button>
   );
 }
@@ -39,44 +41,55 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
   const ready = !!group.data && !!mine.data;
 
   if (group.error) {
-    return <Page><EmptyState icon={<ReceiptText />} title="Can't Open Group">{(group.error as Error).message}</EmptyState>
-      <Button variant="secondary" className="mx-auto flex" onClick={() => navigate({ name: "home" })}>Back to Groups</Button></Page>;
+    return <Page><EmptyState icon={<ReceiptText />} title="Can't open this group">{(group.error as Error).message}</EmptyState>
+      <Button variant="secondary" className="mx-auto flex" onClick={() => navigate({ name: "home" })}>Back to groups</Button></Page>;
   }
 
   return (
-    <Page>
+    <Page className="pb-48">
       <BackButton label="Groups" onClick={() => goBack({ name: "home" })} />
-      {group.data ? <h1 className="large-title mt-1 px-1 break-words">{group.data.group.name}</h1> : <Skeleton className="mt-2 h-9 w-52" />}
-      {group.data && <p className="subhead px-1 text-muted-foreground">{group.data.members.length} {group.data.members.length === 1 ? "member" : "members"}</p>}
-
-      <section className="panel mt-5 p-4">
-        <p className="subhead text-muted-foreground">{!mine.data ? "Your balance" : net > 0 ? "You are owed" : net < 0 ? "You owe" : "Balance"}</p>
-        <div className="mt-1.5 min-h-12">
-          {!mine.data ? <Skeleton className="h-11 w-40" /> : net === 0 ? <p className="title-2 pt-1.5">You are all settled up</p>
-            : <AnimatedMoney cents={Math.abs(net)} size="hero" className={net > 0 ? "text-positive" : "text-negative"} />}
+      {group.data ? <h1 className="page-title mt-3 px-1 break-words">{group.data.group.name}</h1> : <Skeleton className="mt-3 h-8 w-52" />}
+      {group.data && (
+        <div className="mt-2 flex items-center gap-2 px-1">
+          <div className="flex -space-x-2">{group.data.members.slice(0, 5).map(mm => <PersonAvatar key={mm.id} id={mm.id} name={mm.name} size="sm" className="ring-2 ring-[#f3f6f5]" />)}</div>
+          <span className="text-[13px] text-muted-foreground">{group.data.members.length} {group.data.members.length === 1 ? "member" : "members"}</span>
         </div>
-        {mine.data && mine.data.totalOwedToYouCents > 0 && mine.data.totalYouOweCents > 0 && (
-          <p className="footnote mt-1.5 text-muted-foreground">You owe {inr(mine.data.totalYouOweCents)} · you are owed {inr(mine.data.totalOwedToYouCents)}</p>
-        )}
-        <div className="mt-4 grid grid-cols-2 gap-2.5">
-          <Button size="xl" disabled={!ready} onClick={() => setAdding(true)}><Plus className="size-5" strokeWidth={2.5} />Add expense</Button>
-          <Button size="xl" variant="secondary" disabled={!ready} onClick={() => setSettling(true)}><HandCoins className="size-5" />Settle up</Button>
-        </div>
-      </section>
+      )}
 
-      <div className="sticky top-[52px] z-20 -mx-4 mt-5 bg-background/80 px-4 py-2 backdrop-blur-xl backdrop-saturate-[1.8]">
-        <Segmented id="group-tab" value={tab} onChange={t => navigate({ name: "group", groupId, tab: t }, { replace: true })}
-          options={[{ value: "expenses", label: "Expenses" }, { value: "balances", label: "Balances" }, { value: "payments", label: "Payments" }, { value: "insights", label: "Insights" }]} />
-      </div>
+      <AquaCard className="mt-5">
+        <div data-testid="balance-card">
+          <p className="text-[14px] text-white/85">{!mine.data ? "Your balance" : net > 0 ? "You are owed" : net < 0 ? "You owe" : "Your balance"}</p>
+          <div className="mt-2 min-h-11">
+            {!mine.data ? <Skeleton className="h-11 w-40 bg-white/25" /> : net === 0 ? <p className="text-[28px] font-semibold">You are all settled up</p> : <AnimatedMoney cents={Math.abs(net)} size="hero" />}
+          </div>
+          {mine.data && mine.data.totalOwedToYouCents > 0 && mine.data.totalYouOweCents > 0 && (
+            <p className="mt-1.5 text-[13px] text-white/80">You owe {inr(mine.data.totalYouOweCents)} · you are owed {inr(mine.data.totalOwedToYouCents)}</p>
+          )}
+        </div>
+        <Button size="xl" disabled={!ready} onClick={() => setSettling(true)} className="mt-5 w-full bg-white text-[#007a55] shadow-[0_8px_20px_-10px_rgb(0_0_0/35%)] hover:bg-white/95">
+          <HandCoins className="size-5" />Settle up
+        </Button>
+      </AquaCard>
 
       <AnimatePresence mode="wait" initial={false}>
-        <m.div key={tab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: EASE }} className="mt-3">
+        <m.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }} className="mt-7">
           {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} onAdd={() => setAdding(true)} />}
           {tab === "balances" && <BalancesTab groupId={groupId} />}
           {tab === "payments" && <PaymentsTab groupId={groupId} meId={mine.data?.memberId} />}
           {tab === "insights" && <InsightsTab groupId={groupId} />}
         </m.div>
       </AnimatePresence>
+
+      {/* Extended floating action button, above the bottom bar. */}
+      <m.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 400, damping: 28 }}
+        className="fixed right-4 bottom-[calc(max(14px,env(safe-area-inset-bottom))+78px)] z-30 sm:right-[calc(50%-21rem)]">
+        <Button size="xl" disabled={!ready} onClick={() => setAdding(true)} className="h-14 rounded-[20px] px-5 shadow-[0_14px_30px_-10px_rgb(0_168_112/70%)]">
+          <Plus className="size-5" strokeWidth={2.6} />Add expense
+        </Button>
+      </m.div>
+
+      <BottomTabs id="group-tab" value={tab} onChange={t => navigate({ name: "group", groupId, tab: t }, { replace: true })}
+        options={[{ value: "expenses", label: "Expenses", icon: ReceiptText }, { value: "balances", label: "Balances", icon: Scale }, { value: "payments", label: "Payments", icon: Wallet }, { value: "insights", label: "Insights", icon: ChartPie }]} />
 
       <AddExpenseDrawer groupId={groupId} open={adding} onOpenChange={setAdding} />
       <SettleUpDrawer groupId={groupId} open={settling} onOpenChange={setSettling} />
@@ -85,14 +98,13 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
 }
 
 function RowsSkeleton({ rows = 4 }: { rows?: number }) {
-  return <div>{Array.from({ length: rows }, (_, i) => <div key={i} className="flex items-center gap-3 px-4 py-3"><Skeleton className="size-9 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/3" /></div><Skeleton className="h-4 w-16" /></div>)}</div>;
+  return <div>{Array.from({ length: rows }, (_, i) => <div key={i} className="flex items-center gap-3 px-4 py-3.5"><Skeleton className="size-10 rounded-[13px]" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/3" /></div><Skeleton className="h-4 w-16" /></div>)}</div>;
 }
 
-// Column header row shared by the money tables (iOS footnote style).
 function TableHead({ cols }: { cols: [string, string?][] }) {
-  return <thead><tr className="shadow-[inset_0_-0.5px_0_var(--hairline)]">{cols.map(([c, cls], i) => <th key={i} scope="col" className={cn("footnote px-2 py-2 text-left font-normal text-muted-foreground first:pl-4 last:pr-4", cls)}>{c}</th>)}</tr></thead>;
+  return <thead><tr className="border-b border-hairline">{cols.map(([c, cls], i) => <th key={i} scope="col" className={cn("px-2 pt-3 pb-2 text-left text-[12px] font-medium text-muted-foreground first:pl-4 last:pr-4", cls)}>{c}</th>)}</tr></thead>;
 }
-const tr = "shadow-[inset_0_-0.5px_0_var(--hairline)] last:shadow-none";
+const tr = "border-b border-hairline last:border-0";
 
 // ----- Expenses -----
 function ExpensesTab({ groupId, meId, onAdd }: { groupId: string; meId?: string; onAdd: () => void }) {
@@ -104,24 +116,24 @@ function ExpensesTab({ groupId, meId, onAdd }: { groupId: string; meId?: string;
   const total = (expenses.data || []).reduce((s, x) => s + x.amountCents, 0);
   return (
     <>
-      <div className="relative mb-4">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" strokeWidth={2.5} />
+      <div className="relative mb-5">
+        <Search className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted-foreground" />
         <Input type="search" aria-label="Search expenses" placeholder="Search by description or payer" value={query} onChange={e => setQuery(e.target.value)} className={searchFieldClass} />
       </div>
-      <SectionTitle action={expenses.data && expenses.data.length > 0 ? <span className="footnote tabular text-muted-foreground">Total {inr(total)}</span> : undefined}>
+      <SectionTitle action={expenses.data && expenses.data.length > 0 ? <span className="tabular text-[13px] text-muted-foreground">Total {inr(total)}</span> : undefined}>
         {expenses.data ? `${expenses.data.length} ${expenses.data.length === 1 ? "expense" : "expenses"}` : "Expenses"}
       </SectionTitle>
       <div className="panel overflow-hidden">
         {expenses.isPending || !meId ? <RowsSkeleton /> : !list.length ? (
-          expenses.data?.length ? <EmptyState icon={<Search />} title="No Results">Try a different word.</EmptyState> : (
-            <EmptyState icon={<ReceiptText />} title="No Expenses">
+          expenses.data?.length ? <EmptyState icon={<Search />} title="No matches">Try a different word.</EmptyState> : (
+            <EmptyState icon={<ReceiptText />} title="No expenses yet">
               Add the first one and we'll work out who owes whom.
-              <Button className="mt-4 h-9 rounded-full px-4" onClick={onAdd}><Plus />Add expense</Button>
+              <Button className="mt-4" onClick={onAdd}><Plus />Add expense</Button>
             </EmptyState>
           )
         ) : (
-          <table className="w-full text-[15px]">
-            <TableHead cols={[["Date", "w-12"], ["Expense"], ["Amount", "text-right"], ["You", "text-right"]]} />
+          <table className="w-full text-[14px]">
+            <TableHead cols={[["Expense", "w-full"], ["Amount", "text-right"], ["You", "text-right"]]} />
             <tbody>{list.map(x => <ExpenseRow key={x.id} x={x} meId={meId} groupId={groupId} open={open === x.id} onToggle={() => setOpen(o => (o === x.id ? null : x.id))} />)}</tbody>
           </table>
         )}
@@ -134,31 +146,36 @@ function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: s
   const del = useDeleteExpense(groupId);
   const [confirm, setConfirm] = React.useState(false);
   const who = (id: string, name: string) => (id === meId ? "You" : name);
+  const d = shortDate(x.createdAt);
   return (
     <>
       <tr aria-expanded={open} tabIndex={0} onClick={onToggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-        className={cn("cursor-pointer transition-colors duration-100 active:bg-[#d1d1d6] dark:active:bg-[#3a3a3c]", !open && tr, open && "bg-muted/60")}>
-        <td className="py-2.5 pr-1 pl-3 align-middle"><DateBadge ts={x.createdAt} /></td>
-        <td className="w-full max-w-0 px-2 py-2.5">
-          <span className="block truncate text-[17px]">{x.description}</span>
-          <span className="subhead block truncate text-muted-foreground">{who(x.paidBy, x.paidByName)} paid</span>
+        className={cn("cursor-pointer transition-colors duration-150 active:bg-[#0e1a16]/[0.04]", !open && tr, open && "bg-primary/[0.05]")}>
+        <td className="w-full max-w-0 py-3 pr-2 pl-4">
+          <span className="flex items-center gap-3">
+            <CategoryTile description={x.description} />
+            <span className="min-w-0">
+              <span className="block truncate text-[15px] font-medium">{x.description}</span>
+              <span className="block truncate text-[12.5px] text-muted-foreground">{d.day} {d.month} · {who(x.paidBy, x.paidByName)} paid</span>
+            </span>
+          </span>
         </td>
-        <td className="tabular px-2 py-2.5 text-right whitespace-nowrap">{inr(x.amountCents)}</td>
-        <td className="py-2.5 pr-4 pl-2 text-right whitespace-nowrap">
-          {x.myEffectCents > 0 ? <><span className="block text-[12px] text-positive">you lent</span><span className="tabular font-semibold text-positive">{inr(x.myEffectCents)}</span></>
-            : x.myEffectCents < 0 ? <><span className="block text-[12px] text-negative">you borrowed</span><span className="tabular font-semibold text-negative">{inr(-x.myEffectCents)}</span></>
-            : <span className="footnote text-muted-foreground">{x.myShareCents ? "your share" : "not involved"}</span>}
+        <td className="tabular px-2 py-3 text-right whitespace-nowrap">{inr(x.amountCents)}</td>
+        <td className="py-3 pr-4 pl-2 text-right whitespace-nowrap">
+          {x.myEffectCents > 0 ? <><span className="block text-[11.5px] text-positive">you lent</span><span className="tabular font-semibold text-positive">{inr(x.myEffectCents)}</span></>
+            : x.myEffectCents < 0 ? <><span className="block text-[11.5px] text-negative">you borrowed</span><span className="tabular font-semibold text-negative">{inr(-x.myEffectCents)}</span></>
+            : <span className="text-[12.5px] text-muted-foreground">{x.myShareCents ? "your share" : "not involved"}</span>}
         </td>
       </tr>
       <tr className={open ? tr : ""}>
-        <td colSpan={4} className="p-0">
+        <td colSpan={3} className="p-0">
           <AnimatePresence initial={false}>
             {open && (
-              <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }} className="overflow-hidden bg-muted/60">
+              <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: EASE }} className="overflow-hidden bg-primary/[0.05]">
                 <div className="space-y-3 px-4 pt-1 pb-4">
-                  <p className="footnote text-muted-foreground">{who(x.paidBy, x.paidByName)} paid · added by {x.createdBy === meId ? "you" : x.createdByName} · {shortDate(x.createdAt).full}</p>
-                  <div className="overflow-hidden rounded-[10px] bg-card">
-                    <table className="w-full text-[15px]">
+                  <p className="text-[12.5px] text-muted-foreground">{who(x.paidBy, x.paidByName)} paid · added by {x.createdBy === meId ? "you" : x.createdByName} · {d.full}</p>
+                  <div className="overflow-hidden rounded-[16px] bg-white shadow-[0_1px_2px_rgb(16_40_32/5%)]">
+                    <table className="w-full text-[14px]">
                       <TableHead cols={[["Person"], ["Share", "text-right"], ["Owes " + (x.paidBy === meId ? "you" : x.paidByName), "text-right"]]} />
                       <tbody>{x.splits.map(s => (
                         <tr key={s.memberId} className={tr}>
@@ -170,21 +187,21 @@ function ExpenseRow({ x, meId, groupId, open, onToggle }: { x: Expense; meId?: s
                     </table>
                   </div>
                   {x.canDelete && (
-                    <button type="button" className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-[10px] bg-card py-2.5 text-[17px] text-destructive transition-opacity active:opacity-60" onClick={e => { e.stopPropagation(); setConfirm(true); }}><Trash2 className="size-[18px]" />Delete expense</button>
+                    <button type="button" className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-negative-soft py-2.5 text-[14px] font-medium text-negative transition-transform active:scale-[0.98]" onClick={e => { e.stopPropagation(); setConfirm(true); }}><Trash2 className="size-4" />Delete expense</button>
                   )}
                 </div>
               </m.div>
             )}
           </AnimatePresence>
           <AlertDialog open={confirm} onOpenChange={setConfirm}>
-            <AlertDialogContent className="max-w-[300px] gap-0 rounded-[14px] p-0 text-center">
-              <AlertDialogHeader className="px-4 pt-5 pb-4 text-center sm:text-center">
-                <AlertDialogTitle className="headline">Delete “{x.description}”?</AlertDialogTitle>
-                <AlertDialogDescription className="footnote text-foreground">{inr(x.amountCents)} paid by {x.paidByName}. Everyone's balances will be recalculated.</AlertDialogDescription>
+            <AlertDialogContent className="max-w-[340px] rounded-[26px] border-0 p-6">
+              <AlertDialogHeader className="text-left">
+                <AlertDialogTitle className="title-2">Delete “{x.description}”?</AlertDialogTitle>
+                <AlertDialogDescription className="text-[14px]">{inr(x.amountCents)} paid by {x.paidByName}. Everyone's balances will be recalculated.</AlertDialogDescription>
               </AlertDialogHeader>
-              <AlertDialogFooter className="grid grid-cols-2 gap-0 shadow-[inset_0_0.5px_0_var(--hairline)] sm:grid-cols-2">
-                <AlertDialogCancel className="h-11 rounded-none border-0 bg-transparent text-[17px] text-tint shadow-none hover:bg-muted/50">Cancel</AlertDialogCancel>
-                <AlertDialogAction className="h-11 rounded-none bg-transparent text-[17px] font-semibold text-destructive shadow-[inset_0.5px_0_0_var(--hairline)] hover:bg-muted/50" disabled={del.isPending}
+              <AlertDialogFooter className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-2">
+                <AlertDialogCancel className="h-11 rounded-full border-0 bg-[#0e1a16]/[0.06] shadow-none">Cancel</AlertDialogCancel>
+                <AlertDialogAction className="h-11 rounded-full bg-negative text-white hover:bg-negative/90" disabled={del.isPending}
                   onClick={e => { e.preventDefault(); del.mutate(x.id, { onSuccess: () => { setConfirm(false); haptic(); toast.success("Expense deleted."); } }); }}>
                   {del.isPending ? "Deleting…" : "Delete"}
                 </AlertDialogAction>
@@ -214,15 +231,15 @@ function BalancesTab({ groupId }: { groupId: string }) {
       <section>
         <SectionTitle>You and each person</SectionTitle>
         <List inset={68}>
-          {!people ? <RowsSkeleton rows={3} /> : !people.length ? <EmptyState icon={<Users />} title="Just You">No one else is in this group yet.</EmptyState> : people.map(([id, p], i) => (
+          {!people ? <RowsSkeleton rows={3} /> : !people.length ? <EmptyState icon={<Users />} title="Just you here">No one else is in this group yet.</EmptyState> : people.map(([id, p], i) => (
             <m.button key={id} custom={i} variants={listItem} initial="initial" animate="animate" type="button" onClick={() => navigate({ name: "person", groupId, memberId: id })} className={pressableRow}>
-              <PersonAvatar name={p.name} />
+              <PersonAvatar id={id} name={p.name} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[17px]">{p.name}</span>
-                <span className={cn("subhead block", p.cents > 0 ? "text-positive" : p.cents < 0 ? "text-negative" : "text-muted-foreground")}>{p.cents > 0 ? "owes you" : p.cents < 0 ? "you owe" : "settled up"}</span>
+                <span className="block truncate text-[16px] font-medium">{p.name}</span>
+                <span className={cn("block text-[13px]", p.cents > 0 ? "text-positive" : p.cents < 0 ? "text-negative" : "text-muted-foreground")}>{p.cents > 0 ? "owes you" : p.cents < 0 ? "you owe" : "settled up"}</span>
               </span>
-              {p.cents !== 0 && <span className={cn("tabular text-[17px]", p.cents > 0 ? "text-positive" : "text-negative")}>{inr(Math.abs(p.cents))}</span>}
-              <ChevronRight className={CHEVRON} strokeWidth={2.5} />
+              {p.cents !== 0 && <span className={cn("tabular text-[16px] font-semibold", p.cents > 0 ? "text-positive" : "text-negative")}>{inr(Math.abs(p.cents))}</span>}
+              <ChevronRight className={CHEVRON} strokeWidth={2.4} />
             </m.button>
           ))}
         </List>
@@ -234,9 +251,9 @@ function BalancesTab({ groupId }: { groupId: string }) {
         <List inset={60}>
           {!balances.data ? <RowsSkeleton rows={3} /> : balances.data.map(b => (
             <div key={b.memberId} className={rowClass}>
-              <PersonAvatar name={b.name} size="sm" />
-              <span className="min-w-0 flex-1 truncate text-[17px]">{b.name}{b.memberId === meId && <span className="text-muted-foreground"> (you)</span>}</span>
-              <span className={cn("tabular text-[15px]", b.balanceCents > 0 ? "text-positive" : b.balanceCents < 0 ? "text-negative" : "text-muted-foreground")}>
+              <PersonAvatar id={b.memberId} name={b.name} size="sm" />
+              <span className="min-w-0 flex-1 truncate text-[15px]">{b.name}{b.memberId === meId && <span className="text-muted-foreground"> (you)</span>}</span>
+              <span className={cn("tabular rounded-full px-2.5 py-1 text-[13px] font-medium", b.balanceCents > 0 ? "bg-positive-soft text-positive" : b.balanceCents < 0 ? "bg-negative-soft text-negative" : "bg-[#0e1a16]/[0.05] text-muted-foreground")}>
                 {b.balanceCents > 0 ? "gets back " + inr(b.balanceCents) : b.balanceCents < 0 ? "owes " + inr(-b.balanceCents) : "settled"}
               </span>
             </div>
@@ -247,14 +264,14 @@ function BalancesTab({ groupId }: { groupId: string }) {
       <section>
         <SectionTitle>Who owes whom</SectionTitle>
         <List>
-          {!debts.data ? <RowsSkeleton rows={2} /> : !debts.data.length ? <p className="px-4 py-3 text-[17px] text-muted-foreground">Everyone is settled up</p> : debts.data.map(d => (
+          {!debts.data ? <RowsSkeleton rows={2} /> : !debts.data.length ? <p className="px-4 py-4 text-[15px] text-muted-foreground">Everyone is settled up</p> : debts.data.map(d => (
             <div key={d.fromMemberId + ">" + d.toMemberId} className={rowClass}>
-              <span className="min-w-0 flex-1 truncate text-[17px]">
-                {d.fromMemberId === meId ? "You" : d.fromName}
+              <span className="min-w-0 flex-1 truncate text-[15px]">
+                <span className="font-medium">{d.fromMemberId === meId ? "You" : d.fromName}</span>
                 <span className="text-muted-foreground">{d.fromMemberId === meId ? " owe " : " owes "}</span>
-                {d.toMemberId === meId ? "you" : d.toName}
+                <span className="font-medium">{d.toMemberId === meId ? "you" : d.toName}</span>
               </span>
-              <span className="tabular text-[17px] text-muted-foreground">{inr(d.amountCents)}</span>
+              <span className="tabular text-[15px] font-semibold">{inr(d.amountCents)}</span>
             </div>
           ))}
         </List>
@@ -270,26 +287,26 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
   const who = (id: string, name: string) => (id === meId ? "You" : name);
   return (
     <>
-      <SectionTitle action={payments.data && payments.data.length > 0 ? <span className="footnote tabular text-muted-foreground">Total {inr(payments.data.reduce((s, x) => s + x.amountCents, 0))}</span> : undefined}>
+      <SectionTitle action={payments.data && payments.data.length > 0 ? <span className="tabular text-[13px] text-muted-foreground">Total {inr(payments.data.reduce((s, x) => s + x.amountCents, 0))}</span> : undefined}>
         {payments.data ? `${payments.data.length} ${payments.data.length === 1 ? "payment" : "payments"}` : "Payments"}
       </SectionTitle>
       <div className="panel overflow-hidden">
         {payments.isPending ? <RowsSkeleton /> : !payments.data?.length ? (
-          <EmptyState icon={<HandCoins />} title="No Payments">When someone pays back, it shows up here.</EmptyState>
+          <EmptyState icon={<Wallet />} title="No payments yet">When someone pays back, it shows up here.</EmptyState>
         ) : (
-          <table className="w-full text-[15px]">
+          <table className="w-full text-[14px]">
             <TableHead cols={[["Date", "w-12"], ["Payment"], ["Amount", "text-right"]]} />
             <tbody>
               {payments.data.map(s => (
                 <tr key={s.id} className={tr}>
-                  <td className="py-2.5 pr-1 pl-3"><DateBadge ts={s.createdAt} /></td>
-                  <td className="w-full max-w-0 px-2 py-2.5">
-                    <span className="block truncate text-[17px]">{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</span>
-                    <span className="subhead block truncate text-muted-foreground">
+                  <td className="py-3 pr-1 pl-4"><DateBadge ts={s.createdAt} /></td>
+                  <td className="w-full max-w-0 px-2 py-3">
+                    <span className="block truncate text-[15px] font-medium">{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</span>
+                    <span className="block truncate text-[12.5px] text-muted-foreground">
                       {new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}{s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
                     </span>
                   </td>
-                  <td className="tabular py-2.5 pr-4 pl-2 text-right text-[17px] whitespace-nowrap">{inr(s.amountCents)}</td>
+                  <td className="tabular py-3 pr-4 pl-2 text-right text-[15px] font-semibold whitespace-nowrap text-positive">{inr(s.amountCents)}</td>
                 </tr>
               ))}
             </tbody>
@@ -307,19 +324,24 @@ function InsightsTab({ groupId }: { groupId: string }) {
   return (
     <div className="space-y-7">
       <div className="grid grid-cols-2 gap-3">
-        <div className="panel p-4"><p className="footnote text-muted-foreground">Total spent</p>{dash.data ? <AnimatedMoney cents={dash.data.totalSpentCents} size="lg" className="mt-1.5" /> : <Skeleton className="mt-2 h-7 w-24" />}</div>
-        <div className="panel p-4"><p className="footnote text-muted-foreground">Expenses</p><p className="tabular mt-1.5 font-rounded text-[28px] leading-none font-bold">{dash.data?.expenseCount ?? "—"}</p></div>
+        <div className="panel p-4"><p className="text-[13px] text-muted-foreground">Total spent</p>{dash.data ? <AnimatedMoney cents={dash.data.totalSpentCents} size="lg" className="mt-2" /> : <Skeleton className="mt-2 h-7 w-24" />}</div>
+        <div className="panel p-4"><p className="text-[13px] text-muted-foreground">Expenses</p><p className="tabular mt-2 text-[26px] leading-none font-semibold">{dash.data?.expenseCount ?? "—"}</p></div>
       </div>
       <section>
         <SectionTitle>Who paid the most</SectionTitle>
         <div className="panel space-y-4 p-4">
           {!dash.data ? <RowsSkeleton rows={3} /> : dash.data.spending.map((s, i) => (
             <div key={s.memberId}>
-              <div className="flex items-baseline justify-between gap-2 text-[17px]"><span className="truncate">{s.name}</span><span className="tabular font-semibold">{inr(s.paidCents)}</span></div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
-                <m.div className="h-full rounded-full bg-tint" initial={{ width: 0 }} animate={{ width: (s.paidCents / max) * 100 + "%" }} transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1], delay: 0.05 + i * 0.05 }} />
+              <div className="flex items-center gap-3">
+                <PersonAvatar id={s.memberId} name={s.name} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2 text-[15px]"><span className="truncate font-medium">{s.name}</span><span className="tabular font-semibold">{inr(s.paidCents)}</span></div>
+                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[#0e1a16]/[0.06]">
+                    <m.div className="h-full rounded-full bg-[linear-gradient(90deg,#14d39a,#00a3a3)]" initial={{ width: 0 }} animate={{ width: (s.paidCents / max) * 100 + "%" }} transition={{ duration: 0.8, ease: EASE, delay: 0.05 + i * 0.06 }} />
+                  </div>
+                  <p className="mt-1 text-[12px] text-muted-foreground">Their share of expenses: {inr(s.shareCents)}</p>
+                </div>
               </div>
-              <p className="footnote mt-1 text-muted-foreground">Their share of expenses: {inr(s.shareCents)}</p>
             </div>
           ))}
         </div>
@@ -329,9 +351,9 @@ function InsightsTab({ groupId }: { groupId: string }) {
         <List inset={60}>
           {group.data?.members.map(mm => (
             <div key={mm.id} className={rowClass}>
-              <PersonAvatar name={mm.name} size="sm" />
-              <span className="flex-1 truncate text-[17px]">{mm.name}{mm.id === group.data.me.id && <span className="text-muted-foreground"> (you)</span>}</span>
-              <span className="subhead text-muted-foreground">{mm.status === "admin" ? "Admin" : mm.status === "pending" ? "Awaiting re-approval" : ""}</span>
+              <PersonAvatar id={mm.id} name={mm.name} size="sm" />
+              <span className="flex-1 truncate text-[15px]">{mm.name}{mm.id === group.data.me.id && <span className="text-muted-foreground"> (you)</span>}</span>
+              <span className="text-[13px] text-muted-foreground">{mm.status === "admin" ? "Admin" : mm.status === "pending" ? "Awaiting re-approval" : ""}</span>
             </div>
           ))}
         </List>

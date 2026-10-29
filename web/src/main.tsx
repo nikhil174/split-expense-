@@ -3,12 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Follow the phone's light/dark setting.
-const media = window.matchMedia("(prefers-color-scheme: dark)");
-const applyTheme = () => document.documentElement.classList.toggle("dark", media.matches);
-applyTheme();
-media.addEventListener("change", applyTheme);
-
+// Light only by design.
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
