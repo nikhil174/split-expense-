@@ -1,9 +1,11 @@
--- One-time reset of Split Expense app data. Schema and tables are preserved.
-DELETE FROM appx_splits;
-DELETE FROM appx_expenses;
-DELETE FROM appx_invites;
-DELETE FROM appx_group_members;
-DELETE FROM appx_groups;
-DELETE FROM appx_sessions;
-DELETE FROM appx_admin_sessions;
-DELETE FROM appx_access_requests;
+-- Intentionally a no-op.
+--
+-- This migration originally ran DELETE FROM on every appx_* table as a one-time
+-- reset before group-aware access was introduced. Wrangler tracks applied
+-- migrations by file name only, so on any database where it has already run,
+-- editing it changes nothing. On a database where it has NOT yet run (for
+-- example a production D1 that missed earlier deploys), the original version
+-- would have silently wiped every group, expense, split, member and session.
+-- Destructive resets must be an explicit, owner-approved manual action, never
+-- a side effect of `wrangler d1 migrations apply`.
+SELECT 1;

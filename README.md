@@ -21,34 +21,41 @@ Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 - Member-only: group, expense, and balance endpoints. A member request is scoped to one selected group.
 - Migration `0004_group_access_and_unique_names.sql` adds the group reference and case-insensitive unique group-name index.
 
-## Cloudflare setup
+## Money and debt model
+- All money is stored and computed in integer paise (`*_cents` columns). Amounts are parsed from rupee strings/numbers with at most two decimals (`src/money.js`); exponents, hex, booleans and fractional paise are rejected.
+- **Equal split** divides paise exactly; leftover paise go to the first members, so shares differ by at most one paise.
+- **Manual split** must add up exactly to the total; duplicates, non-members, negatives, fractional paise and all-zero allocations are rejected server-side.
+- **Debts use direct expense attribution** (`src/settlement-logic.js`): for each expense, every split member other than the payer owes their own share to the payer. Edges are summed per pair, repayments are subtracted from the same pair, and opposite directions are netted. The UI shows "You need to pay X" / "X needs to pay you" from this model only; no net-settlement plan is shown.
+- Net balance = paid − own shares + repayments made − repayments received. It always equals (owed to you − you owe) over the pairwise debts, and group balances sum to zero.
+- Repayments: a normal member can only record a payment from their own account, to an active member, for at most the exact outstanding amount (re-checked atomically inside the INSERT). The admin can record any payment, including to/from removed members, so those debts can still be cleared.
 
-This repository does not deploy automatically and has not changed the existing Worker or database.
+## Membership policy (as implemented)
+- Members who are approved (even if their 3-hour window lapsed) or pending re-approval stay selectable as payer/split members; acting in the app still requires an active session.
+- Revoked, removed or deleted members are not selectable for new expenses or member-recorded payments. Their `appx_group_members` row is kept so historical expenses, splits, settlements and balances still show their name.
+- Low-friction tradeoff: member sign-in is passwordless (group + approved name), so anyone who knows an approved member's name can sign in as them while their approval is active. Admin approval and the 3-hour expiry are the only guards. Adding a per-member PIN would close this; ask the owner before changing it.
 
-1. In Cloudflare, open the existing Worker `split-expense` and its D1 database `split_expense_db`.
-2. Back up the D1 database and confirm the database ID and current schema.
-3. Replace `REPLACE_WITH_EXISTING_D1_DATABASE_ID` in `wrangler.toml` with the actual database ID.
-4. Verify the D1 binding is named `DB` in the new config. If the existing Worker uses a different binding name, align it before deployment.
-5. Configure strong secrets:
-   - `npx wrangler secret put ADMIN_PIN`
-   - `npx wrangler secret put SESSION_SECRET` (use a long random value)
-6. Install dependencies with `npm install`.
-7. Apply migrations only after reviewing the schema and backup:
-   - `npx wrangler d1 migrations apply split_expense_db --remote`
-8. Deploy only after testing in a staging Worker:
-   - `npm run deploy`
+## Security controls
+- `HttpOnly; Secure; SameSite=Lax` cookies; cross-site writes (foreign `Origin`) are refused; JSON bodies are capped at 16 KB; split lists are capped at 100 members.
+- D1-backed fixed-window rate limits (migration `0006`): admin login 10/15 min per IP and 50/hour overall, member sign-in 20/15 min per IP, access requests 10/hour per IP, expenses 60/10 min and settlements 30/10 min per member. If the table is missing, limits fail open and log an error.
+- The admin PIN is compared in constant time. Use a long PIN: the rate limits slow down guessing but cannot stop it.
 
-## Data safety notes
-The SQL migrations add new `appx_*` tables and do not modify or delete existing tables. The current application code stores its new group/expense data in those tables; it does not automatically import legacy records. Review existing production routes and bindings before replacing any deployed Worker code.
+## Migrations
+Wrangler applies files in name order and tracks them by name only. `0003_reset_app_data.sql` used to delete all app data; it is now a no-op so it can never wipe a database that had not run it yet. Do **not** rename migration files that may already be applied.
 
-## Local development
-- `npm install`
-- `npx wrangler dev`
+Before applying remotely, check what is pending:
 
-## Current status
-Source files are committed to GitHub. Live deployment, secret configuration, D1 migration execution, and end-to-end testing against the existing database remain to be done.
+```bash
+npx wrangler d1 migrations list split_expense_db --remote
+npx wrangler d1 migrations apply split_expense_db --remote
+```
 
+## Cloudflare deployment
+1. Set production secrets (never commit them): `npx wrangler secret put ADMIN_PIN` and `npx wrangler secret put SESSION_SECRET` (long random value). Rotate them if old values were exposed. Deploys fail with "required secrets have not been set" until both exist.
+2. Back up D1 (`npx wrangler d1 export split_expense_db --remote --output backup.sql`), list pending migrations, then apply them.
+3. `npx wrangler deploy`, then do read-only checks on the live URL (`GET /api/groups/public`, then load the page and look for the "Your debts" section).
 
-<!-- Build trigger: verify Cloudflare Git integration is active. -->
+The D1 binding is named `split-expense` (see `wrangler.toml`).
 
-<!-- Build trigger after compatibility-date correction: 2026-10-28 -->
+## Tests
+- `npm test` runs the unit, property, migration and API tests (`node --test`, Node 22+). API tests run the real Worker against an in-memory SQLite D1 double with every migration applied and foreign keys enforced.
+- `npm run test:e2e` runs a Playwright browser test on a Pixel 7 viewport against a **local** `wrangler dev`. Start it with `npx wrangler d1 migrations apply split_expense_db --local` then `npx wrangler dev --local`, with a throwaway `ADMIN_PIN` in `.dev.vars`, and pass `E2E_ADMIN_PIN`. You need Playwright installed. The test refuses to run against a deployed Worker.
