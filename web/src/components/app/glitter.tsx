@@ -99,8 +99,8 @@ export function glitterBurst({ x, y, strong = false }: { x?: number; y?: number;
 
 const TOUCHABLE = 'button, a[href], [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="radio"], [role="checkbox"], summary';
 
-// Touch wave: a soft gold ripple that spreads from the finger across whatever
-// was pressed, shedding a little gold dust. Drawn in a fixed overlay clipped to
+// Touch ripple: a small, soft gold ripple around the finger on whatever was
+// pressed, with a pinch of gold dust. Drawn in a fixed overlay clipped to
 // the element's shape, so it never affects layout or catches taps. Uses the
 // Web Animations API; with reduced motion on it is a brief glow only.
 export function installTouchWave() {
@@ -124,34 +124,35 @@ export function installTouchWave() {
       layer.appendChild(c);
       return c;
     };
-    // Brighter on dark surfaces (ink buttons) so the gold still reads.
+    // A small, soft ripple around the finger (never the whole element),
+    // slightly stronger on dark ink buttons so the gold still reads.
     const bg = getComputedStyle(el).backgroundColor.match(/[\d.]+/g)?.map(Number) ?? [255, 255, 255, 0];
     const dark = (bg[3] ?? 1) > 0.5 && bg[0] * 0.299 + bg[1] * 0.587 + bg[2] * 0.114 < 90;
-    const a = dark ? [48, 22, 85] : [34, 16, 65];
-    const glow = circle(Math.min(reach, 150), `background:radial-gradient(circle, rgb(226 186 98 / ${a[0]}%) 0%, rgb(226 186 98 / ${a[1]}%) 45%, transparent 70%)`);
+    const a = dark ? [26, 10, 40] : [16, 6, 28];
+    const R = Math.min(reach, 46);
+    const glow = circle(R, `background:radial-gradient(circle, rgb(226 186 98 / ${a[0]}%) 0%, rgb(226 186 98 / ${a[1]}%) 55%, transparent 72%)`);
     document.body.appendChild(layer);
 
-    let done = 800;
+    let done = 560;
     if (still) {
-      glow.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: 600, fill: "forwards" });
+      glow.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: 500, fill: "forwards" });
     } else {
-      const ease = "cubic-bezier(0.2, 0.7, 0.2, 1)";
-      glow.animate([{ transform: "scale(0.15)", opacity: 1 }, { opacity: 0.9, offset: 0.45 }, { transform: "scale(1)", opacity: 0 }], { duration: 720, easing: ease, fill: "forwards" });
-      const ring = circle(reach, `border:2px solid rgb(214 168 72 / ${a[2]}%);box-shadow:0 0 8px rgb(228 192 108 / 35%)`);
-      ring.animate([{ transform: "scale(0.05)", opacity: 1 }, { opacity: 0.8, offset: 0.5 }, { transform: "scale(1)", opacity: 0 }], { duration: 760, easing: ease, fill: "forwards" });
-      // Gold dust riding the wave outwards.
-      const specks = Math.min(12, 6 + Math.round(reach / 50));
-      for (let i = 0; i < specks; i++) {
-        const angle = (i / specks) * Math.PI * 2 + Math.random() * 0.6;
-        const dist = Math.min(reach, 160) * (0.35 + Math.random() * 0.5);
-        const size = 2 + Math.random() * 2.5;
+      const ease = "cubic-bezier(0.22, 0.8, 0.3, 1)";
+      glow.animate([{ transform: "scale(0.35)", opacity: 1 }, { transform: "scale(1)", opacity: 0 }], { duration: 520, easing: ease, fill: "forwards" });
+      const ring = circle(Math.min(reach, 52), `border:1px solid rgb(214 168 72 / ${a[2]}%)`);
+      ring.animate([{ transform: "scale(0.3)", opacity: 1 }, { transform: "scale(1)", opacity: 0 }], { duration: 560, easing: ease, fill: "forwards" });
+      // A pinch of gold dust that stays close to the finger.
+      for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2 + Math.random() * 1.2;
+        const dist = R * (0.45 + Math.random() * 0.4);
+        const size = 1.5 + Math.random();
         const color = CHAMPAGNE[i % 3];
-        const s = circle(size / 2, `background:${color};box-shadow:0 0 ${size * 2}px ${color}`);
-        const delay = Math.random() * 90, duration = 520 + Math.random() * 260;
+        const s = circle(size / 2, `background:${color}`);
+        const delay = 40 + Math.random() * 60, duration = 420 + Math.random() * 120;
         s.animate([
-          { transform: "translate(0,0) scale(0.6)", opacity: 0 },
-          { opacity: 1, offset: 0.2 },
-          { transform: `translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px) scale(1)`, opacity: 0 },
+          { transform: "translate(0,0)", opacity: 0 },
+          { opacity: 0.85, offset: 0.3 },
+          { transform: `translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px)`, opacity: 0 },
         ], { duration, delay, easing: ease, fill: "forwards" });
         done = Math.max(done, delay + duration);
       }
