@@ -105,3 +105,37 @@ for (let seed = 1; seed <= 100; seed++) {
     }
   });
 }
+
+test("balances list everyone I owe or who owes me across groups, matching group totals", async t => {
+  const f = await fixture(t);
+  const { ids } = f;
+  // In one group the admin is owed by Bea but owes Cy: gross amounts, not just the net.
+  await f.add("admin", { description: "Hotel", amount: "90", paidBy: ids.admin, memberIds: [ids.admin, ids.Bea] });
+  await f.add("Cy", { description: "Cab", amount: "40", paidBy: ids.Cy, memberIds: [ids.Cy, ids.admin] });
+  await f.add("Bea", { description: "Snacks", amount: "10", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy] });
+  const other = await setupGroup(f.env, "Office", ["Zed"], { adminCookie: f.adminCookie });
+  await call(f.env, `/api/groups/${other.groupId}/expenses`, { method: "POST", cookie: other.cookies.Zed, body: { description: "Lunch", amount: "30", paidBy: other.ids.Zed, memberIds: [other.ids.Zed, "admin"] } });
+  const paid = await call(f.env, `/api/groups/${other.groupId}/settlements`, { method: "POST", cookie: f.adminCookie, body: { fromMemberId: "admin", toMemberId: other.ids.Zed, amount: "5" } });
+  assert.equal(paid.status, 201);
+
+  const b = (await call(f.env, "/api/balances", { cookie: f.adminCookie })).data;
+  assert.deepEqual(b.people.map(x => [x.groupName, x.name, x.netCents, x.active]), [
+    ["Goa Trip", "Bea", 4500, true],
+    ["Goa Trip", "Cy", -2000, true],
+    ["Office", "Zed", -1000, true],
+  ]);
+  assert.deepEqual([b.owedToYouCents, b.youOweCents, b.netCents], [4500, 3000, 1500]);
+  // Each row matches that group's own debts and person drill-down.
+  for (const x of b.people) {
+    const view = (await call(f.env, `/api/groups/${x.groupId}/with/${x.memberId}`, { cookie: f.adminCookie })).data;
+    assert.equal(view.netCents, x.netCents);
+  }
+  // The net agrees with the per-group balances shown on the group list.
+  const groups = (await call(f.env, "/api/groups", { cookie: f.adminCookie })).data.groups;
+  assert.equal(groups.reduce((s, g) => s + g.myBalanceCents, 0), b.netCents);
+
+  // A member sees only their own group and counterparties; settled pairs drop out.
+  const bea = (await call(f.env, "/api/balances", { cookie: f.cookies.Bea })).data;
+  assert.deepEqual(bea.people.map(x => [x.name, x.netCents]), [["Alex Admin", -4500], ["Cy", 500]]);
+  assert.equal((await call(f.env, "/api/balances")).status, 401);
+});

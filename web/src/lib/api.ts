@@ -53,6 +53,9 @@ export type Dashboard = { totalSpentCents: number; expenseCount: number; spendin
 export type ActivityItem =
   | { type: "expense"; id: string; description: string; paidBy: string; totalCents: number; shareCents: number; effectCents: number; runningCents: number; createdAt: number }
   | { type: "payment"; id: string; fromMemberId: string; toMemberId: string; amountCents: number; effectCents: number; runningCents: number; createdAt: number };
+// One row per person per group: positive netCents means they owe me.
+export type PersonBalance = { groupId: string; groupName: string; memberId: string; name: string; active: boolean; netCents: number };
+export type PeopleBalances = { people: PersonBalance[]; owedToYouCents: number; youOweCents: number; netCents: number };
 export type PersonView = { me: Identity; other: Identity & { active: boolean }; netCents: number; items: ActivityItem[] };
 
 export type AccessRequest = {

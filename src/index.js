@@ -408,6 +408,29 @@ async function api(req, env, url) {
       + "FROM appx_groups g JOIN appx_group_members m ON m.group_id=g.id WHERE m.member_id=?1 ORDER BY g.created_at DESC").bind(u.id).all();
     return json({ groups: r.results });
   }
+  // Everyone I owe or who owes me, across all my groups, one row per person
+  // per group (member ids are group-scoped). Same pairwise ledger as each
+  // group's debts, so these always match the group and person screens.
+  if (method === "GET" && p === "/api/balances") {
+    const groups = (await db.prepare("SELECT g.id,g.name FROM appx_groups g JOIN appx_group_members m ON m.group_id=g.id WHERE m.member_id=? AND " + ACTIVE_MEMBER_SQL + " ORDER BY g.created_at DESC").bind(u.id).all()).results;
+    const people = [];
+    for (const g of groups) {
+      const [members, ledger] = await Promise.all([groupMembers(db, g.id), loadLedger(db, g.id)]);
+      const nameOf = nameLookup(members);
+      const active = new Set(members.filter(x => x.active).map(x => x.id));
+      for (const d of computePairwiseDebts(ledger)) {
+        if (d.fromMemberId !== u.id && d.toMemberId !== u.id) continue;
+        const other = d.fromMemberId === u.id ? d.toMemberId : d.fromMemberId;
+        // Positive: they owe me; negative: I owe them.
+        const netCents = d.toMemberId === u.id ? d.amountCents : -d.amountCents;
+        people.push({ groupId: g.id, groupName: g.name, memberId: other, name: nameOf(other), active: active.has(other), netCents });
+      }
+    }
+    people.sort((a, b) => Math.abs(b.netCents) - Math.abs(a.netCents) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    const owedToYouCents = people.reduce((s, x) => s + Math.max(0, x.netCents), 0);
+    const youOweCents = people.reduce((s, x) => s + Math.max(0, -x.netCents), 0);
+    return json({ people, owedToYouCents, youOweCents, netCents: owedToYouCents - youOweCents });
+  }
   if (method === "POST" && p === "/api/groups") return fail("Only an administrator can create groups.", 403);
   if (method === "POST" && p === "/api/groups/join") return fail("Invite codes do not bypass group approval. Request access to the group instead.", 403);
   const gm = p.match(/^\/api\/groups\/([\w-]+)(?:\/(.*))?$/);
