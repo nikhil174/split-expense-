@@ -7,9 +7,11 @@ keep_vars = true
 required = ["ADMIN_PIN", "SESSION_SECRET"]
 
 # Builds the React app (web/) into dist/ before `wrangler dev` / `wrangler deploy`,
-# including Cloudflare's Git-triggered deploys.
+# including Cloudflare's Git-triggered deploys. `npm install` makes sure Vite is
+# present even if the build environment did not install dependencies first
+# (it is a quick no-op when they are already installed). Type-checking runs in CI.
 [build]
-command = "npm run build"
+command = "npm install --no-audit --no-fund && npm run build:web"
 
 [assets]
 directory = "./dist"
