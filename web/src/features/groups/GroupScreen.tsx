@@ -39,6 +39,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
   const [settling, setSettling] = React.useState(false);
   const net = mine.data ? mine.data.totalOwedToYouCents - mine.data.totalYouOweCents : 0;
   const ready = !!group.data && !!mine.data;
+  const tabsRef = React.useRef<HTMLDivElement>(null);
 
   if (group.error) {
     return <Page><EmptyState icon={<ReceiptText />} title="Can't open this group">{(group.error as Error).message}</EmptyState>
@@ -57,6 +58,10 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
       )}
 
       <AquaCard className="mt-5">
+        {/* Tapping the balance jumps to this group's Balances tab, where each
+            person opens everything shared with them. */}
+        <button type="button" className="block w-full cursor-pointer text-left transition-transform duration-150 active:scale-[0.985]"
+          onClick={() => { navigate({ name: "group", groupId, tab: "balances" }, { replace: true }); requestAnimationFrame(() => tabsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })); }}>
         <div data-testid="balance-card">
           <p className="eyebrow">{!mine.data ? "Your balance" : net > 0 ? "You are owed" : net < 0 ? "You owe" : "Your balance"}</p>
           <div className="mt-2 min-h-11">
@@ -66,11 +71,14 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
             <p className="mt-1.5 text-[13px] text-muted-foreground">You owe {inr(mine.data.totalYouOweCents)} · you are owed {inr(mine.data.totalOwedToYouCents)}</p>
           )}
         </div>
+        <span className="mt-3 flex items-center gap-1 text-[13.5px] font-medium">See balances by person<ChevronRight className="size-4 text-[#141716]/35" strokeWidth={2.4} /></span>
+        </button>
         <Button size="xl" variant="secondary" disabled={!ready} onClick={() => setSettling(true)} className="mt-5 w-full">
           <HandCoins className="size-5" />Settle up
         </Button>
       </AquaCard>
 
+      <div ref={tabsRef} className="scroll-mt-20">
       <AnimatePresence mode="wait" initial={false}>
         <m.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }} className="mt-7">
           {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} onAdd={() => setAdding(true)} />}
@@ -79,6 +87,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
           {tab === "insights" && <InsightsTab groupId={groupId} />}
         </m.div>
       </AnimatePresence>
+      </div>
 
       {/* Extended floating action button, above the bottom bar. */}
       <m.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 400, damping: 28 }}
