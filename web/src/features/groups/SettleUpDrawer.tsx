@@ -5,6 +5,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, PartyPopper } from "lucide-react
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { List, LoadingButton, PersonAvatar, SectionTitle, haptic, pressableRow } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
+import { glitterBurst } from "@/components/app/glitter";
 import { useDebts, useMine, useRecordPayment } from "@/hooks/queries";
 import type { Debt } from "@/lib/api";
 import { centsToInput, inr, toCents } from "@/lib/money";
@@ -45,6 +46,7 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
       onSuccess: () => {
         haptic([10, 40, 14]);
         const remaining = debt.amountCents - cents;
+        glitterBurst({ strong: remaining === 0 });
         toast.success(`Recorded ${inr(cents)} from ${debt.fromName} to ${debt.toName}.`, { description: remaining ? `${inr(remaining)} is still owed.` : "All settled between them ✓" });
         onOpenChange(false);
       },

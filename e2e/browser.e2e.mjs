@@ -213,6 +213,18 @@ try {
   await noHorizontalOverflow(admin, "admin dashboard");
   await shot(admin, "admin-expenses");
   step("admin is one person in the group and switches between My groups and Admin");
+
+  for (const page of [admin, cy]) {
+    await page.getByRole("button", { name: "Account" }).click();
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
+    await page.getByRole("heading", { name: "Split It", level: 1 }).waitFor();
+    assert.ok(new URL(page.url()).hash === "#/" || new URL(page.url()).hash === "", "sign-out resets the route");
+    await page.reload();
+    await page.getByRole("heading", { name: "Split It", level: 1 }).waitFor();
+  }
+  await adminSignIn(admin);
+  await admin.getByRole("heading", { name: "Your groups" }).waitFor();
+  step("sign out lands on the sign-in screen (admin and member), stays there after reload, and signing back in works");
   console.log("E2E PASSED");
 } finally {
   await browser.close();

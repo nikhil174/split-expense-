@@ -1,4 +1,4 @@
-# Split Expense
+# Split It
 
 Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 

@@ -127,6 +127,22 @@
   [data-sonner-toaster] [data-sonner-toast] { width: 100% !important; }
 }
 
+/* Subtle glitter: twinkling glints, a slow sheen, and a brief burst on success. */
+@keyframes twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.3) rotate(0deg); }
+  45%, 55% { opacity: var(--glint-o, 0.85); transform: scale(1) rotate(45deg); }
+}
+@keyframes sheen {
+  0% { transform: translateX(-140%) skewX(-18deg); }
+  55%, 100% { transform: translateX(340%) skewX(-18deg); }
+}
+@keyframes glitter-fly {
+  0% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.2) rotate(var(--rot)); opacity: 0; }
+}
+@utility glint { animation: twinkle var(--glint-t, 3.8s) ease-in-out var(--glint-d, 0s) infinite; }
+@utility sheen { animation: sheen 7.5s cubic-bezier(0.45, 0, 0.25, 1) 1.2s infinite; }
+
 @keyframes loadbar { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 
 @media (prefers-reduced-motion: reduce) {

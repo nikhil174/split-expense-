@@ -5,6 +5,7 @@ import { Check, X } from "lucide-react";
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { EASE, Footnote, List, LoadingButton, NativeSelect, PersonAvatar, SectionTitle, Segmented, fieldClass, haptic, pressableRow, rowClass } from "@/components/app/bits";
+import { glitterBurst } from "@/components/app/glitter";
 import { useAddExpense, useGroup, type NewExpense } from "@/hooks/queries";
 import { inr, toCents } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -62,7 +63,7 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange }: { groupId: str
       ? { description: description.trim(), amount: amount.trim(), paidBy, splitMode: "equal", memberIds: [...selected] }
       : { description: description.trim(), amount: amount.trim(), paidBy, splitMode: "manual", allocations: Object.entries(manual).filter(([, v]) => v.trim()).map(([memberId, v]) => ({ memberId, amount: v.trim() })) };
     add.mutate(body, {
-      onSuccess: () => { haptic(); toast.success(`“${body.description}” added · ${inr(total)}`); onOpenChange(false); },
+      onSuccess: () => { haptic(); glitterBurst(); toast.success(`“${body.description}” added · ${inr(total)}`); onOpenChange(false); },
       onError: err => setError(err.message),
     });
   };

@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { categoryOf } from "@/lib/category";
+import { Sparkles } from "./glitter";
 import { inr, shortDate } from "@/lib/money";
 
 // Fluid, slightly springy motion (ColorOS-like), never bouncy.
@@ -224,14 +225,19 @@ export const listItem = {
 export const fieldClass = "h-12 w-full rounded-[16px] border border-[#141716]/[0.08] bg-white px-4 text-[15px] text-foreground shadow-[0_1px_2px_rgb(16_40_32/4%)] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-muted-foreground/70 focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15 disabled:opacity-50";
 export const searchFieldClass = "h-11 w-full rounded-full border border-[#141716]/[0.06] bg-white/80 pl-10 pr-4 text-[15px] shadow-[0_1px_2px_rgb(16_40_32/4%)] outline-none placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-[3px] focus-visible:ring-primary/15";
 
-// App mark: green squircle with an arrow, and "Split".
+// App mark: ink squircle with an arrow, a couple of glints, and "Split It".
 export function Wordmark({ large }: { large?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2">
-      <span className={cn("grid place-items-center bg-[#141716] text-white shadow-[0_6px_16px_-8px_rgb(20_23_22/50%)]", large ? "size-[64px] rounded-[20px]" : "size-8 rounded-[10px]")}>
-        <svg viewBox="0 0 24 24" className={large ? "size-8" : "size-4"} fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M6 16 18 8M11 8h7v7" /></svg>
+      <span className="relative">
+        <span className={cn("grid place-items-center bg-[#141716] text-white shadow-[0_6px_16px_-8px_rgb(20_23_22/50%)]", large ? "size-[64px] rounded-[20px]" : "size-8 rounded-[10px]")}>
+          <svg viewBox="0 0 24 24" className={large ? "size-8" : "size-4"} fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M6 16 18 8M11 8h7v7" /></svg>
+        </span>
+        <Sparkles className={large ? "-inset-3" : "-inset-1.5"} glints={large
+          ? [{ x: "88%", y: "-4%", size: 12, delay: 0.3 }, { x: "-6%", y: "80%", size: 7, delay: 1.9, opacity: 0.7 }, { x: "100%", y: "62%", size: 5, delay: 2.8, opacity: 0.6 }]
+          : [{ x: "86%", y: "-6%", size: 7, delay: 0.6 }]} />
       </span>
-      {!large && <span className="text-[18px] font-medium tracking-[-0.03em]">Split</span>}
+      {!large && <span className="text-[18px] font-medium tracking-[-0.03em]">Split It</span>}
     </span>
   );
 }
