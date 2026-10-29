@@ -98,3 +98,71 @@ for (let i = 1; i <= 10; i++) {
     assert.ok(!selected.some(member => member.id === "outsider"));
   });
 }
+
+
+import { allocateManualSplit } from "../src/split-logic.js";
+
+const manualAllowed = ["nikhil", "vicky", "jagan", "anvitha"];
+
+test("manual split accepts exact allocations and preserves total", () => {
+  const rows = allocateManualSplit(100000, [
+    { memberId: "nikhil", amountCents: 50000 },
+    { memberId: "vicky", amountCents: 30000 },
+    { memberId: "jagan", amountCents: 15000 },
+    { memberId: "anvitha", amountCents: 5000 }
+  ], manualAllowed);
+  assert.equal(rows.reduce((sum, row) => sum + row.amountCents, 0), 100000);
+  assert.deepEqual(rows.map(row => row.amountCents), [50000, 30000, 15000, 5000]);
+});
+
+test("manual split rejects a total that is one paise short", () => {
+  assert.throws(() => allocateManualSplit(1000, [
+    { memberId: "nikhil", amountCents: 500 },
+    { memberId: "vicky", amountCents: 499 }
+  ], manualAllowed), /add up exactly/);
+});
+
+test("manual split rejects a total that exceeds the expense", () => {
+  assert.throws(() => allocateManualSplit(1000, [
+    { memberId: "nikhil", amountCents: 500 },
+    { memberId: "vicky", amountCents: 501 }
+  ], manualAllowed), /add up exactly/);
+});
+
+test("manual split rejects duplicate member allocations", () => {
+  assert.throws(() => allocateManualSplit(1000, [
+    { memberId: "nikhil", amountCents: 500 },
+    { memberId: "nikhil", amountCents: 500 }
+  ], manualAllowed), /unique members/);
+});
+
+test("manual split rejects a member outside the group", () => {
+  assert.throws(() => allocateManualSplit(1000, [
+    { memberId: "nikhil", amountCents: 500 },
+    { memberId: "outsider", amountCents: 500 }
+  ], manualAllowed), /unique members/);
+});
+
+test("manual split rejects negative, fractional, or unsafe cents", () => {
+  for (const amountCents of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => allocateManualSplit(1000, [
+      { memberId: "nikhil", amountCents },
+      { memberId: "vicky", amountCents: 1000 - amountCents }
+    ], manualAllowed));
+  }
+});
+
+test("manual split rejects empty and all-zero allocations", () => {
+  assert.throws(() => allocateManualSplit(1000, [], manualAllowed), /at least one manual allocation/i);
+  assert.throws(() => allocateManualSplit(1000, [
+    { memberId: "nikhil", amountCents: 0 },
+    { memberId: "vicky", amountCents: 0 }
+  ], manualAllowed), /greater than zero/);
+});
+
+for (let cents = 1; cents <= 100; cents++) {
+  test(`manual split property: valid single-member allocation sums to ${cents} cents`, () => {
+    const rows = allocateManualSplit(cents, [{ memberId: "nikhil", amountCents: cents }], manualAllowed);
+    assert.equal(rows.reduce((sum, row) => sum + row.amountCents, 0), cents);
+  });
+}
