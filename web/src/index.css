@@ -1,11 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/geist";
+@import "@fontsource/instrument-serif/latin-400.css";
+@import "@fontsource/instrument-serif/latin-400-italic.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -34,64 +37,74 @@
   --color-positive-soft: var(--positive-soft);
   --color-negative: var(--negative);
   --color-negative-soft: var(--negative-soft);
-  --color-hero: var(--hero);
-  --color-hero-foreground: var(--hero-foreground);
+  --color-brass: var(--brass);
+  --color-brass-soft: var(--brass-soft);
+  --color-surface: var(--surface);
+  --color-hairline: var(--hairline);
 }
 
-/* Brand: deep indigo for actions; green = money coming to you, coral = money you owe. */
+/*
+ * "Ink & brass". One restrained accent (brass), warm neutrals, hairlines
+ * instead of shadows. Money colours are quiet: sage = coming to you,
+ * clay = you owe. Light mode is ivory paper with ink.
+ */
 :root {
   --radius: 0.875rem;
-  --background: oklch(0.982 0.004 275);
-  --foreground: oklch(0.21 0.03 270);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.03 270);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.03 270);
-  --primary: oklch(0.52 0.21 274);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.955 0.012 275);
-  --secondary-foreground: oklch(0.3 0.05 272);
-  --muted: oklch(0.962 0.008 275);
-  --muted-foreground: oklch(0.54 0.03 270);
-  --accent: oklch(0.95 0.025 275);
-  --accent-foreground: oklch(0.3 0.08 272);
-  --destructive: oklch(0.58 0.22 25);
-  --border: oklch(0.92 0.01 275);
-  --input: oklch(0.9 0.012 275);
-  --ring: oklch(0.62 0.17 274);
-  --positive: oklch(0.55 0.14 160);
-  --positive-soft: oklch(0.955 0.04 160);
-  --negative: oklch(0.6 0.19 28);
-  --negative-soft: oklch(0.96 0.03 28);
-  --hero: oklch(0.25 0.06 273);
-  --hero-foreground: oklch(0.98 0.005 275);
+  --background: oklch(0.968 0.008 85);
+  --surface: oklch(0.985 0.005 85);
+  --foreground: oklch(0.2 0.008 70);
+  --card: oklch(0.993 0.003 85);
+  --card-foreground: oklch(0.2 0.008 70);
+  --popover: oklch(0.993 0.003 85);
+  --popover-foreground: oklch(0.2 0.008 70);
+  --primary: oklch(0.2 0.008 70);
+  --primary-foreground: oklch(0.97 0.01 85);
+  --secondary: oklch(0.94 0.008 85);
+  --secondary-foreground: oklch(0.25 0.01 70);
+  --muted: oklch(0.935 0.008 85);
+  --muted-foreground: oklch(0.52 0.012 70);
+  --accent: oklch(0.93 0.02 82);
+  --accent-foreground: oklch(0.32 0.04 75);
+  --destructive: oklch(0.55 0.15 32);
+  --border: oklch(0.2 0.01 70 / 9%);
+  --hairline: oklch(0.2 0.01 70 / 7%);
+  --input: oklch(0.2 0.01 70 / 13%);
+  --ring: oklch(0.6 0.08 78);
+  --brass: oklch(0.58 0.09 76);
+  --brass-soft: oklch(0.92 0.035 82);
+  --positive: oklch(0.5 0.08 160);
+  --positive-soft: oklch(0.93 0.03 160);
+  --negative: oklch(0.55 0.13 35);
+  --negative-soft: oklch(0.94 0.03 40);
 }
 
 .dark {
-  --background: oklch(0.16 0.02 272);
-  --foreground: oklch(0.96 0.006 275);
-  --card: oklch(0.205 0.025 272);
-  --card-foreground: oklch(0.96 0.006 275);
-  --popover: oklch(0.22 0.025 272);
-  --popover-foreground: oklch(0.96 0.006 275);
-  --primary: oklch(0.68 0.17 274);
-  --primary-foreground: oklch(0.16 0.03 272);
-  --secondary: oklch(0.27 0.03 272);
-  --secondary-foreground: oklch(0.92 0.01 275);
-  --muted: oklch(0.25 0.025 272);
-  --muted-foreground: oklch(0.7 0.025 272);
-  --accent: oklch(0.28 0.04 273);
-  --accent-foreground: oklch(0.94 0.01 275);
-  --destructive: oklch(0.66 0.19 25);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.68 0.17 274);
-  --positive: oklch(0.74 0.14 160);
-  --positive-soft: oklch(0.3 0.05 160);
-  --negative: oklch(0.72 0.16 28);
-  --negative-soft: oklch(0.3 0.06 28);
-  --hero: oklch(0.24 0.06 273);
-  --hero-foreground: oklch(0.98 0.005 275);
+  --background: oklch(0.145 0.004 70);
+  --surface: oklch(0.175 0.004 70);
+  --foreground: oklch(0.95 0.008 85);
+  --card: oklch(0.185 0.005 70);
+  --card-foreground: oklch(0.95 0.008 85);
+  --popover: oklch(0.2 0.005 70);
+  --popover-foreground: oklch(0.95 0.008 85);
+  --primary: oklch(0.82 0.075 82);
+  --primary-foreground: oklch(0.18 0.02 75);
+  --secondary: oklch(0.23 0.005 70);
+  --secondary-foreground: oklch(0.92 0.01 85);
+  --muted: oklch(0.22 0.005 70);
+  --muted-foreground: oklch(0.66 0.012 80);
+  --accent: oklch(0.26 0.02 80);
+  --accent-foreground: oklch(0.88 0.05 82);
+  --destructive: oklch(0.7 0.12 35);
+  --border: oklch(1 0 0 / 8%);
+  --hairline: oklch(1 0 0 / 6%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.82 0.075 82 / 70%);
+  --brass: oklch(0.82 0.075 82);
+  --brass-soft: oklch(0.27 0.03 80);
+  --positive: oklch(0.8 0.075 160);
+  --positive-soft: oklch(0.26 0.03 160);
+  --negative: oklch(0.76 0.1 38);
+  --negative-soft: oklch(0.27 0.035 38);
 }
 
 @layer base {
@@ -104,14 +117,25 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "cv11", "ss01";
+    font-feature-settings: "ss01", "cv01";
     overscroll-behavior-y: none;
+    letter-spacing: -0.005em;
   }
+  ::selection { background: color-mix(in oklch, var(--brass) 35%, transparent); }
   button, [role="button"], a { touch-action: manipulation; }
 }
 
 @utility tabular { font-variant-numeric: tabular-nums; }
 @utility safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+/* Small caps label: the quiet, editorial way to title a section. */
+@utility eyebrow { font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted-foreground); }
+/* A surface with a hairline and a faint top highlight, instead of a drop shadow. */
+@utility panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.6);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 4%);
+}
 @utility no-scrollbar {
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }

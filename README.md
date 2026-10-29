@@ -33,7 +33,8 @@ Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 - React 19 + TypeScript + Tailwind CSS v4 + shadcn/ui (Radix primitives), in `web/`. Built by Vite into `dist/`, which the Worker serves.
 - `wrangler.toml` has `[build] command = "npm run build"`, so `wrangler dev` and `wrangler deploy` (including Cloudflare's Git-triggered deploys) build the app first.
 - Data: TanStack Query. Every write refreshes the affected screens, and a progress bar under the top bar shows while requests are in flight. Buttons show a spinner and are disabled until the request finishes.
-- Feel: Motion for page/tab/list transitions and animated amounts (its animation features load after first paint), vaul bottom sheets for Add expense and Settle up, sonner toasts. Follows the phone's light/dark setting.
+- Look: "ink & brass" — warm near-black (dark) or ivory paper (light) following the phone setting, a single brass accent, hairlines instead of shadows, quiet sage/clay for owed/owe. Instrument Serif for titles and amounts (rupees large, paise smaller), Geist for the interface. Fonts are bundled, not loaded from Google.
+- Feel: Motion for page/tab/list transitions, sliding tab underline and count-up amounts (animation features load after first paint), vaul bottom sheets for Add expense and Settle up, sonner toasts, a short vibration on Android when a save succeeds.
 - Navigation uses hash routes (`#/`, `#/admin`, `#/g/:id`, `#/g/:id/p/:memberId`), so the Android back button works.
 - Group screen: hero with your position, **Add expense** / **Settle up**, tabs for Expenses (table, tap a row for the split, search, delete), Balances (you and each person → drill-down, group balances, who owes whom), Payments (table) and Insights.
 - Person drill-down (`GET /api/groups/:id/with/:memberId`): every shared expense and payment between you and that person with a running balance that ends at the current debt.

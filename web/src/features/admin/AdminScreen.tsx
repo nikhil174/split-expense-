@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AnimatedAmount, DateBadge, EASE, EmptyState, LoadingButton, Page, PersonAvatar, Segmented, SectionTitle, listItem } from "@/components/app/bits";
+import { AnimatedMoney, DateBadge, EASE, EmptyState, LoadingButton, NativeSelect, Page, PersonAvatar, SectionTitle, UnderlineTabs, fieldClass, listItem } from "@/components/app/bits";
 import { useAdminAction, useAdminDashboard, useAdminExpenses, useAdminGroups, useAdminRequests, useMergePreview } from "@/hooks/queries";
 import { post, type AccessRequest } from "@/lib/api";
 import { inr } from "@/lib/money";
@@ -29,16 +29,16 @@ export function AdminScreen({ adminName }: { adminName: string }) {
 
   return (
     <Page>
-      <section className="relative overflow-hidden rounded-3xl bg-hero p-5 text-hero-foreground shadow-xl shadow-primary/10">
-        <div className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-primary/40 blur-3xl" />
-        <p className="inline-flex items-center gap-1.5 text-sm text-white/70"><ShieldCheck className="size-4" />Admin · {adminName}</p>
-        <p className="mt-3 text-sm text-white/70">Total recorded spend</p>
-        {s ? <AnimatedAmount cents={s.totalSpentCents} className="text-4xl font-bold tracking-tight" /> : <Skeleton className="mt-1 h-10 w-44 bg-white/10" />}
-        <div className="mt-5 grid grid-cols-4 gap-2">
+      <p className="eyebrow inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5" />Administrator</p>
+      <h1 className="mt-1 font-serif text-[40px] leading-none tracking-[-0.02em]">Overview</h1>
+      <section className="panel mt-6 p-5">
+        <p className="eyebrow">Total recorded spend</p>
+        <div className="mt-3 min-h-14">{s ? <AnimatedMoney cents={s.totalSpentCents} size="hero" /> : <Skeleton className="h-12 w-48" />}</div>
+        <div className="mt-5 grid grid-cols-4 divide-x divide-hairline border-t border-hairline pt-4">
           {[["Groups", s?.groups], ["Members", s?.members], ["Pending", s?.pending], ["Expenses", s?.expenses]].map(([label, value]) => (
-            <div key={label as string} className="rounded-xl bg-white/10 px-2 py-2.5 text-center">
-              <p className="tabular text-lg font-bold">{value ?? "–"}</p>
-              <p className="text-[11px] text-white/70">{label}</p>
+            <div key={label as string} className="px-1 text-center">
+              <p className="tabular font-serif text-[26px] leading-none">{value ?? "–"}</p>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">{label}</p>
             </div>
           ))}
         </div>
@@ -47,26 +47,26 @@ export function AdminScreen({ adminName }: { adminName: string }) {
       <AnimatePresence>
         {duplicates.map(d => (
           <m.div key={d.id} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-primary/30 bg-accent p-4">
-              <UserCheck className="mt-0.5 size-5 shrink-0 text-primary" />
+            <div className="mt-4 flex items-start gap-3 rounded-2xl bg-brass-soft/70 p-4 ring-1 ring-brass/30">
+              <UserCheck className="mt-0.5 size-5 shrink-0 text-brass" />
               <div className="min-w-0 flex-1 text-sm">
-                <p className="font-semibold">You also have a separate member entry in {d.groupName}</p>
+                <p className="font-medium">You also have a separate member entry in {d.groupName}</p>
                 <p className="mt-0.5 text-muted-foreground">“{d.name}” is treated as a different person. Merge it so you're one person with an admin view and a normal view.</p>
-                <Button size="sm" className="mt-3" onClick={() => setMerging(d)}>Review merge</Button>
+                <Button size="sm" className="mt-3 rounded-full" onClick={() => setMerging(d)}>Review merge</Button>
               </div>
             </div>
           </m.div>
         ))}
       </AnimatePresence>
 
-      <Segmented id="admin-tab" className="sticky top-[60px] z-20 mt-4 shadow-sm" value={tab} onChange={setTab} options={[
-        { value: "requests", label: <>Requests{pending > 0 && <span className="ml-1.5 inline-grid min-w-5 place-items-center rounded-full bg-primary px-1 text-[11px] text-primary-foreground">{pending}</span>}</> },
+      <div className="sticky top-[60px] z-20 -mx-5 mt-6 bg-background/85 px-5 backdrop-blur-xl"><UnderlineTabs id="admin-tab" value={tab} onChange={setTab} options={[
+        { value: "requests", label: <>Requests{pending > 0 && <span className="ml-1.5 inline-grid min-w-5 place-items-center rounded-full bg-brass px-1 text-[10.5px] font-semibold text-background">{pending}</span>}</> },
         { value: "groups", label: "Groups" },
         { value: "expenses", label: "Expenses" },
-      ]} />
+      ]} /></div>
 
       <AnimatePresence mode="wait" initial={false}>
-        <m.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2, ease: EASE }} className="mt-4">
+        <m.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2, ease: EASE }} className="mt-5">
           {tab === "requests" && <RequestsTab onMerge={setMerging} />}
           {tab === "groups" && <GroupsTab />}
           {tab === "expenses" && <ExpensesTab />}
@@ -78,10 +78,10 @@ export function AdminScreen({ adminName }: { adminName: string }) {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-[oklch(0.95_0.06_85)] text-[oklch(0.45_0.1_70)] dark:bg-[oklch(0.35_0.06_80)] dark:text-[oklch(0.9_0.08_85)]",
-  approved: "bg-positive-soft text-positive",
-  revoked: "bg-muted text-muted-foreground",
-  rejected: "bg-negative-soft text-negative",
+  pending: "text-brass ring-brass/40",
+  approved: "text-positive ring-positive/35",
+  revoked: "text-muted-foreground ring-border",
+  rejected: "text-negative ring-negative/35",
 };
 
 function RequestsTab({ onMerge }: { onMerge: (r: AccessRequest) => void }) {
@@ -102,20 +102,20 @@ function RequestsTab({ onMerge }: { onMerge: (r: AccessRequest) => void }) {
       {groups.map(([title, list]) => (
         <section key={title}>
           <SectionTitle>{title}</SectionTitle>
-          <div className="overflow-hidden rounded-2xl border bg-card">
+          <div className="panel divide-y divide-hairline overflow-hidden">
             <AnimatePresence initial={false}>
               {list.map((r, i) => (
-                <m.div key={r.id} layout custom={i} variants={listItem} initial="initial" animate="animate" exit="exit" className="flex items-center gap-3 border-b px-4 py-3 last:border-0">
+                <m.div key={r.id} layout custom={i} variants={listItem} initial="initial" animate="animate" exit="exit" className="flex items-center gap-3 px-4 py-3.5">
                   <PersonAvatar id={r.id} name={r.name} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{r.name}</p>
+                    <p className="truncate text-[15px] font-medium">{r.name}</p>
                     <p className="truncate text-xs text-muted-foreground">{r.groupName || "No group"} · {new Date(r.requestedAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</p>
                   </div>
-                  <Badge variant="secondary" className={cn("capitalize", STATUS_STYLE[r.status])}>{r.status}</Badge>
+                  <Badge variant="outline" className={cn("rounded-full border-0 bg-transparent font-normal capitalize ring-1", STATUS_STYLE[r.status])}>{r.status}</Badge>
                   {r.status === "pending" ? (
                     <div className="flex gap-1.5">
-                      <LoadingButton size="icon-sm" variant="secondary" aria-label={"Reject " + r.name} loading={busy(r.id, "reject")} onClick={() => act.mutate({ id: r.id, action: "reject", label: r.name + " rejected." })}><X /></LoadingButton>
-                      <LoadingButton size="sm" aria-label={"Approve " + r.name} loading={busy(r.id, "approve")} onClick={() => act.mutate({ id: r.id, action: "approve", label: r.name + " approved." })}><Check />Approve</LoadingButton>
+                      <LoadingButton size="icon-sm" variant="secondary" className="rounded-full" aria-label={"Reject " + r.name} loading={busy(r.id, "reject")} onClick={() => act.mutate({ id: r.id, action: "reject", label: r.name + " rejected." })}><X /></LoadingButton>
+                      <LoadingButton size="sm" className="rounded-full" aria-label={"Approve " + r.name} loading={busy(r.id, "approve")} onClick={() => act.mutate({ id: r.id, action: "approve", label: r.name + " approved." })}><Check />Approve</LoadingButton>
                     </div>
                   ) : (
                     <DropdownMenu>
@@ -154,16 +154,16 @@ function GroupsTab() {
   return (
     <div className="space-y-6">
       <form className="flex gap-2" onSubmit={e => { e.preventDefault(); create.mutate(name.trim(), { onSuccess: () => setName("") }); }}>
-        <Input aria-label="New group name" required minLength={2} maxLength={80} placeholder="New group, e.g. Goa Trip 2026" value={name} onChange={e => setName(e.target.value)} className="h-11 rounded-xl" />
-        <LoadingButton type="submit" className="h-11 rounded-xl" loading={create.isPending} loadingText="Creating…"><FolderPlus />Create</LoadingButton>
+        <Input aria-label="New group name" required minLength={2} maxLength={80} placeholder="New group, e.g. Goa Trip 2026" value={name} onChange={e => setName(e.target.value)} className={cn(fieldClass, "h-11")} />
+        <LoadingButton type="submit" className="h-11 rounded-full px-5" loading={create.isPending} loadingText="Creating…"><FolderPlus />Create</LoadingButton>
       </form>
       <section>
         <SectionTitle>All groups</SectionTitle>
-        <div className="overflow-hidden rounded-2xl border bg-card">
+        <div className="panel divide-y divide-hairline overflow-hidden">
           {groups.isPending ? <div className="p-4"><Skeleton className="h-10 w-full" /></div> : !groups.data?.length ? <EmptyState icon={<FolderPlus className="size-5" />} title="No groups yet">Create the first one above.</EmptyState> : (
             <AnimatePresence initial={false}>
               {groups.data.map((g, i) => (
-                <m.div key={g.id} layout custom={i} variants={listItem} initial="initial" animate="animate" exit="exit" className="flex items-center gap-3 border-b px-4 py-3 last:border-0">
+                <m.div key={g.id} layout custom={i} variants={listItem} initial="initial" animate="animate" exit="exit" className="flex items-center gap-3 px-4 py-3.5">
                   <PersonAvatar id={g.id} name={g.name} />
                   <div className="min-w-0 flex-1"><p className="truncate font-medium">{g.name}</p><p className="text-xs text-muted-foreground">{g.memberCount} {g.memberCount === 1 ? "member" : "members"}</p></div>
                   <Button size="icon-sm" variant="ghost" aria-label={"Delete " + g.name} className="text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -187,13 +187,13 @@ function ExpensesTab() {
   const groupNames = React.useMemo(() => [...new Map((expenses.data || []).map(x => [x.groupId, x.groupName]))], [expenses.data]);
   const rows = (expenses.data || []).filter(x => !groupId || x.groupId === groupId);
   return (
-    <div className="overflow-hidden rounded-2xl border bg-card">
+    <div className="panel divide-y divide-hairline overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 pb-2">
-        <select aria-label="Filter by group" value={groupId} onChange={e => setGroupId(e.target.value)} className="h-10 min-w-0 flex-1 rounded-xl border border-input bg-card px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+        <NativeSelect aria-label="Filter by group" value={groupId} onChange={e => setGroupId(e.target.value)} className="h-10 min-w-0 flex-1 text-[14px]">
           <option value="">All groups</option>
           {groupNames.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
-        </select>
-        <span className="tabular text-sm text-muted-foreground" data-testid="admin-expense-summary">{rows.length} {rows.length === 1 ? "expense" : "expenses"} · {inr(rows.reduce((s, x) => s + x.amountCents, 0))}</span>
+        </NativeSelect>
+        <span className="tabular text-[12.5px] text-muted-foreground" data-testid="admin-expense-summary">{rows.length} {rows.length === 1 ? "expense" : "expenses"} · {inr(rows.reduce((s, x) => s + x.amountCents, 0))}</span>
       </div>
       {expenses.isPending ? <div className="space-y-2 p-4">{[0, 1, 2].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div> : !rows.length ? <EmptyState icon={<ReceiptText className="size-5" />} title="No expenses yet" /> : (
         <Table>
@@ -204,7 +204,7 @@ function ExpensesTab() {
                 <TableCell className="pl-4"><DateBadge ts={x.createdAt} /></TableCell>
                 <TableCell className="max-w-0 w-full"><span className="block truncate font-medium">{x.description}</span><span className="block truncate text-xs text-muted-foreground">{x.groupName}</span></TableCell>
                 <TableCell className="max-w-24 truncate text-sm">{x.paidBy}</TableCell>
-                <TableCell className="tabular pr-4 text-right font-semibold">{inr(x.amountCents)}</TableCell>
+                <TableCell className="tabular pr-4 text-right">{inr(x.amountCents)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -218,8 +218,8 @@ function ConfirmDialog({ confirm, onClose }: { confirm: Confirm | null; onClose:
   const [busy, setBusy] = React.useState(false);
   return (
     <AlertDialog open={!!confirm} onOpenChange={o => { if (!o && !busy) onClose(); }}>
-      <AlertDialogContent>
-        <AlertDialogHeader><AlertDialogTitle>{confirm?.title}</AlertDialogTitle><AlertDialogDescription>{confirm?.body}</AlertDialogDescription></AlertDialogHeader>
+      <AlertDialogContent className="rounded-2xl">
+        <AlertDialogHeader><AlertDialogTitle className="font-serif text-2xl font-normal">{confirm?.title}</AlertDialogTitle><AlertDialogDescription>{confirm?.body}</AlertDialogDescription></AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
           <LoadingButton variant={confirm?.destructive ? "destructive" : "default"} loading={busy} onClick={async () => {
@@ -239,14 +239,14 @@ function MergeDialog({ request, onClose }: { request: AccessRequest | null; onCl
   const p = preview.data;
   return (
     <AlertDialog open={!!request} onOpenChange={o => { if (!o && !merge.isPending) onClose(); }}>
-      <AlertDialogContent>
+      <AlertDialogContent className="rounded-2xl">
         <AlertDialogHeader>
-          <AlertDialogTitle>Merge “{request?.name}” into you?</AlertDialogTitle>
+          <AlertDialogTitle className="font-serif text-2xl font-normal">Merge “{request?.name}” into you?</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3 text-sm text-muted-foreground">
               <p>Everything this member entry did in <b className="text-foreground">{request?.groupName}</b> becomes yours. You'll be one person with two views: <b className="text-foreground">My groups</b> and <b className="text-foreground">Admin</b>.</p>
               {!p ? <Skeleton className="h-24 w-full" /> : (
-                <ul className="space-y-1.5 rounded-xl bg-muted p-3 text-foreground">
+                <ul className="space-y-2 rounded-xl bg-muted/60 p-3.5 text-foreground ring-1 ring-hairline ring-inset">
                   <li className="flex justify-between"><span>Expenses they paid</span><b className="tabular">{p.expensesPaid}</b></li>
                   <li className="flex justify-between"><span>Expense shares</span><b className="tabular">{p.shares}</b></li>
                   <li className="flex justify-between"><span>Payments</span><b className="tabular">{p.payments}</b></li>
