@@ -628,6 +628,6 @@ export default {
       headers.set("cache-control", url.pathname.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache");
       return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
     }
-    return new Response("Split Expense API is running. Configure the static assets binding.", { status: 200, headers: { "content-type": "text/plain" } });
+    return new Response("Split It API is running. Configure the static assets binding.", { status: 200, headers: { "content-type": "text/plain" } });
   },
 };

@@ -65,8 +65,8 @@ export function AuthScreen() {
       <div className="mx-auto flex min-h-dvh max-w-md flex-col px-4 pt-[max(3rem,env(safe-area-inset-top))] pb-10">
         <m.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.45, ease: EASE }} className="flex flex-col items-center text-center">
           <Wordmark large />
-          <h1 className="mt-5 text-[32px] leading-[38px] font-medium tracking-[-0.03em]">Split Expense</h1>
-          <p className="mt-2 max-w-[30ch] text-[15px] text-muted-foreground">Track shared spending, see exactly who owes whom, and settle up in a tap.</p>
+          <h1 className="mt-5 text-[32px] leading-[38px] font-medium tracking-[-0.03em]">Split It</h1>
+          <p className="mt-2 max-w-[30ch] text-[15px] text-muted-foreground">Split it. Settle it. Every rupee accounted for.</p>
         </m.div>
 
         <m.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: EASE, delay: 0.08 }} className="mt-9">

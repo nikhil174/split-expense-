@@ -73,9 +73,12 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
     setSigningOut(true);
     try {
       await Promise.allSettled([post("/api/admin/logout"), post("/api/logout")]);
-      qc.clear();
-      history.replaceState(null, "", "#/");
-      await qc.invalidateQueries({ queryKey: keys.me });
+      // Mark the session signed out right away so Root swaps to the sign-in
+      // screen, then drop everything cached for the previous user.
+      await qc.cancelQueries();
+      qc.setQueryData(keys.me, { admin: null, member: null });
+      qc.removeQueries({ predicate: q => q.queryKey[0] !== "me" });
+      navigate({ name: "home" }, { replace: true });
     } finally { setSigningOut(false); }
   };
 

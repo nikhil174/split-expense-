@@ -2,6 +2,7 @@ import { m } from "motion/react";
 import { ChevronRight, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedMoney, EASE, EmptyState, List, Page, PersonAvatar, SectionTitle, listItem, pressableRow } from "@/components/app/bits";
+import { Sheen, Sparkles } from "@/components/app/glitter";
 import { useGroups } from "@/hooks/queries";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
@@ -12,12 +13,14 @@ function greeting() {
   return h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
-// Balance card: white with a hairline and a faint emerald light in one corner.
+// Balance card: white with a hairline, a faint champagne light, a slow sheen and a few glints.
 export function AquaCard({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <m.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: EASE }}
       className={cn("panel relative overflow-hidden p-5", className)}>
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_100%_0%,rgb(27_122_95/7%),transparent_60%)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_70%_at_100%_0%,rgb(201_168_106/9%),transparent_60%)]" />
+      <Sheen />
+      <Sparkles />
       <div className="relative">{children}</div>
     </m.section>
   );
