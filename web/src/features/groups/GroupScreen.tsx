@@ -13,6 +13,7 @@ import {
 } from "@/components/app/bits";
 import { AquaCard, cardTap } from "./GroupsScreen";
 import { PeopleSheet } from "./PeopleSheet";
+import { MembersSheet } from "./MembersSheet";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
 import { useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
@@ -43,6 +44,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
   const net = mine.data ? mine.data.totalOwedToYouCents - mine.data.totalYouOweCents : 0;
   const ready = !!group.data && !!mine.data;
   const [peopleOpen, setPeopleOpen] = React.useState(false);
+  const [membersOpen, setMembersOpen] = React.useState(false);
 
   if (group.error) {
     return <Page><EmptyState icon={<ReceiptText />} title="Can't open this group">{(group.error as Error).message}</EmptyState>
@@ -54,10 +56,10 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
       <BackButton label="Groups" onClick={() => goBack({ name: "home" })} />
       {group.data ? <h1 className="page-title mt-3 px-1 break-words">{group.data.group.name}</h1> : <Skeleton className="mt-3 h-8 w-52" />}
       {group.data && (
-        <div className="mt-2 flex items-center gap-2 px-1">
-          <div className="flex -space-x-2">{group.data.members.slice(0, 5).map(mm => <PersonAvatar key={mm.id} id={mm.id} name={mm.name} size="sm" className="ring-2 ring-[#f7f7f5]" />)}</div>
-          <span className="text-[13px] text-muted-foreground">{group.data.members.length} {group.data.members.length === 1 ? "member" : "members"}</span>
-        </div>
+        <button type="button" onClick={() => setMembersOpen(true)} className="mt-2 flex cursor-pointer items-center gap-2 rounded-full px-1 py-0.5 transition-transform active:scale-[0.97]">
+          <span className="flex -space-x-2">{group.data.members.slice(0, 5).map(mm => <PersonAvatar key={mm.id} id={mm.id} name={mm.name} size="sm" className="ring-2 ring-[#f7f7f5]" />)}</span>
+          <span className="flex items-center text-[13px] text-muted-foreground">{group.data.members.length} {group.data.members.length === 1 ? "member" : "members"}<ChevronRight className="size-3.5" strokeWidth={2.4} /></span>
+        </button>
       )}
 
       <AquaCard className="mt-5">
@@ -103,6 +105,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
       <AddExpenseDrawer groupId={groupId} open={adding} onOpenChange={setAdding} />
       <AddExpenseDrawer groupId={groupId} open={editing.open} onOpenChange={o => setEditing(v => ({ ...v, open: o }))} editing={editing.x} />
       <PeopleSheet open={peopleOpen} onOpenChange={setPeopleOpen} filter="all" groupId={groupId} />
+      <MembersSheet groupId={groupId} open={membersOpen} onOpenChange={setMembersOpen} />
       <SettleUpDrawer groupId={groupId} open={settling} onOpenChange={setSettling} />
     </Page>
   );
