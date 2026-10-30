@@ -6,6 +6,7 @@ import { AnimatedMoney, EASE, EmptyState, List, Page, PersonAvatar, SectionTitle
 import { GlitterDust, Sheen, Sparkles } from "@/components/app/glitter";
 import { PeopleSheet, type PeopleFilter } from "./PeopleSheet";
 import { PendingPayments } from "./PendingPayments";
+import { InstallCard } from "@/components/app/InstallApp";
 import { useGroups, usePeopleBalances } from "@/hooks/queries";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
@@ -76,6 +77,7 @@ export function GroupsScreen({ name }: { name: string }) {
       <PeopleSheet open={sheetOpen} onOpenChange={setSheetOpen} filter={filter} />
 
       <PendingPayments className="mt-7" />
+      <InstallCard className="mt-5" />
 
       <div className="mt-7">
         <SectionTitle>Your groups</SectionTitle>
