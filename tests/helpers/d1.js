@@ -48,7 +48,7 @@ export async function makeEnv() {
   return { raw, env: { "split-expense": new D1Mock(raw), ADMIN_PIN: ADMIN.pin, SESSION_SECRET: "test-session-secret", ENVIRONMENT: "development", PIN_HASH_ITERATIONS: "1000" } };
 }
 
-export async function call(env, path, { method = "GET", body, cookie, headers: extra = {} } = {}) {
+export async function call(env, path, { method = "GET", body, cookie, headers: extra = {}, raw = false } = {}) {
   const headers = new Headers(extra);
   if (body !== undefined) headers.set("content-type", "application/json");
   if (cookie) headers.set("cookie", cookie);
@@ -56,6 +56,8 @@ export async function call(env, path, { method = "GET", body, cookie, headers: e
     method, headers, body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
   });
   const response = await worker.fetch(request, env);
+  // raw: hand back the Response itself (for non-JSON bodies such as images).
+  if (raw) return { status: response.status, response };
   const data = await response.json();
   const setCookie = response.headers.get("set-cookie");
   return { status: response.status, data, cookie: setCookie?.split(";")[0], setCookie };

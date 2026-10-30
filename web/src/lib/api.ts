@@ -63,6 +63,9 @@ export type MemberSummary = {
   expenses: { id: string; description: string; amountCents: number; paidBy: string; paidByName: string; createdAt: number; shareCents: number; splitCount: number; effectCents: number }[];
   payments: { id: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string; amountCents: number; createdAt: number; status: "pending" | "confirmed" }[];
 };
+// How a person likes to be paid (UPI only for now).
+export type PaymentMethod = { kind: "upi"; upiId: string | null; hasQr: boolean; updatedAt: number | null };
+export type GroupPaymentMethod = PaymentMethod & { memberId: string; name: string; isMe: boolean };
 export type PendingPayment = {
   id: string; groupId: string; groupName: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
   amountCents: number; createdAt: number; incoming: boolean;

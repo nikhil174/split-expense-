@@ -14,6 +14,7 @@ const RATE_LIMITS = {
   accessRequest: { limit: 10, windowMs: 60 * MINUTE },
   expenseWrite: { limit: 60, windowMs: 10 * MINUTE },
   settlementWrite: { limit: 30, windowMs: 10 * MINUTE },
+  paymentMethodWrite: { limit: 20, windowMs: 10 * MINUTE },
 };
 // A member who may be chosen for new expenses and payments: the admin, or a
 // member whose access request in this group is approved (even if their 3-hour
@@ -99,10 +100,10 @@ async function checkMemberPin(db, env, r, pin, { create = false } = {}) {
   return fail(`Incorrect PIN. ${left} ${left === 1 ? "try" : "tries"} left.`, 401);
 }
 
-async function body(req) {
-  if (Number(req.headers.get("content-length") || 0) > MAX_BODY_BYTES) throw new HttpError("Request body is too large.", 413);
+async function body(req, maxBytes = MAX_BODY_BYTES) {
+  if (Number(req.headers.get("content-length") || 0) > maxBytes) throw new HttpError("Request body is too large.", 413);
   const text = await req.text();
-  if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) throw new HttpError("Request body is too large.", 413);
+  if (new TextEncoder().encode(text).length > maxBytes) throw new HttpError("Request body is too large.", 413);
   if (!text) return null;
   try { return JSON.parse(text); } catch { return null; }
 }
@@ -221,6 +222,25 @@ async function parseExpense(db, gid, b) {
   if (splitRows.reduce((sum, row) => sum + row.amountCents, 0) !== cents) throw new Error("Split rows do not add up to the expense total");
   return { desc, cents, paidBy, splitRows };
 }
+
+// Payment methods (UPI only for now). A UPI ID looks like name@bank; the QR
+// is an image the person uploads (the app shrinks it before sending), checked
+// by its actual bytes, not just its declared type.
+const UPI_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{1,255}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/;
+const QR_MAX_BYTES = 300 * 1024, PAYMENT_METHOD_BODY_BYTES = 512 * 1024;
+function parseQr(value) {
+  const m = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(value || ""));
+  if (!m) return { error: "Upload the QR code as a PNG, JPEG or WebP image." };
+  let bytes;
+  try { bytes = Uint8Array.from(atob(m[2]), c => c.charCodeAt(0)); } catch { return { error: "That QR image could not be read." }; }
+  if (bytes.length > QR_MAX_BYTES) return { error: "That QR image is too large (max 300 KB)." };
+  const starts = (...sig) => sig.every((b, i) => bytes[i] === b);
+  const real = starts(0x89, 0x50, 0x4e, 0x47) ? "image/png" : starts(0xff, 0xd8, 0xff) ? "image/jpeg"
+    : starts(0x52, 0x49, 0x46, 0x46) && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP" ? "image/webp" : null;
+  if (real !== m[1]) return { error: "That file is not a valid PNG, JPEG or WebP image." };
+  return { mime: real, base64: m[2] };
+}
+const methodOut = r => ({ kind: "upi", upiId: r?.upi_id || null, hasQr: !!r?.qr_base64, updatedAt: r?.updated_at || null });
 
 // SQL for what member f still owes member t in group g (each a placeholder
 // like "?2"), from expenses and confirmed payments. With reserve, payments
@@ -596,6 +616,33 @@ async function api(req, env, url) {
     const rows = r.results.map(x => ({ ...x, incoming: x.toMemberId === u.id }));
     return json({ toConfirm: rows.filter(x => x.incoming), waiting: rows.filter(x => !x.incoming) });
   }
+  // My own payment method (how others pay me), the same in every group.
+  if (p === "/api/payment-method" && method === "GET") {
+    return json({ method: methodOut(await db.prepare("SELECT * FROM appx_payment_methods WHERE member_id=? AND kind='upi'").bind(u.id).first()) });
+  }
+  if (p === "/api/payment-method" && method === "POST") {
+    if (await rateLimited(db, "paymethod", u.id, RATE_LIMITS.paymentMethodWrite)) return tooMany();
+    const b = await body(req, PAYMENT_METHOD_BODY_BYTES);
+    const upiId = textField(b?.upiId).trim();
+    if (!UPI_RE.test(upiId)) return fail("Enter a valid UPI ID, like name@okbank.");
+    // qr: a data URL to set it, null to remove it, left out to keep the current one.
+    let qr = null;
+    if (b?.qr !== undefined && b?.qr !== null) { qr = parseQr(b.qr); if (qr.error) return fail(qr.error); }
+    const keep = b?.qr === undefined;
+    await db.prepare("INSERT INTO appx_payment_methods(member_id,kind,upi_id,qr_mime,qr_base64,updated_at) VALUES(?1,'upi',?2,?3,?4,?5) ON CONFLICT(member_id,kind) DO UPDATE SET upi_id=excluded.upi_id,updated_at=excluded.updated_at"
+      + (keep ? "" : ",qr_mime=excluded.qr_mime,qr_base64=excluded.qr_base64"))
+      .bind(u.id, upiId, qr?.mime ?? null, qr?.base64 ?? null, Date.now()).run();
+    return json({ method: methodOut(await db.prepare("SELECT * FROM appx_payment_methods WHERE member_id=? AND kind='upi'").bind(u.id).first()) });
+  }
+  if (p === "/api/payment-method/qr" && method === "GET") {
+    const r = await db.prepare("SELECT qr_mime,qr_base64 FROM appx_payment_methods WHERE member_id=? AND kind='upi'").bind(u.id).first();
+    if (!r?.qr_base64) return fail("No QR code yet.", 404);
+    return new Response(Uint8Array.from(atob(r.qr_base64), c => c.charCodeAt(0)), { headers: { "content-type": r.qr_mime, "cache-control": "private, no-cache", "x-content-type-options": "nosniff" } });
+  }
+  if (p === "/api/payment-method/delete" && method === "POST") {
+    await db.prepare("DELETE FROM appx_payment_methods WHERE member_id=?").bind(u.id).run();
+    return json({ method: methodOut(null) });
+  }
   if (method === "POST" && p === "/api/groups") return fail("Only an administrator can create groups.", 403);
   if (method === "POST" && p === "/api/groups/join") return fail("Invite codes do not bypass group approval. Request access to the group instead.", 403);
   const gm = p.match(/^\/api\/groups\/([\w-]+)(?:\/(.*))?$/);
@@ -697,6 +744,23 @@ async function api(req, env, url) {
     // One member's whole picture in the group, for anyone in it (group
     // expenses are visible to all members anyway): totals, who they owe and
     // who owes them, every expense they are part of, and their payments.
+    // Everyone in the group and how to pay them (UPI ID, whether a QR exists).
+    if (method === "GET" && tail === "payment-methods") {
+      const members = (await groupMembers(db, gid)).filter(x => x.active);
+      const rows = members.length ? (await db.prepare("SELECT * FROM appx_payment_methods WHERE kind='upi' AND member_id IN (" + members.map(() => "?").join(",") + ")").bind(...members.map(x => x.id)).all()).results : [];
+      const byId = new Map(rows.map(r => [r.member_id, r]));
+      return json({ people: members.map(x => ({ memberId: x.id, name: x.name, isMe: x.id === u.id, ...methodOut(byId.get(x.id)) })) });
+    }
+    // A member's UPI QR image, only for people in the same group.
+    const qrImage = tail.match(/^members\/([\w-]+)\/qr$/);
+    if (method === "GET" && qrImage) {
+      const mid = qrImage[1];
+      if (!(await groupMembers(db, gid)).some(x => x.id === mid)) return fail("That person is not in this group.", 404);
+      const r = await db.prepare("SELECT qr_mime,qr_base64 FROM appx_payment_methods WHERE member_id=? AND kind='upi'").bind(mid).first();
+      if (!r?.qr_base64) return fail("No QR code yet.", 404);
+      const bytes = Uint8Array.from(atob(r.qr_base64), c => c.charCodeAt(0));
+      return new Response(bytes, { headers: { "content-type": r.qr_mime, "cache-control": "private, no-cache", "x-content-type-options": "nosniff", "content-disposition": "inline" } });
+    }
     const memberSummary = tail.match(/^members\/([\w-]+)$/);
     if (method === "GET" && memberSummary) {
       const mid = memberSummary[1];
