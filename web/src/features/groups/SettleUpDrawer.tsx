@@ -21,7 +21,11 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
 }) {
   const debts = useDebts(groupId), mine = useMine(groupId), pay = useRecordPayment(groupId);
   const meId = mine.data?.memberId;
+  // What can still be recorded: the debt minus payments already sent and
+  // waiting for the receiver to confirm (owedCents keeps the full debt).
   const options = React.useMemo(() => (debts.data || []).filter(d => d.canRecord)
+    .map(d => ({ ...d, owedCents: d.amountCents, amountCents: d.amountCents - (d.waitingCents || 0) }))
+    .filter(d => d.amountCents > 0)
     .sort((a, b) => Number(b.fromMemberId === meId) - Number(a.fromMemberId === meId) || b.amountCents - a.amountCents), [debts.data, meId]);
   const [chosen, setChosen] = React.useState<string | null>(null);
   const [amount, setAmount] = React.useState("");
@@ -43,11 +47,13 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
     e.preventDefault();
     if (!debt || !cents || over) return;
     pay.mutate({ fromMemberId: debt.fromMemberId, toMemberId: debt.toMemberId, amount: amount.trim() }, {
-      onSuccess: () => {
+      onSuccess: res => {
         haptic([10, 40, 14]);
         const remaining = debt.amountCents - cents;
-        glitterBurst({ strong: remaining === 0 });
-        toast.success(`Recorded ${inr(cents)} from ${debt.fromName} to ${debt.toName}.`, { description: remaining ? `${inr(remaining)} is still owed.` : "All settled between them ✓" });
+        glitterBurst({ strong: remaining === 0 && res.status === "confirmed" });
+        // Most payments wait for the person who received them to confirm.
+        if (res.status === "pending") toast.success(`Sent ${inr(cents)} to ${debt.toMemberId === meId ? "you" : debt.toName} to confirm.`, { description: `It counts once ${debt.toName} confirms they received it.` });
+        else toast.success(`Recorded ${inr(cents)} from ${debt.fromName} to ${debt.toName}.`, { description: remaining ? `${inr(remaining)} is still owed.` : "All settled between them ✓" });
         onOpenChange(false);
       },
       onError: err => setError(err.message),
@@ -106,7 +112,7 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                   <PersonAvatar id={debt.toMemberId} name={debt.toName} size="lg" />
                 </div>
                 <p className="title-2 text-center">{debt.fromMemberId === meId ? "You" : debt.fromName} {debt.fromMemberId === meId ? "pay" : "pays"} {debt.toMemberId === meId ? "you" : debt.toName}</p>
-                <p className="subhead mt-1 text-center text-muted-foreground">{debt.fromMemberId === meId ? "You owe" : debt.fromName + " owes"} <span className="tabular text-foreground">{inr(debt.amountCents)}</span> in total</p>
+                <p className="subhead mt-1 text-center text-muted-foreground">{debt.fromMemberId === meId ? "You owe" : debt.fromName + " owes"} <span className="tabular text-foreground">{inr(debt.owedCents)}</span> in total{debt.owedCents > debt.amountCents ? <> · <span className="tabular">{inr(debt.owedCents - debt.amountCents)}</span> already waiting for {debt.toMemberId === meId ? "you" : debt.toName} to confirm</> : null}</p>
 
                 <label htmlFor="settle-amount" className="sr-only">Amount paid</label>
                 <div className={cn("mt-6 flex h-[84px] items-center justify-center rounded-[24px] border bg-white px-5 shadow-[0_1px_2px_rgb(16_40_32/5%)] transition-[border-color,box-shadow] focus-within:ring-[3px]", over ? "border-negative/50 ring-[3px] ring-negative/15" : "border-[#141716]/[0.08] focus-within:border-primary/50 focus-within:ring-primary/15")}>

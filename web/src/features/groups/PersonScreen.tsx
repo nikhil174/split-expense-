@@ -43,7 +43,10 @@ export function PersonScreen({ groupId, memberId }: { groupId: string; memberId:
 
       {d && n !== 0 && (
         <div className="mt-4">
-          {n < 0 && myDebt && <Button size="xl" className="w-full" onClick={() => setSettling(myDebt)}><HandCoins className="size-5" />Pay {d.other.name}</Button>}
+          {n < 0 && myDebt && myDebt.waitingCents < myDebt.amountCents && <Button size="xl" className="w-full" onClick={() => setSettling(myDebt)}><HandCoins className="size-5" />Pay {d.other.name}</Button>}
+          {n < 0 && myDebt && myDebt.waitingCents > 0 && (
+            <p className="subhead mt-3 rounded-[18px] bg-[#141716]/[0.035] px-4 py-3 text-center text-muted-foreground">{inr(myDebt.waitingCents)} you sent is waiting for {d.other.name} to confirm. It counts once they do.</p>
+          )}
           {n < 0 && !myDebt && debts.data && <p className="subhead rounded-[18px] bg-[#141716]/[0.035] px-4 py-3 text-muted-foreground">{d.other.name} is no longer an active member. Ask the admin to record this payment.</p>}
           {n > 0 && theirDebt && <Button size="xl" variant="secondary" className="w-full" onClick={() => setSettling(theirDebt)}>Record payment from {d.other.name}</Button>}
           {n > 0 && !theirDebt && debts.data && <p className="subhead rounded-[18px] bg-[#141716]/[0.035] px-4 py-3 text-center text-muted-foreground">Waiting for {d.other.name} to record their payment.</p>}

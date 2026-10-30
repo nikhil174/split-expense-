@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeEnv, call, setupGroup, MEMBER_PIN } from "./helpers/d1.js";
+import { makeEnv, call, setupGroup, payAndConfirm, MEMBER_PIN } from "./helpers/d1.js";
 import { computePairwiseDebts, outstandingDebt, pairwiseActivity } from "../src/settlement-logic.js";
 import { allocateEqualSplit } from "../src/split-logic.js";
 
@@ -10,7 +10,7 @@ async function fixture(t) {
   const g = await setupGroup(env, "Goa Trip", ["Bea", "Cy"]);
   const G = `/api/groups/${g.groupId}`;
   const add = (who, body) => call(env, G + "/expenses", { method: "POST", cookie: g.cookies[who], body });
-  const pay = (who, fromMemberId, toMemberId, amount) => call(env, G + "/settlements", { method: "POST", cookie: g.cookies[who], body: { fromMemberId, toMemberId, amount } });
+  const pay = (who, fromMemberId, toMemberId, amount) => payAndConfirm(env, g.groupId, g, g.cookies[who], { fromMemberId, toMemberId, amount });
   const get = (who, tail) => call(env, G + tail, { cookie: g.cookies[who] });
   return { raw, env, G, ...g, add, pay, get };
 }
@@ -117,6 +117,7 @@ test("balances list everyone I owe or who owes me across groups, matching group 
   await call(f.env, `/api/groups/${other.groupId}/expenses`, { method: "POST", cookie: other.cookies.Zed, body: { description: "Lunch", amount: "30", paidBy: other.ids.Zed, memberIds: [other.ids.Zed, "admin"] } });
   const paid = await call(f.env, `/api/groups/${other.groupId}/settlements`, { method: "POST", cookie: f.adminCookie, body: { fromMemberId: "admin", toMemberId: other.ids.Zed, amount: "5" } });
   assert.equal(paid.status, 201);
+  assert.equal((await call(f.env, `/api/groups/${other.groupId}/settlements/${paid.data.id}/confirm`, { method: "POST", cookie: other.cookies.Zed, body: {} })).status, 200);
 
   const b = (await call(f.env, "/api/balances", { cookie: f.adminCookie })).data;
   assert.deepEqual(b.people.map(x => [x.groupName, x.name, x.netCents, x.active]), [

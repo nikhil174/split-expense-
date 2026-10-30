@@ -2,13 +2,14 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { toast } from "sonner";
 import {
   get, post, type AccessRequest, type AdminDashboard, type AdminExpense, type AdminGroup, type Balance, type Dashboard,
-  type Debt, type Expense, type GroupDetail, type GroupSummary, type Me, type MergePreview, type Mine, type PeopleBalances, type PersonView, type Settlement,
+  type Debt, type Expense, type GroupDetail, type GroupSummary, type Me, type MergePreview, type Mine, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
 } from "@/lib/api";
 
 export const keys = {
   me: ["me"] as const,
   groups: ["groups"] as const,
   people: ["people-balances"] as const,
+  pending: ["pending-payments"] as const,
   group: (id: string) => ["group", id] as const,
   admin: ["admin"] as const,
 };
@@ -17,6 +18,8 @@ export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => get<Me>(
 export const useGroups = (enabled = true) =>
   useQuery({ queryKey: keys.groups, queryFn: () => get<{ groups: GroupSummary[] }>("/api/groups").then(d => d.groups), enabled });
 
+// Payments waiting for me to confirm, or that I sent and are waiting on someone else.
+export const usePendingPayments = () => useQuery({ queryKey: keys.pending, queryFn: () => get<{ toConfirm: PendingPayment[]; waiting: PendingPayment[] }>("/api/payments/pending"), refetchInterval: 60_000 });
 export const usePeopleBalances = () => useQuery({ queryKey: keys.people, queryFn: () => get<PeopleBalances>("/api/balances") });
 
 // Every group-scoped query shares the ["group", id] prefix, so one
@@ -35,7 +38,7 @@ export const useDashboard = (id: string) => useQuery(groupQuery<Dashboard>(id, "
 export const usePerson = (id: string, memberId: string) => useQuery(groupQuery<PersonView>(id, "person-" + memberId, "/with/" + encodeURIComponent(memberId)));
 
 export function refreshGroup(qc: QueryClient, groupId: string) {
-  return Promise.all([qc.invalidateQueries({ queryKey: keys.group(groupId) }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.admin })]);
+  return Promise.all([qc.invalidateQueries({ queryKey: keys.group(groupId) }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.pending }), qc.invalidateQueries({ queryKey: keys.admin })]);
 }
 
 export type NewExpense =
@@ -56,6 +59,15 @@ export function useEditExpense(groupId: string) {
     onSuccess: () => refreshGroup(qc, groupId),
   });
 }
+// Confirm or reject a payment sent to me, or cancel one I sent.
+export function useDecidePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, id, action }: { groupId: string; id: string; action: "confirm" | "reject" | "cancel" }) => post(`/api/groups/${groupId}/settlements/${id}/${action}`),
+    onSuccess: (_d, v) => refreshGroup(qc, v.groupId),
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
 export function useDeleteExpense(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -67,7 +79,7 @@ export function useDeleteExpense(groupId: string) {
 export function useRecordPayment(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { fromMemberId: string; toMemberId: string; amount: string }) => post(`/api/groups/${groupId}/settlements`, body),
+    mutationFn: (body: { fromMemberId: string; toMemberId: string; amount: string }) => post<{ id: string; status: "pending" | "confirmed" }>(`/api/groups/${groupId}/settlements`, body),
     onSuccess: () => refreshGroup(qc, groupId),
   });
 }

@@ -1,13 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeEnv, call, setupGroup } from "./helpers/d1.js";
+import { makeEnv, call, setupGroup, payAndConfirm } from "./helpers/d1.js";
 
 async function fixture(t, names = ["Bea", "Cy"]) {
   const { raw, env } = await makeEnv();
   t.after(() => raw.close());
   const g = await setupGroup(env, "Goa Trip", names);
   const expense = (who, body) => call(env, `/api/groups/${g.groupId}/expenses`, { method: "POST", cookie: g.cookies[who], body });
-  const pay = (who, fromMemberId, toMemberId, amount) => call(env, `/api/groups/${g.groupId}/settlements`, { method: "POST", cookie: g.cookies[who], body: { fromMemberId, toMemberId, amount } });
+  // Payments here are confirmed by the receiver straight away; the
+  // confirmation flow itself is tested in confirmations.api.test.js.
+  const pay = (who, fromMemberId, toMemberId, amount) => payAndConfirm(env, g.groupId, g, g.cookies[who], { fromMemberId, toMemberId, amount });
   const mine = async who => (await call(env, `/api/groups/${g.groupId}/settlements/mine`, { cookie: g.cookies[who] })).data;
   const balances = async who => (await call(env, `/api/groups/${g.groupId}/balances`, { cookie: g.cookies[who] })).data.balances;
   return { raw, env, ...g, expense, pay, mine, balances };
