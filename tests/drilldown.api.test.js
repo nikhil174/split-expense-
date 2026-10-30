@@ -263,3 +263,54 @@ test("admin can edit and delete anyone's expense; members only the ones they add
   assert.equal((await del("admin", admins)).status, 200);
   assert.equal(f.raw.prepare("SELECT COUNT(*) AS n FROM appx_expenses").get().n, 0);
 });
+
+test("member summary: anyone in the group can see one person's totals, debts, expenses and payments", async t => {
+  const f = await fixture(t);
+  const { ids } = f;
+  await f.add("Bea", { description: "Dinner", amount: "90", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy, ids.admin] });
+  await f.add("Cy", { description: "Cab", amount: "40", paidBy: ids.Cy, memberIds: [ids.Cy, ids.admin] });
+  await f.add("admin", { description: "Snacks", amount: "10", paidBy: ids.admin, memberIds: [ids.admin] });
+  await f.pay("Cy", ids.Cy, ids.Bea, "10");
+  // Bea looks at Cy.
+  const s = (await f.get("Bea", "/members/" + ids.Cy)).data;
+  assert.deepEqual([s.member.name, s.member.isMe, s.paidCents, s.shareCents], ["Cy", false, 4000, 5000]);
+  // Cy paid 40 + 10 repaid, share 30 + 20 → balance 0.
+  assert.equal(s.balanceCents, 0);
+  // Cy owes Bea 20 (30 − 10 repaid); the admin owes Cy 20.
+  assert.deepEqual(s.owes.map(d => [d.name, d.amountCents]), [["Bea", 2000]]);
+  assert.deepEqual(s.owedBy.map(d => [d.name, d.amountCents]), [["Alex Admin", 2000]]);
+  assert.deepEqual(s.expenses.map(e => [e.description, e.paidByName, e.shareCents, e.effectCents]).sort(), [["Cab", "Cy", 2000, 2000], ["Dinner", "Bea", 3000, -3000]]);
+  assert.ok(!s.expenses.some(e => e.description === "Snacks"), "only expenses they are part of");
+  assert.deepEqual(s.payments.map(p => [p.fromName, p.toName, p.amountCents, p.status]), [["Cy", "Bea", 1000, "confirmed"]]);
+  // It matches the group balances.
+  const bal = (await f.get("Bea", "/balances")).data.balances.find(b => b.memberId === ids.Cy).balanceCents;
+  assert.equal(s.balanceCents, bal);
+  assert.equal((await f.get("Bea", "/members/" + ids.Bea)).data.member.isMe, true);
+  assert.equal((await f.get("Bea", "/members/nope")).status, 404);
+  const other = await setupGroup(f.env, "Office", ["Zed"], { adminCookie: f.adminCookie });
+  assert.equal((await f.get("Bea", "/members/" + other.ids.Zed)).status, 404);
+  assert.equal((await call(f.env, f.G + "/members/" + ids.Cy)).status, 401);
+});
+
+test("pair view: anyone in the group can see what is between two other members, matching their debt", async t => {
+  const f = await fixture(t);
+  const { ids } = f;
+  await f.add("Bea", { description: "Dinner", amount: "90", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy, ids.admin] });
+  await f.add("Cy", { description: "Cab", amount: "40", paidBy: ids.Cy, memberIds: [ids.Cy, ids.Bea] });
+  await f.add("admin", { description: "Hotel", amount: "60", paidBy: ids.admin, memberIds: [ids.admin, ids.Cy] });
+  await f.pay("Cy", ids.Cy, ids.Bea, "5");
+  // The admin looks at Cy and Bea: Cy owes Bea 30 for dinner, Bea owes Cy 20 for the cab, Cy paid 5.
+  const v = (await f.get("admin", `/pair/${ids.Bea}/${ids.Cy}`)).data;
+  assert.deepEqual([v.me.name, v.other.name, v.netCents], ["Bea", "Cy", 500]);
+  assert.deepEqual(v.items.map(i => [i.type, i.description ?? null]).sort(), [["expense", "Cab"], ["expense", "Dinner"], ["payment", null]]);
+  assert.ok(!v.items.some(i => i.description === "Hotel"), "only what is between the two of them");
+  // Same answer as Bea's own view, and as the group's who-owes-whom.
+  assert.equal((await f.get("Bea", "/with/" + ids.Cy)).data.netCents, v.netCents);
+  const debt = (await f.get("admin", "/debts")).data.debts.find(d => d.fromMemberId === ids.Cy && d.toMemberId === ids.Bea);
+  assert.equal(debt.amountCents, v.netCents);
+  // Reversed order flips the sign.
+  assert.equal((await f.get("admin", `/pair/${ids.Cy}/${ids.Bea}`)).data.netCents, -500);
+  assert.equal((await f.get("admin", `/pair/${ids.Bea}/${ids.Bea}`)).status, 404);
+  assert.equal((await f.get("admin", `/pair/${ids.Bea}/nope`)).status, 404);
+  assert.equal((await call(f.env, `${f.G}/pair/${ids.Bea}/${ids.Cy}`)).status, 401);
+});

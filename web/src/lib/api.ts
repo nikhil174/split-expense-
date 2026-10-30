@@ -54,6 +54,15 @@ export type Settlement = {
   // A payment counts only once the receiver confirms it.
   status: "pending" | "confirmed" | "rejected"; canDecide: boolean; canCancel: boolean;
 };
+// One member's whole picture in a group (GET /api/groups/:id/members/:memberId).
+export type MemberSummary = {
+  member: { id: string; name: string; active: boolean; isMe: boolean };
+  paidCents: number; shareCents: number; balanceCents: number;
+  owes: { memberId: string; name: string; amountCents: number }[];
+  owedBy: { memberId: string; name: string; amountCents: number }[];
+  expenses: { id: string; description: string; amountCents: number; paidBy: string; paidByName: string; createdAt: number; shareCents: number; splitCount: number; effectCents: number }[];
+  payments: { id: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string; amountCents: number; createdAt: number; status: "pending" | "confirmed" }[];
+};
 export type PendingPayment = {
   id: string; groupId: string; groupName: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
   amountCents: number; createdAt: number; incoming: boolean;

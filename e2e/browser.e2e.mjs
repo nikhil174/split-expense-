@@ -224,6 +224,14 @@ try {
   await cy.keyboard.press("Escape");
   await cy.getByRole("dialog").waitFor({ state: "detached" });
   await cy.getByRole("tab", { name: "Balances", exact: true }).click();
+  // "Who owes whom": tapping a line shows the expenses behind it.
+  await cy.locator("section", { has: cy.getByRole("heading", { name: "Who owes whom" }) }).getByRole("button", { name: /You\s*owe\s*Bea E2E/ }).click();
+  const between = cy.getByRole("dialog");
+  await between.getByText("You owe Bea E2E ₹55.00").first().waitFor();
+  assert.equal(await between.locator("li").count(), 2, "Dinner and Snacks");
+  await between.getByText("Dinner").waitFor();
+  await cy.keyboard.press("Escape");
+  await between.waitFor({ state: "detached" });
   await cy.getByRole("button", { name: /Bea E2E.*you owe.*₹55\.00/s }).click();
   await cy.getByRole("heading", { name: "You & Bea E2E" }).waitFor();
   await cy.getByText("You owe Bea E2E ₹55.00").waitFor();
@@ -298,6 +306,16 @@ try {
   await cy.getByRole("tab", { name: "Balances", exact: true }).click();
   await cy.getByText("Everyone is settled up").waitFor();
   await noHorizontalOverflow(cy, "balances");
+  // Tap anyone in Group balances for their whole picture.
+  await cy.locator("section", { has: cy.getByRole("heading", { name: "Group balances" }) }).getByRole("button", { name: /Bea E2E/ }).click();
+  const bea2 = cy.getByRole("dialog");
+  await bea2.getByText("Settled up").waitFor();
+  await bea2.getByText("2 expenses").waitFor();
+  await bea2.getByText("Dinner").waitFor();
+  await bea2.getByText("Snacks").waitFor();
+  await bea2.getByText("You paid Bea E2E").first().waitFor();
+  await cy.keyboard.press("Escape");
+  await bea2.waitFor({ state: "detached" });
   step("Settle up sends ₹35 for Bea to confirm; a rejected payment never counts; after confirming everyone is settled");
 
   await admin.getByRole("tab", { name: "Home", exact: true }).click();
@@ -362,6 +380,21 @@ try {
   await adminSignIn(admin);
   await admin.getByRole("heading", { name: "Your groups" }).waitFor();
   step("sign out lands on the sign-in screen (admin and member), stays there after reload, and signing back in works");
+  // Installable: manifest, icons and service worker are served, Chrome reports no
+  // installability errors, and "Install the app" explains how on this phone.
+  const fresh = await newPage();
+  for (const path of ["/manifest.webmanifest", "/sw.js", "/icons/icon-192.png", "/icons/maskable-512.png", "/icons/apple-touch-icon.png"]) {
+    assert.equal((await fresh.request.get(BASE + path)).status(), 200, path);
+  }
+  const cdp = await fresh.context().newCDPSession(fresh);
+  await fresh.waitForFunction(async () => !!(await navigator.serviceWorker?.getRegistration()), null, { timeout: 15000 });
+  assert.deepEqual((await cdp.send("Page.getInstallabilityErrors")).installabilityErrors, []);
+  await fresh.getByRole("button", { name: "Install the app" }).click();
+  await fresh.getByRole("alertdialog").getByText("Install Split It").waitFor();
+  await fresh.getByRole("button", { name: "Got it" }).click();
+  await fresh.getByRole("alertdialog").waitFor({ state: "detached" });
+  await fresh.context().close();
+  step("installable as an app: manifest, icons and service worker; install steps on the sign-in screen");
   console.log("E2E PASSED");
 } finally {
   await browser.close();

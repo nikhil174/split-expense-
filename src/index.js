@@ -694,19 +694,51 @@ async function api(req, env, url) {
       ]);
       return json({ ok: true, deleted: true });
     }
-    const withMember = tail.match(/^with\/([\w-]+)$/);
-    if (method === "GET" && withMember) {
-      const other = withMember[1];
+    // One member's whole picture in the group, for anyone in it (group
+    // expenses are visible to all members anyway): totals, who they owe and
+    // who owes them, every expense they are part of, and their payments.
+    const memberSummary = tail.match(/^members\/([\w-]+)$/);
+    if (method === "GET" && memberSummary) {
+      const mid = memberSummary[1];
+      const [members, ledger] = await Promise.all([groupMembers(db, gid), loadLedger(db, gid)]);
+      const who = members.find(x => x.id === mid);
+      if (!who) return fail("That person is not in this group.", 404);
+      const nameOf = nameLookup(members);
+      const sum = (rows, key) => rows.filter(r => r[key] === mid).reduce((t, r) => t + r.amountCents, 0);
+      const debts = computePairwiseDebts(ledger);
+      const [expenses, payments] = await Promise.all([
+        db.prepare("SELECT e.id,e.description,e.amount_cents AS amountCents,e.paid_by AS paidBy,e.created_at AS createdAt,COALESCE((SELECT amount_cents FROM appx_splits WHERE expense_id=e.id AND member_id=?2),0) AS shareCents,(SELECT COUNT(*) FROM appx_splits WHERE expense_id=e.id) AS splitCount FROM appx_expenses e WHERE e.group_id=?1 AND (e.paid_by=?2 OR e.id IN (SELECT expense_id FROM appx_splits WHERE member_id=?2)) ORDER BY e.created_at DESC LIMIT 300").bind(gid, mid).all(),
+        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt,status FROM appx_settlements WHERE group_id=?1 AND (from_member_id=?2 OR to_member_id=?2) AND status<>'rejected' ORDER BY created_at DESC LIMIT 200").bind(gid, mid).all(),
+      ]);
+      return json({
+        member: { id: mid, name: who.name, active: who.active, isMe: mid === u.id },
+        paidCents: sum(ledger.paidTotals, "memberId"),
+        shareCents: sum(ledger.splitEdges, "memberId"),
+        balanceCents: computeBalances(ledger).get(mid) || 0,
+        owes: debts.filter(d => d.fromMemberId === mid).map(d => ({ memberId: d.toMemberId, name: nameOf(d.toMemberId), amountCents: d.amountCents })),
+        owedBy: debts.filter(d => d.toMemberId === mid).map(d => ({ memberId: d.fromMemberId, name: nameOf(d.fromMemberId), amountCents: d.amountCents })),
+        // effectCents: how the expense moved their balance (paid minus own share).
+        expenses: expenses.results.map(x => ({ ...x, paidByName: nameOf(x.paidBy), effectCents: (x.paidBy === mid ? x.amountCents : 0) - x.shareCents })),
+        payments: payments.results.map(x => ({ ...x, fromName: nameOf(x.fromMemberId), toName: nameOf(x.toMemberId) })),
+      });
+    }
+    // Everything between two members: expenses where one paid and the other
+    // had a share, and confirmed payments between them, with a running total
+    // from a's side (positive: b owes a). "with/:id" is me and that person;
+    // "pair/:a/:b" is any two members of the group (anyone in it may look).
+    const withMember = tail.match(/^with\/([\w-]+)$/), pair = tail.match(/^pair\/([\w-]+)\/([\w-]+)$/);
+    if (method === "GET" && (withMember || pair)) {
+      const a = withMember ? u.id : pair[1], other = withMember ? withMember[1] : pair[2];
       const members = await groupMembers(db, gid);
       const nameOf = nameLookup(members);
-      if (other === u.id || !members.some(x => x.id === other)) return fail("Choose another member of this group.", 404);
+      if (other === a || !members.some(x => x.id === other) || !members.some(x => x.id === a)) return fail("Choose two different members of this group.", 404);
       const [shares, settlements] = await Promise.all([
-        db.prepare("SELECT e.id AS expenseId,e.description,e.paid_by AS paidBy,e.amount_cents AS totalCents,e.created_at AS createdAt,s.member_id AS memberId,s.amount_cents AS amountCents FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?1 AND ((e.paid_by=?2 AND s.member_id=?3) OR (e.paid_by=?3 AND s.member_id=?2))").bind(gid, u.id, other).all(),
-        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt FROM appx_settlements WHERE group_id=?1 AND status='confirmed' AND ((from_member_id=?2 AND to_member_id=?3) OR (from_member_id=?3 AND to_member_id=?2))").bind(gid, u.id, other).all(),
+        db.prepare("SELECT e.id AS expenseId,e.description,e.paid_by AS paidBy,e.amount_cents AS totalCents,e.created_at AS createdAt,s.member_id AS memberId,s.amount_cents AS amountCents FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?1 AND ((e.paid_by=?2 AND s.member_id=?3) OR (e.paid_by=?3 AND s.member_id=?2))").bind(gid, a, other).all(),
+        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt FROM appx_settlements WHERE group_id=?1 AND status='confirmed' AND ((from_member_id=?2 AND to_member_id=?3) OR (from_member_id=?3 AND to_member_id=?2))").bind(gid, a, other).all(),
       ]);
-      const activity = pairwiseActivity({ shares: shares.results, settlements: settlements.results, me: u.id, other });
+      const activity = pairwiseActivity({ shares: shares.results, settlements: settlements.results, me: a, other });
       const otherMember = members.find(x => x.id === other);
-      return json({ me: { id: u.id, name: u.name }, other: { id: other, name: nameOf(other), active: otherMember.active }, netCents: activity.netCents, items: activity.items });
+      return json({ me: { id: a, name: withMember ? u.name : nameOf(a) }, other: { id: other, name: nameOf(other), active: otherMember.active }, netCents: activity.netCents, items: activity.items });
     }
     if (method === "GET" && tail === "settlements") {
       const r = await db.prepare("SELECT s.id,s.from_member_id AS fromMemberId,COALESCE(f.name,'" + FORMER_MEMBER + "') AS fromName,s.to_member_id AS toMemberId,COALESCE(t.name,'" + FORMER_MEMBER + "') AS toName,s.amount_cents AS amountCents,s.status,s.created_by AS createdBy,s.decided_at AS decidedAt,s.created_at AS createdAt,COALESCE(c.name,'" + FORMER_MEMBER + "') AS recordedByName FROM appx_settlements s LEFT JOIN appx_group_members f ON f.group_id=s.group_id AND f.member_id=s.from_member_id LEFT JOIN appx_group_members t ON t.group_id=s.group_id AND t.member_id=s.to_member_id LEFT JOIN appx_group_members c ON c.group_id=s.group_id AND c.member_id=s.created_by WHERE s.group_id=? ORDER BY s.created_at DESC LIMIT 200").bind(gid).all();
