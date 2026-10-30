@@ -298,6 +298,16 @@ try {
   await cy.getByRole("tab", { name: "Balances", exact: true }).click();
   await cy.getByText("Everyone is settled up").waitFor();
   await noHorizontalOverflow(cy, "balances");
+  // Tap anyone in Group balances for their whole picture.
+  await cy.locator("section", { has: cy.getByRole("heading", { name: "Group balances" }) }).getByRole("button", { name: /Bea E2E/ }).click();
+  const bea2 = cy.getByRole("dialog");
+  await bea2.getByText("Settled up").waitFor();
+  await bea2.getByText("2 expenses").waitFor();
+  await bea2.getByText("Dinner").waitFor();
+  await bea2.getByText("Snacks").waitFor();
+  await bea2.getByText("You paid Bea E2E").first().waitFor();
+  await cy.keyboard.press("Escape");
+  await bea2.waitFor({ state: "detached" });
   step("Settle up sends ₹35 for Bea to confirm; a rejected payment never counts; after confirming everyone is settled");
 
   await admin.getByRole("tab", { name: "Home", exact: true }).click();

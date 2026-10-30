@@ -694,6 +694,34 @@ async function api(req, env, url) {
       ]);
       return json({ ok: true, deleted: true });
     }
+    // One member's whole picture in the group, for anyone in it (group
+    // expenses are visible to all members anyway): totals, who they owe and
+    // who owes them, every expense they are part of, and their payments.
+    const memberSummary = tail.match(/^members\/([\w-]+)$/);
+    if (method === "GET" && memberSummary) {
+      const mid = memberSummary[1];
+      const [members, ledger] = await Promise.all([groupMembers(db, gid), loadLedger(db, gid)]);
+      const who = members.find(x => x.id === mid);
+      if (!who) return fail("That person is not in this group.", 404);
+      const nameOf = nameLookup(members);
+      const sum = (rows, key) => rows.filter(r => r[key] === mid).reduce((t, r) => t + r.amountCents, 0);
+      const debts = computePairwiseDebts(ledger);
+      const [expenses, payments] = await Promise.all([
+        db.prepare("SELECT e.id,e.description,e.amount_cents AS amountCents,e.paid_by AS paidBy,e.created_at AS createdAt,COALESCE((SELECT amount_cents FROM appx_splits WHERE expense_id=e.id AND member_id=?2),0) AS shareCents,(SELECT COUNT(*) FROM appx_splits WHERE expense_id=e.id) AS splitCount FROM appx_expenses e WHERE e.group_id=?1 AND (e.paid_by=?2 OR e.id IN (SELECT expense_id FROM appx_splits WHERE member_id=?2)) ORDER BY e.created_at DESC LIMIT 300").bind(gid, mid).all(),
+        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt,status FROM appx_settlements WHERE group_id=?1 AND (from_member_id=?2 OR to_member_id=?2) AND status<>'rejected' ORDER BY created_at DESC LIMIT 200").bind(gid, mid).all(),
+      ]);
+      return json({
+        member: { id: mid, name: who.name, active: who.active, isMe: mid === u.id },
+        paidCents: sum(ledger.paidTotals, "memberId"),
+        shareCents: sum(ledger.splitEdges, "memberId"),
+        balanceCents: computeBalances(ledger).get(mid) || 0,
+        owes: debts.filter(d => d.fromMemberId === mid).map(d => ({ memberId: d.toMemberId, name: nameOf(d.toMemberId), amountCents: d.amountCents })),
+        owedBy: debts.filter(d => d.toMemberId === mid).map(d => ({ memberId: d.fromMemberId, name: nameOf(d.fromMemberId), amountCents: d.amountCents })),
+        // effectCents: how the expense moved their balance (paid minus own share).
+        expenses: expenses.results.map(x => ({ ...x, paidByName: nameOf(x.paidBy), effectCents: (x.paidBy === mid ? x.amountCents : 0) - x.shareCents })),
+        payments: payments.results.map(x => ({ ...x, fromName: nameOf(x.fromMemberId), toName: nameOf(x.toMemberId) })),
+      });
+    }
     const withMember = tail.match(/^with\/([\w-]+)$/);
     if (method === "GET" && withMember) {
       const other = withMember[1];

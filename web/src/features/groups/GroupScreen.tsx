@@ -15,6 +15,7 @@ import { AquaCard, cardTap } from "./GroupsScreen";
 import { PeopleSheet } from "./PeopleSheet";
 import { MembersSheet } from "./MembersSheet";
 import { PendingPayments } from "./PendingPayments";
+import { MemberSheet } from "./MemberSheet";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
 import { useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
@@ -238,6 +239,7 @@ function ExpenseRow({ x, meId, groupId, open, onToggle, onEdit }: { x: Expense; 
 function BalancesTab({ groupId }: { groupId: string }) {
   const mine = useMine(groupId), group = useGroup(groupId), balances = useBalances(groupId), debts = useDebts(groupId);
   const meId = mine.data?.memberId;
+  const [inspecting, setInspecting] = React.useState<string | null>(null);
   const people = React.useMemo(() => {
     if (!mine.data || !group.data) return null;
     const net = new Map<string, { name: string; cents: number }>();
@@ -270,15 +272,18 @@ function BalancesTab({ groupId }: { groupId: string }) {
         <SectionTitle>Group balances</SectionTitle>
         <List inset={60}>
           {!balances.data ? <RowsSkeleton rows={3} /> : balances.data.map(b => (
-            <div key={b.memberId} className={rowClass}>
+            <button key={b.memberId} type="button" onClick={() => setInspecting(b.memberId)} className={pressableRow}>
               <PersonAvatar id={b.memberId} name={b.name} size="sm" />
               <span className="min-w-0 flex-1 truncate text-[15px]">{b.name}{b.memberId === meId && <span className="text-muted-foreground"> (you)</span>}</span>
               <span className={cn("tabular rounded-full px-2.5 py-1 text-[13px] font-medium", b.balanceCents > 0 ? "bg-positive-soft text-positive" : b.balanceCents < 0 ? "bg-negative-soft text-negative" : "bg-[#141716]/[0.05] text-muted-foreground")}>
                 {b.balanceCents > 0 ? "gets back " + inr(b.balanceCents) : b.balanceCents < 0 ? "owes " + inr(-b.balanceCents) : "settled"}
               </span>
-            </div>
+              <ChevronRight className={CHEVRON} strokeWidth={2.4} />
+            </button>
           ))}
         </List>
+        <Footnote>Tap anyone to see what they paid, who they owe, and every expense they are in.</Footnote>
+        <MemberSheet groupId={groupId} memberId={inspecting} onClose={() => setInspecting(null)} meId={meId} />
       </section>
 
       <section>
