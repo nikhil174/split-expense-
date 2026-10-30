@@ -90,7 +90,7 @@ export function useAdminAction<V>(fn: (v: V) => Promise<unknown>, success?: (v: 
     mutationFn: fn,
     onSuccess: async (_d, v) => {
       if (success) toast.success(success(v));
-      await Promise.all([qc.invalidateQueries({ queryKey: keys.admin }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: ["group"] })]);
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.admin }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: ["group"] }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.me })]);
     },
     onError: (e: Error) => toast.error(e.message),
   });

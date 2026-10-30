@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
-import { Check, FolderPlus, MoreHorizontal, ReceiptText, ShieldCheck, Trash2, UserCheck, Users, X } from "lucide-react";
+import { Check, FolderPlus, MoreHorizontal, Pencil, ReceiptText, ShieldCheck, Trash2, UserCheck, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 type Tab = "requests" | "groups" | "expenses";
 type Confirm = { title: string; body: React.ReactNode; action: string; destructive?: boolean; run: () => Promise<unknown> };
+type Rename = { kind: "member" | "group"; id: string; name: string };
 
 export function AdminScreen({ adminName }: { adminName: string }) {
   const [tab, setTab] = React.useState<Tab>("requests");
@@ -88,6 +89,7 @@ const STATUS_STYLE: Record<string, string> = {
 function RequestsTab({ onMerge }: { onMerge: (r: AccessRequest) => void }) {
   const requests = useAdminRequests();
   const [confirm, setConfirm] = React.useState<Confirm | null>(null);
+  const [renaming, setRenaming] = React.useState<Rename | null>(null);
   const act = useAdminAction(({ id, action }: { id: string; action: string; label: string }) => post(`/api/admin/requests/${id}/${action}`), v => v.label);
   const busy = (id: string, action: string) => act.isPending && act.variables?.id === id && act.variables.action === action;
   const groups = React.useMemo(() => {
@@ -122,6 +124,7 @@ function RequestsTab({ onMerge }: { onMerge: (r: AccessRequest) => void }) {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild><Button size="icon-sm" variant="ghost" aria-label={"Actions for " + r.name}><MoreHorizontal /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem onSelect={() => setRenaming({ kind: "member", id: r.id, name: r.name })}><Pencil />Rename</DropdownMenuItem>
                         {r.status === "approved" && <DropdownMenuItem onSelect={() => act.mutate({ id: r.id, action: "revoke", label: r.name + "'s access revoked." })}>Revoke access</DropdownMenuItem>}
                         {(r.status === "rejected" || r.status === "revoked") && <DropdownMenuItem onSelect={() => act.mutate({ id: r.id, action: "approve", label: r.name + " approved." })}>Approve again</DropdownMenuItem>}
                         {r.groupId && <DropdownMenuItem onSelect={() => onMerge(r)}><UserCheck />This is me — merge</DropdownMenuItem>}
@@ -142,6 +145,7 @@ function RequestsTab({ onMerge }: { onMerge: (r: AccessRequest) => void }) {
         </section>
       ))}
       <ConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
+      <RenameDialog target={renaming} onClose={() => setRenaming(null)} />
     </div>
   );
 }
@@ -150,6 +154,7 @@ function GroupsTab() {
   const groups = useAdminGroups();
   const [name, setName] = React.useState("");
   const [confirm, setConfirm] = React.useState<Confirm | null>(null);
+  const [renaming, setRenaming] = React.useState<Rename | null>(null);
   const create = useAdminAction((n: string) => post("/api/admin/groups", { name: n }), n => `Group “${n}” created.`);
   const remove = useAdminAction((g: { id: string; name: string }) => post(`/api/admin/groups/${g.id}/delete`), g => `Group “${g.name}” deleted.`);
   return (
@@ -167,6 +172,7 @@ function GroupsTab() {
                 <m.div key={g.id} layout custom={i} variants={listItem} initial="initial" animate="animate" exit="exit" className="flex items-center gap-3 px-4 py-3.5">
                   <PersonAvatar id={g.id} name={g.name} />
                   <div className="min-w-0 flex-1"><p className="truncate font-medium">{g.name}</p><p className="text-xs text-muted-foreground">{g.memberCount} {g.memberCount === 1 ? "member" : "members"}</p></div>
+                  <Button size="icon-sm" variant="ghost" aria-label={"Rename " + g.name} onClick={() => setRenaming({ kind: "group", id: g.id, name: g.name })}><Pencil /></Button>
                   <Button size="icon-sm" variant="ghost" aria-label={"Delete " + g.name} className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => setConfirm({ title: `Delete “${g.name}”?`, body: "This permanently removes its expenses, payments, members and access requests. This cannot be undone.", action: "Delete group", destructive: true, run: () => remove.mutateAsync(g) })}>
                     <Trash2 />
@@ -178,6 +184,7 @@ function GroupsTab() {
         </div>
       </section>
       <ConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
+      <RenameDialog target={renaming} onClose={() => setRenaming(null)} />
     </div>
   );
 }
@@ -212,6 +219,34 @@ function ExpensesTab() {
         </Table>
       )}
     </div>
+  );
+}
+
+// Rename a member or a group. A member's new name shows on all their past
+// expenses and payments and is the name they sign in with from now on.
+function RenameDialog({ target, onClose }: { target: Rename | null; onClose: () => void }) {
+  const [name, setName] = React.useState("");
+  React.useEffect(() => { if (target) setName(target.name); }, [target]);
+  const rename = useAdminAction((v: Rename) => post(`/api/admin/${v.kind === "group" ? "groups" : "requests"}/${v.id}/rename`, { name: v.name }), v => `Renamed to “${v.name}”.`);
+  const clean = name.trim().replace(/\s+/g, " ");
+  const max = target?.kind === "group" ? 80 : 60;
+  const ok = !!target && clean.length >= 2 && clean.length <= max && clean !== target.name;
+  return (
+    <AlertDialog open={!!target} onOpenChange={o => { if (!o && !rename.isPending) onClose(); }}>
+      <AlertDialogContent className="max-w-[360px] rounded-[26px] border-0 p-6">
+        <form onSubmit={e => { e.preventDefault(); if (ok && target) rename.mutate({ ...target, name: clean }, { onSuccess: onClose }); }} className="space-y-4">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="title-2">{target?.kind === "group" ? "Rename group" : `Rename ${target?.name ?? ""}`}</AlertDialogTitle>
+            <AlertDialogDescription>{target?.kind === "group" ? "Everyone in the group sees the new name." : "Their new name shows on all past expenses and payments, and they sign in with it from now on."}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input aria-label="New name" autoFocus required minLength={2} maxLength={max} value={name} onChange={e => setName(e.target.value)} className={cn(fieldClass, "h-11")} />
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button" disabled={rename.isPending} className="rounded-full border-0 bg-[#141716]/[0.06] shadow-none">Cancel</AlertDialogCancel>
+            <LoadingButton type="submit" disabled={!ok} loading={rename.isPending} loadingText="Saving…">Save name</LoadingButton>
+          </AlertDialogFooter>
+        </form>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

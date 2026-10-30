@@ -273,6 +273,21 @@ try {
   await shot(admin, "admin-expenses");
   step("admin is one person in the group and switches between My groups and Admin");
 
+  // Rename a member: the new name shows on their past expenses.
+  await admin.getByRole("tab", { name: /^Requests/ }).click();
+  await admin.getByRole("button", { name: "Actions for Cy E2E" }).click();
+  await admin.getByRole("menuitem", { name: "Rename" }).click();
+  await admin.getByLabel("New name").fill("Cyrus E2E");
+  await admin.getByRole("button", { name: "Save name" }).click();
+  await toast(admin, "Renamed to “Cyrus E2E”");
+  await admin.getByRole("button", { name: "Actions for Cyrus E2E" }).waitFor();
+  await admin.getByRole("tab", { name: "Home", exact: true }).click();
+  await openGroup(admin);
+  await admin.getByRole("tab", { name: "Payments", exact: true }).click();
+  await admin.locator("tbody").getByText(/Cyrus E2E/).first().waitFor();
+  assert.equal(await admin.locator("tbody").getByText(/\bCy E2E\b/).count(), 0, "old name gone from history");
+  step("admin renames a member; the new name shows on their past payments");
+
   for (const page of [admin, cy]) {
     await page.getByRole("button", { name: "Account" }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();

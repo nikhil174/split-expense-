@@ -266,6 +266,38 @@ async function api(req, env, url) {
       ]);
       return json({ ok: true, deletedGroup: g.name });
     }
+    const renameGroup = p.match(/^\/api\/admin\/groups\/([\w-]+)\/rename$/);
+    if (method === "POST" && renameGroup) {
+      const gid = renameGroup[1], name = cleanName((await body(req))?.name);
+      if (name.length < 2 || name.length > 80) return fail("Group name must be 2–80 characters.");
+      const g = await db.prepare("SELECT id FROM appx_groups WHERE id=?").bind(gid).first();
+      if (!g) return fail("Group not found.", 404);
+      try {
+        await db.prepare("UPDATE appx_groups SET name=? WHERE id=?").bind(name, gid).run();
+      } catch (e) {
+        if (String(e).toLowerCase().includes("unique")) return fail("That group name already exists. Choose a unique name.", 409);
+        throw e;
+      }
+      return json({ ok: true, group: { id: gid, name } });
+    }
+    // Renaming a member changes their name everywhere: past expenses and
+    // payments (stored by id) and the name they sign in with. Their current
+    // session keeps working.
+    const renameMember = p.match(/^\/api\/admin\/requests\/([\w-]+)\/rename$/);
+    if (method === "POST" && renameMember) {
+      const rid = renameMember[1], name = cleanName((await body(req))?.name);
+      if (name.length < 2 || name.length > 60) return fail("Name must be 2–60 characters.");
+      const r = await db.prepare("SELECT id,group_id FROM appx_access_requests WHERE id=?").bind(rid).first();
+      if (!r) return fail("Member not found.", 404);
+      if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Choose a different name.", 409);
+      const taken = await db.prepare("SELECT 1 FROM appx_access_requests WHERE group_id=?1 AND id<>?2 AND lower(display_name)=lower(?3) UNION SELECT 1 FROM appx_group_members WHERE group_id=?1 AND member_id<>?2 AND lower(name)=lower(?3)").bind(r.group_id, rid, name).first();
+      if (taken) return fail("Someone in this group already has that name.", 409);
+      await db.batch([
+        db.prepare("UPDATE appx_access_requests SET display_name=? WHERE id=?").bind(name, rid),
+        db.prepare("UPDATE appx_group_members SET name=? WHERE group_id=? AND member_id=?").bind(name, r.group_id, rid),
+      ]);
+      return json({ ok: true, id: rid, name });
+    }
     if (method === "POST" && p === "/api/admin/groups") {
       const b = await body(req), name = cleanName(b?.name);
       if (name.length < 2 || name.length > 80) return fail("Group name must be 2–80 characters.");
