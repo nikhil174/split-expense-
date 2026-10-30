@@ -211,3 +211,54 @@ test("admin can rename a member and a group; names update everywhere and the mem
   assert.equal((await call(f.env, "/api/groups", { cookie: f.cookies.Bea })).data.groups[0].name, "Goa 2026");
   assert.ok(other.groupId);
 });
+
+test("names are unique per group in the database itself; people are tracked by a permanent id", async t => {
+  const f = await fixture(t);
+  const { ids } = f;
+  const insert = (id, name, gid = f.groupId) => f.raw.prepare("INSERT INTO appx_access_requests(id,display_name,status,requested_at,group_id) VALUES(?,?,'pending',?,?)").run(id, name, Date.now(), gid);
+  // Even bypassing the API, a second "bea" in the same group is impossible...
+  assert.throws(() => insert("dup-1", "bEA"), /UNIQUE/);
+  // ...but the same name in another group is fine (it is a different membership).
+  const other = await setupGroup(f.env, "Office", [], { adminCookie: f.adminCookie });
+  insert("other-bea", "Bea", other.groupId);
+
+  // History points at ids, not names: rename Cy, then a new person may take the old name.
+  await f.add("Cy", { description: "Cab", amount: "40", paidBy: ids.Cy, memberIds: [ids.Cy, ids.Bea] });
+  assert.equal((await call(f.env, `/api/admin/requests/${ids.Cy}/rename`, { method: "POST", cookie: f.adminCookie, body: { name: "Cyrus" } })).status, 200);
+  const newCy = await call(f.env, "/api/access/request", { method: "POST", body: { name: "Cy", groupId: f.groupId, pin: "1357" } });
+  assert.equal(newCy.status, 201);
+  assert.notEqual(newCy.data.requestId, ids.Cy, "a new person gets a new id");
+  const cab = (await f.get("Bea", "/expenses")).data.expenses[0];
+  assert.deepEqual([cab.paidBy, cab.paidByName], [ids.Cy, "Cyrus"], "the old expense still belongs to the renamed person");
+  // Renaming someone onto a name already in use is refused.
+  assert.equal((await call(f.env, `/api/admin/requests/${ids.Bea}/rename`, { method: "POST", cookie: f.adminCookie, body: { name: "cyrus" } })).status, 409);
+});
+
+test("admin can edit and delete anyone's expense; members only the ones they added", async t => {
+  const f = await fixture(t);
+  const { ids } = f;
+  const body = (paidBy, memberIds) => ({ description: "Lunch", amount: "60", paidBy, memberIds });
+  // Bea adds an expense that Cy paid for and is part of; the admin adds one too.
+  const beas = (await f.add("Bea", body(ids.Cy, [ids.Bea, ids.Cy]))).data.id;
+  const admins = (await f.add("admin", body(ids.admin, [ids.admin, ids.Bea, ids.Cy]))).data.id;
+  const edit = (who, eid) => call(f.env, `${f.G}/expenses/${eid}/edit`, { method: "POST", cookie: f.cookies[who], body: body(ids.Cy, [ids.Bea, ids.Cy]) });
+  const del = (who, eid) => call(f.env, `${f.G}/expenses/${eid}/delete`, { method: "POST", cookie: f.cookies[who], body: {} });
+  const flags = async (who, eid) => { const x = (await f.get(who, "/expenses")).data.expenses.find(e => e.id === eid); return [x.canEdit, x.canDelete]; };
+
+  // What each person's screen offers matches what the server allows.
+  assert.deepEqual(await flags("Bea", beas), [true, true]);
+  assert.deepEqual(await flags("Cy", beas), [false, false], "paying for it or being in it is not enough");
+  assert.deepEqual(await flags("admin", beas), [true, true]);
+  assert.deepEqual(await flags("Bea", admins), [false, false]);
+  assert.deepEqual(await flags("Cy", admins), [false, false]);
+
+  assert.equal((await edit("Cy", beas)).status, 403);
+  assert.equal((await del("Cy", beas)).status, 403);
+  assert.equal((await edit("Bea", admins)).status, 403);
+  assert.equal((await del("Bea", admins)).status, 403);
+  assert.equal((await edit("Bea", beas)).status, 200);
+  assert.equal((await edit("admin", beas)).status, 200);
+  assert.equal((await del("admin", beas)).status, 200);
+  assert.equal((await del("admin", admins)).status, 200);
+  assert.equal(f.raw.prepare("SELECT COUNT(*) AS n FROM appx_expenses").get().n, 0);
+});

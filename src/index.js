@@ -254,7 +254,13 @@ async function api(req, env, url) {
       return json({ ok: true, requestId: existing.id, message: "Access request sent again using your existing membership entry." }, 200);
     }
     const requestId = id();
-    await db.prepare("INSERT INTO appx_access_requests(id,display_name,status,requested_at,group_id,pin_hash) VALUES(?,?,'pending',?,?,?)").bind(requestId, name, now, groupId, await hashPin(pin, env)).run();
+    try {
+      await db.prepare("INSERT INTO appx_access_requests(id,display_name,status,requested_at,group_id,pin_hash) VALUES(?,?,'pending',?,?,?)").bind(requestId, name, now, groupId, await hashPin(pin, env)).run();
+    } catch (e) {
+      // Another request with this name landed first (names are unique per group).
+      if (String(e).toLowerCase().includes("unique")) return fail("Someone in this group already uses that name. Choose a different name.", 409);
+      throw e;
+    }
     return json({ ok: true, requestId, message: "Group access request submitted." }, 201);
   }
   if (method === "POST" && p === "/api/admin/login") {
@@ -364,10 +370,15 @@ async function api(req, env, url) {
       if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Choose a different name.", 409);
       const taken = await db.prepare("SELECT 1 FROM appx_access_requests WHERE group_id=?1 AND id<>?2 AND lower(display_name)=lower(?3) UNION SELECT 1 FROM appx_group_members WHERE group_id=?1 AND member_id<>?2 AND lower(name)=lower(?3)").bind(r.group_id, rid, name).first();
       if (taken) return fail("Someone in this group already has that name.", 409);
-      await db.batch([
-        db.prepare("UPDATE appx_access_requests SET display_name=? WHERE id=?").bind(name, rid),
-        db.prepare("UPDATE appx_group_members SET name=? WHERE group_id=? AND member_id=?").bind(name, r.group_id, rid),
-      ]);
+      try {
+        await db.batch([
+          db.prepare("UPDATE appx_access_requests SET display_name=? WHERE id=?").bind(name, rid),
+          db.prepare("UPDATE appx_group_members SET name=? WHERE group_id=? AND member_id=?").bind(name, r.group_id, rid),
+        ]);
+      } catch (e) {
+        if (String(e).toLowerCase().includes("unique")) return fail("Someone in this group already has that name.", 409);
+        throw e;
+      }
       return json({ ok: true, id: rid, name });
     }
     if (method === "POST" && p === "/api/admin/groups") {

@@ -12,7 +12,7 @@ test("all migrations apply cleanly, in Wrangler order, to an empty isolated data
   assert.deepEqual(await migrationFiles(), [
     "0001_app_tables.sql", "0002_admin_sessions.sql", "0003_app_settings.sql", "0003_reset_app_data.sql",
     "0004_group_access_and_unique_names.sql", "0004_settlements.sql", "0005_admin_profile.sql", "0006_indexes_and_rate_limits.sql",
-    "0007_member_pins.sql",
+    "0007_member_pins.sql", "0008_unique_member_names.sql",
   ]);
   await applyMigrations(db);
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'appx_%' ORDER BY name").all().map(r => r.name);
@@ -24,7 +24,7 @@ test("all migrations apply cleanly, in Wrangler order, to an empty isolated data
   const requestCols = db.prepare("PRAGMA table_info(appx_access_requests)").all().map(c => c.name);
   for (const c of ["group_id", "pin_hash", "pin_failures", "pin_locked_until"]) assert.ok(requestCols.includes(c), c);
   const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'appx_%'").all().map(r => r.name);
-  for (const name of ["appx_settlements_group_idx", "appx_expenses_group_created_idx", "appx_groups_unique_normalized_name", "appx_access_requests_group_name_idx"]) {
+  for (const name of ["appx_settlements_group_idx", "appx_expenses_group_created_idx", "appx_groups_unique_normalized_name", "appx_access_requests_unique_group_name"]) {
     assert.ok(indexes.includes(name), name);
   }
 });
