@@ -5,6 +5,7 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DateBadge, EmptyState, List, PersonAvatar, SectionTitle, pressableRow } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
+import { ExpandableExpense } from "./ExpenseBreakdown";
 import { usePeopleBalances, usePerson } from "@/hooks/queries";
 import type { PersonBalance } from "@/lib/api";
 import { inr } from "@/lib/money";
@@ -93,6 +94,7 @@ function Rows({ title, people, showGroup, onPick }: { title: string | null; peop
 
 function PersonDetail({ person, onOpenPage }: { person: PersonBalance; onOpenPage: () => void }) {
   const view = usePerson(person.groupId, person.memberId);
+  const [openExpense, setOpenExpense] = React.useState<string | null>(null);
   const d = view.data;
   const n = d?.netCents ?? person.netCents;
   return (
@@ -111,8 +113,9 @@ function PersonDetail({ person, onOpenPage }: { person: PersonBalance; onOpenPag
           <EmptyState icon={<ReceiptText />} title="Nothing shared">Expenses and payments between you two will appear here.</EmptyState>
         ) : (
           <ul>
-            {d.items.map(it => (
-              <li key={it.type + it.id} className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-0">
+            {d.items.map(it => {
+              // Expenses open their full split when tapped; payments are plain rows.
+              const body = <>
                 <DateBadge ts={it.createdAt} />
                 <span className="min-w-0 flex-1">
                   {it.type === "expense" ? (
@@ -124,8 +127,11 @@ function PersonDetail({ person, onOpenPage }: { person: PersonBalance; onOpenPag
                   )}
                 </span>
                 <span className={cn("tabular text-right text-[15px] font-medium whitespace-nowrap", it.effectCents > 0 ? "text-positive" : "text-negative")}>{it.effectCents > 0 ? "+" : "−"}{inr(Math.abs(it.effectCents))}</span>
-              </li>
-            ))}
+              </>;
+              return it.type === "expense"
+                ? <ExpandableExpense key={it.type + it.id} groupId={person.groupId} expenseId={it.id} meId={d.me.id} open={openExpense === it.id} onToggle={() => setOpenExpense(o => (o === it.id ? null : it.id))}>{body}</ExpandableExpense>
+                : <li key={it.type + it.id} className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-0">{body}</li>;
+            })}
           </ul>
         )}
       </div>

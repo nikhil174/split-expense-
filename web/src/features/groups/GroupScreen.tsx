@@ -9,7 +9,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  AnimatedMoney, BottomTabs, CategoryTile, DateBadge, EASE, EmptyState, Footnote, List, Page, PersonAvatar, SectionTitle, haptic, listItem, pressableRow, rowClass, searchFieldClass,
+  AnimatedMoney, BottomTabs, CategoryTile, DateBadge, EASE, EmptyState, Footnote, List, Page, PersonAvatar, SectionTitle, haptic, listItem, pressableRow, searchFieldClass,
 } from "@/components/app/bits";
 import { AquaCard, cardTap } from "./GroupsScreen";
 import { PeopleSheet } from "./PeopleSheet";
@@ -350,6 +350,8 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
 // ----- Insights -----
 function InsightsTab({ groupId }: { groupId: string }) {
   const dash = useDashboard(groupId), group = useGroup(groupId);
+  // Tap anyone to open their whole picture (same sheet as Group balances).
+  const [inspecting, setInspecting] = React.useState<string | null>(null);
   const max = Math.max(1, ...(dash.data?.spending.map(s => s.paidCents) || [0]));
   return (
     <div className="space-y-7">
@@ -361,7 +363,7 @@ function InsightsTab({ groupId }: { groupId: string }) {
         <SectionTitle>Who paid the most</SectionTitle>
         <div className="panel space-y-4 p-4">
           {!dash.data ? <RowsSkeleton rows={3} /> : dash.data.spending.map((s, i) => (
-            <div key={s.memberId}>
+            <button key={s.memberId} type="button" onClick={() => setInspecting(s.memberId)} className="block w-full cursor-pointer rounded-[14px] text-left transition-transform active:scale-[0.98]">
               <div className="flex items-center gap-3">
                 <PersonAvatar id={s.memberId} name={s.name} size="sm" />
                 <div className="min-w-0 flex-1">
@@ -371,8 +373,9 @@ function InsightsTab({ groupId }: { groupId: string }) {
                   </div>
                   <p className="mt-1 text-[12px] text-muted-foreground">Their share of expenses: {inr(s.shareCents)}</p>
                 </div>
+                <ChevronRight className={CHEVRON} strokeWidth={2.4} />
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </section>
@@ -380,14 +383,16 @@ function InsightsTab({ groupId }: { groupId: string }) {
         <SectionTitle>People</SectionTitle>
         <List inset={60}>
           {group.data?.members.map(mm => (
-            <div key={mm.id} className={rowClass}>
+            <button key={mm.id} type="button" onClick={() => setInspecting(mm.id)} className={pressableRow}>
               <PersonAvatar id={mm.id} name={mm.name} size="sm" />
               <span className="flex-1 truncate text-[15px]">{mm.name}{mm.id === group.data.me.id && <span className="text-muted-foreground"> (you)</span>}</span>
-              <span className="text-[13px] text-muted-foreground">{mm.status === "admin" ? "Admin" : mm.status === "pending" ? "Awaiting re-approval" : ""}</span>
-            </div>
+              <span className="text-[13px] text-muted-foreground">{mm.status === "admin" ? "Admin" : mm.status === "pending" ? "Waiting for approval" : ""}</span>
+              <ChevronRight className={CHEVRON} strokeWidth={2.4} />
+            </button>
           ))}
         </List>
       </section>
+      <MemberSheet groupId={groupId} memberId={inspecting} onClose={() => setInspecting(null)} meId={group.data?.me.id} />
     </div>
   );
 }

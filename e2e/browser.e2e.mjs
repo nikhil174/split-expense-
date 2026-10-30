@@ -204,7 +204,7 @@ try {
   await noHorizontalOverflow(cy, "people popup");
   await shot(cy, "cy-people-popup");
   await sheet.getByRole("button", { name: "You owe", exact: true }).click();
-  await sheet.getByRole("button", { name: /Bea E2E/ }).waitFor();
+  await sheet.getByRole("button", { name: /Bea E2E.*₹55\.00/s }).waitFor();
   await cy.keyboard.press("Escape");
   await sheet.waitFor({ state: "detached" });
   // "Owed to you" shows only that side.
@@ -314,6 +314,10 @@ try {
   await bea2.getByText("Dinner").waitFor();
   await bea2.getByText("Snacks").waitFor();
   await bea2.getByText("You paid Bea E2E").first().waitFor();
+  // Tapping an expense opens its full split, like on the Expenses tab.
+  await bea2.getByRole("button").filter({ hasText: "Dinner" }).click();
+  await bea2.getByRole("columnheader", { name: "Owes Bea E2E" }).waitFor();
+  assert.equal(await bea2.locator("tbody tr").count(), 2, "Bea and Cy in the dinner split");
   await cy.keyboard.press("Escape");
   await bea2.waitFor({ state: "detached" });
   step("Settle up sends ₹35 for Bea to confirm; a rejected payment never counts; after confirming everyone is settled");

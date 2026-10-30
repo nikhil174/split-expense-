@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedMoney, DateBadge, EmptyState, Footnote, Page, PersonAvatar, SectionTitle } from "@/components/app/bits";
 import { BackButton } from "./GroupScreen";
 import { SettleUpDrawer } from "./SettleUpDrawer";
+import { ExpenseBreakdown } from "./ExpenseBreakdown";
 import { useDebts, useGroup, usePerson } from "@/hooks/queries";
 import { inr } from "@/lib/money";
 import { goBack } from "@/lib/route";
@@ -18,6 +19,7 @@ const tr = "border-b border-hairline last:border-0";
 export function PersonScreen({ groupId, memberId }: { groupId: string; memberId: string }) {
   const view = usePerson(groupId, memberId), group = useGroup(groupId), debts = useDebts(groupId);
   const [settling, setSettling] = React.useState<null | { fromMemberId: string; toMemberId: string }>(null);
+  const [openExpense, setOpenExpense] = React.useState<string | null>(null);
   const d = view.data;
   const meId = d?.me.id;
   const myDebt = debts.data?.find(x => x.fromMemberId === meId && x.toMemberId === memberId && x.canRecord);
@@ -63,7 +65,11 @@ export function PersonScreen({ groupId, memberId }: { groupId: string; memberId:
               <thead><tr className="border-b border-hairline">{[["Date", "w-12"], ["Item", ""], ["Effect", "text-right"], ["Balance", "text-right"]].map(([c, cls]) => <th key={c} scope="col" className={cn("px-2 pt-3 pb-2 text-left text-[12px] font-medium text-muted-foreground first:pl-4 last:pr-4", cls)}>{c}</th>)}</tr></thead>
               <tbody>
                 {d.items.map((it, i) => (
-                  <m.tr key={it.type + it.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 12) * 0.025, duration: 0.25 }} className={tr}>
+                  <React.Fragment key={it.type + it.id}>
+                  <m.tr initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 12) * 0.025, duration: 0.25 }}
+                    // Tap an expense to see its full split underneath.
+                    {...(it.type === "expense" ? { onClick: () => setOpenExpense(o => (o === it.id ? null : it.id)), "aria-expanded": openExpense === it.id, role: "button", tabIndex: 0, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenExpense(o => (o === it.id ? null : it.id)); } } } : {})}
+                    className={cn(openExpense === it.id ? "bg-[#141716]/[0.025]" : tr, it.type === "expense" && "cursor-pointer transition-colors active:bg-[#141716]/[0.04]")}>
                     <td className="py-3 pr-1 pl-4"><DateBadge ts={it.createdAt} /></td>
                     <td className="w-full max-w-0 px-2 py-2.5">
                       {it.type === "expense" ? (
@@ -77,6 +83,10 @@ export function PersonScreen({ groupId, memberId }: { groupId: string; memberId:
                     <td className={cn("tabular px-2 py-2.5 text-right whitespace-nowrap", it.effectCents > 0 ? "text-positive" : "text-negative")}>{it.effectCents > 0 ? "+" : "−"}{inr(Math.abs(it.effectCents))}</td>
                     <td className={cn("tabular py-2.5 pr-4 pl-2 text-right whitespace-nowrap", it.runningCents > 0 ? "text-positive" : it.runningCents < 0 ? "text-negative" : "text-muted-foreground")}>{inr(it.runningCents)}</td>
                   </m.tr>
+                  {openExpense === it.id && (
+                    <tr className={tr}><td colSpan={4} className="bg-[#141716]/[0.025] p-0 pt-1"><ExpenseBreakdown groupId={groupId} expenseId={it.id} meId={d.me.id} /></td></tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
