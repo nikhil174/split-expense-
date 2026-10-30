@@ -2,7 +2,8 @@ import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { Check, Clock3 } from "lucide-react";
+import { Check, Clock3, Download } from "lucide-react";
+import { useInstallApp } from "@/components/app/InstallApp";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ export function AuthScreen() {
   const [tab, setTab] = React.useState<"signin" | "request">("signin");
   const [mode, setMode] = React.useState<"member" | "admin">("member");
   const [busy, setBusy] = React.useState(false);
+  const install = useInstallApp();
   const [requestId, setRequestId] = React.useState(storage.get);
   const groups = useQuery({ queryKey: ["public-groups"], queryFn: () => get<{ groups: PublicGroup[] }>("/api/groups/public").then(d => d.groups) });
   const [form, setForm] = React.useState({ groupId: "", name: "", memberPin: "", confirmPin: "", adminName: "", pin: "", requestName: "", requestGroup: "", requestPin: "", requestPin2: "" });
@@ -164,6 +166,12 @@ export function AuthScreen() {
             </AnimatePresence>
           </div>
         </m.div>
+        {install.available && (
+          <button type="button" onClick={() => install.start()} className="mx-auto mt-6 inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-4 py-2.5 text-[14px] font-medium shadow-[0_1px_2px_rgb(16_40_32/6%)] ring-1 ring-[#141716]/[0.06] transition-transform active:scale-95">
+            <Download className="size-4" />Install the app
+          </button>
+        )}
+        {install.dialog}
         <p className="footnote mt-auto pt-10 text-center text-muted-foreground">Amounts are kept to the exact paisa.<span className="mt-1 block text-[11px] opacity-60">Build {__BUILD__}</span></p>
       </div>
     </div>

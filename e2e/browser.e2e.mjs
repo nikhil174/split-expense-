@@ -372,6 +372,21 @@ try {
   await adminSignIn(admin);
   await admin.getByRole("heading", { name: "Your groups" }).waitFor();
   step("sign out lands on the sign-in screen (admin and member), stays there after reload, and signing back in works");
+  // Installable: manifest, icons and service worker are served, Chrome reports no
+  // installability errors, and "Install the app" explains how on this phone.
+  const fresh = await newPage();
+  for (const path of ["/manifest.webmanifest", "/sw.js", "/icons/icon-192.png", "/icons/maskable-512.png", "/icons/apple-touch-icon.png"]) {
+    assert.equal((await fresh.request.get(BASE + path)).status(), 200, path);
+  }
+  const cdp = await fresh.context().newCDPSession(fresh);
+  await fresh.waitForFunction(async () => !!(await navigator.serviceWorker?.getRegistration()), null, { timeout: 15000 });
+  assert.deepEqual((await cdp.send("Page.getInstallabilityErrors")).installabilityErrors, []);
+  await fresh.getByRole("button", { name: "Install the app" }).click();
+  await fresh.getByRole("alertdialog").getByText("Install Split It").waitFor();
+  await fresh.getByRole("button", { name: "Got it" }).click();
+  await fresh.getByRole("alertdialog").waitFor({ state: "detached" });
+  await fresh.context().close();
+  step("installable as an app: manifest, icons and service worker; install steps on the sign-in screen");
   console.log("E2E PASSED");
 } finally {
   await browser.close();

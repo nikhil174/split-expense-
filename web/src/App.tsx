@@ -1,7 +1,8 @@
 import * as React from "react";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion } from "motion/react";
-import { LogOut } from "lucide-react";
+import { Download, LogOut } from "lucide-react";
+import { useInstallApp } from "@/components/app/InstallApp";
 import { Toaster } from "@/components/ui/sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PersonAvatar, Segmented, TopProgress, Wordmark } from "@/components/app/bits";
@@ -66,6 +67,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
   const route = useRoute();
   const qc = useQueryClient();
   const [signingOut, setSigningOut] = React.useState(false);
+  const install = useInstallApp();
   // Members never see the admin view.
   React.useEffect(() => { if (route.name === "admin" && !isAdmin) navigate({ name: "home" }, { replace: true }); }, [route.name, isAdmin]);
 
@@ -107,10 +109,12 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
                 <p className="text-xs text-muted-foreground">{isAdmin ? "Administrator · also a member" : "Member"}</p>
                 <p className="mt-1.5 text-[11px] text-muted-foreground/70">Build {__BUILD__}</p>
               </DropdownMenuLabel>
+              {install.available && <DropdownMenuItem onSelect={() => install.start()}><Download />Install app</DropdownMenuItem>}
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={e => { e.preventDefault(); signOut(); }} disabled={signingOut}><LogOut />{signingOut ? "Signing out…" : "Sign out"}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {install.dialog}
         </div>
         <TopProgress />
       </header>
