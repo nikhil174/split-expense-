@@ -17,7 +17,8 @@ export function MembersSheet({ groupId, open, onOpenChange }: { groupId: string;
   const me = group.data?.me;
   const [editing, setEditing] = React.useState<string | null>(null);
   const [name, setName] = React.useState("");
-  const rename = useAdminAction((v: { id: string; name: string }) => post(`/api/admin/requests/${v.id}/rename`, { name: v.name }), v => `Renamed to “${v.name}”.`);
+  // The admin renames anyone; a member renames only themselves.
+  const rename = useAdminAction((v: { id: string; name: string }) => v.id === me?.id && !me?.isAdmin ? post("/api/me/name", { name: v.name }) : post(`/api/admin/requests/${v.id}/rename`, { name: v.name }), v => `Renamed to “${v.name}”.`);
   React.useEffect(() => { if (!open) setEditing(null); }, [open]);
 
   const start = (id: string, current: string) => { setEditing(id); setName(current); };
@@ -33,11 +34,11 @@ export function MembersSheet({ groupId, open, onOpenChange }: { groupId: string;
     <Drawer open={open} onOpenChange={o => { if (!rename.isPending) onOpenChange(o); }} repositionInputs={false}>
       <DrawerContent className="mx-auto max-h-[90dvh] max-w-xl rounded-t-[28px] border-0">
         <SheetHeader title={`${members.length} ${members.length === 1 ? "member" : "members"}`}
-          description={me?.isAdmin ? "Tap Edit to rename someone. Their new name shows on all past expenses." : "Everyone in this group."} disabled={rename.isPending} />
+          description={me?.isAdmin ? "Tap Edit to rename someone. Their new name shows on all past expenses." : "Everyone in this group. Tap Edit on your own name to change it."} disabled={rename.isPending} />
         <div className="safe-bottom min-h-0 overflow-y-auto px-4 pt-1 pb-6">
           <List inset={60}>
             {members.map(mm => {
-              const isMe = mm.id === me?.id, canRename = !!me?.isAdmin && mm.id !== "admin";
+              const isMe = mm.id === me?.id, canRename = me?.isAdmin ? mm.id !== "admin" : isMe;
               return editing === mm.id ? (
                 <form key={mm.id} onSubmit={save} className={cn(rowClass, "gap-2")}>
                   <PersonAvatar id={mm.id} name={clean || mm.name} size="sm" />

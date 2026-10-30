@@ -69,7 +69,7 @@ test("group list shows my net balance per group", async t => {
   assert.deepEqual([await list("Bea"), await list("Cy"), await list("admin")], [3000, -3000, 0]);
 });
 
-test("only the creator or admin can delete an expense; balances update", async t => {
+test("only the payer or admin can delete an expense; balances update", async t => {
   const f = await fixture(t);
   const { ids } = f;
   const e = await f.add("Bea", { description: "Dinner", amount: "100", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy] });
@@ -141,7 +141,7 @@ test("balances list everyone I owe or who owes me across groups, matching group 
   assert.equal((await call(f.env, "/api/balances")).status, 401);
 });
 
-test("creator or admin can edit an expense: amount, payer and who is in the split; balances follow", async t => {
+test("payer or admin can edit an expense: amount, payer and who is in the split; balances follow", async t => {
   const f = await fixture(t);
   const { ids } = f;
   const e = await f.add("Bea", { description: "Dinner", amount: "90", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy, ids.admin] });
@@ -163,8 +163,10 @@ test("creator or admin can edit an expense: amount, payer and who is in the spli
   assert.equal(await net("Bea", ids.Cy), -7000);
   assert.equal(await net("Bea", ids.admin), 0);
   // Edits are validated exactly like new expenses and touch nothing on failure.
-  assert.equal((await edit("Bea", { description: "Dinner", amount: "100", paidBy: ids.Bea, splitMode: "manual", allocations: [{ memberId: ids.Bea, amount: "60" }] })).status, 400);
-  assert.equal((await edit("Bea", { description: "Dinner", amount: "100", paidBy: ids.Bea, memberIds: [] })).status, 400);
+  // Cy paid now, so Bea can no longer change it; the admin's invalid edits are refused.
+  assert.equal((await edit("Bea", { description: "Dinner", amount: "100", paidBy: ids.Bea, memberIds: [ids.Bea] })).status, 403);
+  assert.equal((await edit("admin", { description: "Dinner", amount: "100", paidBy: ids.Bea, splitMode: "manual", allocations: [{ memberId: ids.Bea, amount: "60" }] })).status, 400);
+  assert.equal((await edit("admin", { description: "Dinner", amount: "100", paidBy: ids.Bea, memberIds: [] })).status, 400);
   assert.equal(await net("Bea", ids.Cy), -7000);
   assert.equal(f.raw.prepare("SELECT COUNT(*) AS n FROM appx_splits").get().n, 2);
   // Unknown expense, or one from another group, is not found.
@@ -235,33 +237,54 @@ test("names are unique per group in the database itself; people are tracked by a
   assert.equal((await call(f.env, `/api/admin/requests/${ids.Bea}/rename`, { method: "POST", cookie: f.adminCookie, body: { name: "cyrus" } })).status, 409);
 });
 
-test("admin can edit and delete anyone's expense; members only the ones they added", async t => {
+test("admin can edit and delete any expense; members only the ones they paid for", async t => {
   const f = await fixture(t);
   const { ids } = f;
   const body = (paidBy, memberIds) => ({ description: "Lunch", amount: "60", paidBy, memberIds });
-  // Bea adds an expense that Cy paid for and is part of; the admin adds one too.
-  const beas = (await f.add("Bea", body(ids.Cy, [ids.Bea, ids.Cy]))).data.id;
-  const admins = (await f.add("admin", body(ids.admin, [ids.admin, ids.Bea, ids.Cy]))).data.id;
+  // Bea adds an expense that Cy paid for; the admin adds one the admin paid.
+  const cyPaid = (await f.add("Bea", body(ids.Cy, [ids.Bea, ids.Cy]))).data.id;
+  const adminPaid = (await f.add("admin", body(ids.admin, [ids.admin, ids.Bea, ids.Cy]))).data.id;
   const edit = (who, eid) => call(f.env, `${f.G}/expenses/${eid}/edit`, { method: "POST", cookie: f.cookies[who], body: body(ids.Cy, [ids.Bea, ids.Cy]) });
   const del = (who, eid) => call(f.env, `${f.G}/expenses/${eid}/delete`, { method: "POST", cookie: f.cookies[who], body: {} });
   const flags = async (who, eid) => { const x = (await f.get(who, "/expenses")).data.expenses.find(e => e.id === eid); return [x.canEdit, x.canDelete]; };
 
   // What each person's screen offers matches what the server allows.
-  assert.deepEqual(await flags("Bea", beas), [true, true]);
-  assert.deepEqual(await flags("Cy", beas), [false, false], "paying for it or being in it is not enough");
-  assert.deepEqual(await flags("admin", beas), [true, true]);
-  assert.deepEqual(await flags("Bea", admins), [false, false]);
-  assert.deepEqual(await flags("Cy", admins), [false, false]);
+  assert.deepEqual(await flags("Cy", cyPaid), [true, true], "the payer");
+  assert.deepEqual(await flags("Bea", cyPaid), [false, false], "adding it or being in it is not enough");
+  assert.deepEqual(await flags("admin", cyPaid), [true, true]);
+  assert.deepEqual(await flags("Bea", adminPaid), [false, false]);
+  assert.deepEqual(await flags("Cy", adminPaid), [false, false]);
 
-  assert.equal((await edit("Cy", beas)).status, 403);
-  assert.equal((await del("Cy", beas)).status, 403);
-  assert.equal((await edit("Bea", admins)).status, 403);
-  assert.equal((await del("Bea", admins)).status, 403);
-  assert.equal((await edit("Bea", beas)).status, 200);
-  assert.equal((await edit("admin", beas)).status, 200);
-  assert.equal((await del("admin", beas)).status, 200);
-  assert.equal((await del("admin", admins)).status, 200);
+  assert.equal((await edit("Bea", cyPaid)).status, 403);
+  assert.equal((await del("Bea", cyPaid)).status, 403);
+  assert.equal((await edit("Cy", adminPaid)).status, 403);
+  assert.equal((await del("Cy", adminPaid)).status, 403);
+  assert.equal((await edit("Cy", cyPaid)).status, 200);
+  assert.equal((await edit("admin", cyPaid)).status, 200);
+  assert.equal((await del("Cy", cyPaid)).status, 200);
+  assert.equal((await del("admin", adminPaid)).status, 200);
   assert.equal(f.raw.prepare("SELECT COUNT(*) AS n FROM appx_expenses").get().n, 0);
+});
+
+test("members can change their own name (not anyone else's); the admin's login name is not changed here", async t => {
+  const f = await fixture(t);
+  const { ids } = f;
+  await f.add("Bea", { description: "Dinner", amount: "90", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy] });
+  const me = (who, name) => call(f.env, "/api/me/name", { method: "POST", cookie: f.cookies[who], body: { name } });
+  const r = await me("Bea", "Beatrice");
+  assert.deepEqual([r.status, r.data.name, r.data.id], [200, "Beatrice", ids.Bea], "renames only the caller");
+  assert.equal((await call(f.env, "/api/me", { cookie: f.cookies.Bea })).data.member.name, "Beatrice");
+  assert.equal((await f.get("Cy", "/expenses")).data.expenses[0].paidByName, "Beatrice", "past expenses show the new name");
+  // Same rules as the admin's rename.
+  assert.equal((await me("Bea", "cy")).status, 409, "taken in the group");
+  assert.equal((await me("Bea", "Alex Admin")).status, 409, "the admin's name");
+  assert.equal((await me("Bea", "B")).status, 400);
+  // Members cannot rename others through the admin route.
+  assert.equal((await call(f.env, `/api/admin/requests/${ids.Cy}/rename`, { method: "POST", cookie: f.cookies.Bea, body: { name: "Cyrus" } })).status, 401);
+  assert.equal((await me("admin", "New Admin")).status, 403);
+  assert.equal((await call(f.env, "/api/me/name", { method: "POST", body: { name: "X Y" } })).status, 401);
+  // Signing in uses the new name.
+  assert.equal((await call(f.env, "/api/access/signin", { method: "POST", body: { name: "Beatrice", groupId: f.groupId, pin: MEMBER_PIN } })).status, 200);
 });
 
 test("member summary: anyone in the group can see one person's totals, debts, expenses and payments", async t => {

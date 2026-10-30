@@ -187,6 +187,29 @@ function describeDebt(debt, nameOf) {
   return { fromMemberId: debt.fromMemberId, fromName: nameOf(debt.fromMemberId), toMemberId: debt.toMemberId, toName: nameOf(debt.toMemberId), amountCents: debt.amountCents, amount: rupees(debt.amountCents) };
 }
 
+// Renames a member everywhere: the name they sign in with and the name on
+// their past expenses and payments (stored by id). Used by the admin for
+// anyone, and by members for themselves. Their current session keeps working.
+async function renameMember_(db, rid, rawName) {
+  const name = cleanName(rawName);
+  if (name.length < 2 || name.length > 60) return fail("Name must be 2–60 characters.");
+  const r = await db.prepare("SELECT id,group_id FROM appx_access_requests WHERE id=?").bind(rid).first();
+  if (!r) return fail("Member not found.", 404);
+  if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Choose a different name.", 409);
+  const taken = await db.prepare("SELECT 1 FROM appx_access_requests WHERE group_id=?1 AND id<>?2 AND lower(display_name)=lower(?3) UNION SELECT 1 FROM appx_group_members WHERE group_id=?1 AND member_id<>?2 AND lower(name)=lower(?3)").bind(r.group_id, rid, name).first();
+  if (taken) return fail("Someone in this group already has that name.", 409);
+  try {
+    await db.batch([
+      db.prepare("UPDATE appx_access_requests SET display_name=? WHERE id=?").bind(name, rid),
+      db.prepare("UPDATE appx_group_members SET name=? WHERE group_id=? AND member_id=?").bind(name, r.group_id, rid),
+    ]);
+  } catch (e) {
+    if (String(e).toLowerCase().includes("unique")) return fail("Someone in this group already has that name.", 409);
+    throw e;
+  }
+  return json({ ok: true, id: rid, name });
+}
+
 // Validates an add/edit expense request body against the group's active
 // members. Returns { desc, cents, paidBy, splitRows } or { error }.
 async function parseExpense(db, gid, b) {
@@ -394,25 +417,7 @@ async function api(req, env, url) {
       return json({ ok: true });
     }
     const renameMember = p.match(/^\/api\/admin\/requests\/([\w-]+)\/rename$/);
-    if (method === "POST" && renameMember) {
-      const rid = renameMember[1], name = cleanName((await body(req))?.name);
-      if (name.length < 2 || name.length > 60) return fail("Name must be 2–60 characters.");
-      const r = await db.prepare("SELECT id,group_id FROM appx_access_requests WHERE id=?").bind(rid).first();
-      if (!r) return fail("Member not found.", 404);
-      if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Choose a different name.", 409);
-      const taken = await db.prepare("SELECT 1 FROM appx_access_requests WHERE group_id=?1 AND id<>?2 AND lower(display_name)=lower(?3) UNION SELECT 1 FROM appx_group_members WHERE group_id=?1 AND member_id<>?2 AND lower(name)=lower(?3)").bind(r.group_id, rid, name).first();
-      if (taken) return fail("Someone in this group already has that name.", 409);
-      try {
-        await db.batch([
-          db.prepare("UPDATE appx_access_requests SET display_name=? WHERE id=?").bind(name, rid),
-          db.prepare("UPDATE appx_group_members SET name=? WHERE group_id=? AND member_id=?").bind(name, r.group_id, rid),
-        ]);
-      } catch (e) {
-        if (String(e).toLowerCase().includes("unique")) return fail("Someone in this group already has that name.", 409);
-        throw e;
-      }
-      return json({ ok: true, id: rid, name });
-    }
+    if (method === "POST" && renameMember) return renameMember_(db, renameMember[1], (await body(req))?.name);
     if (method === "POST" && p === "/api/admin/groups") {
       const b = await body(req), name = cleanName(b?.name);
       if (name.length < 2 || name.length > 80) return fail("Group name must be 2–80 characters.");
@@ -643,6 +648,13 @@ async function api(req, env, url) {
     await db.prepare("DELETE FROM appx_payment_methods WHERE member_id=?").bind(u.id).run();
     return json({ method: methodOut(null) });
   }
+  // A member changes their own name. (The admin's name is their login, so it
+  // is not changed here.)
+  if (method === "POST" && p === "/api/me/name") {
+    if (isAdmin) return fail("The admin name is your login and can't be changed here.", 403);
+    if (await rateLimited(db, "rename", u.id, RATE_LIMITS.paymentMethodWrite)) return tooMany();
+    return renameMember_(db, u.id, (await body(req))?.name);
+  }
   if (method === "POST" && p === "/api/groups") return fail("Only an administrator can create groups.", 403);
   if (method === "POST" && p === "/api/groups/join") return fail("Invite codes do not bypass group approval. Request access to the group instead.", 403);
   const gm = p.match(/^\/api\/groups\/([\w-]+)(?:\/(.*))?$/);
@@ -695,9 +707,9 @@ async function api(req, env, url) {
     const editExpense = tail.match(/^expenses\/([\w-]+)\/edit$/);
     if (method === "POST" && editExpense) {
       if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
-      const e = await db.prepare("SELECT id,created_by FROM appx_expenses WHERE id=? AND group_id=?").bind(editExpense[1], gid).first();
+      const e = await db.prepare("SELECT id,paid_by FROM appx_expenses WHERE id=? AND group_id=?").bind(editExpense[1], gid).first();
       if (!e) return fail("Expense not found.", 404);
-      if (!isAdmin && e.created_by !== u.id) return fail("Only the person who added this expense or the admin can edit it.", 403);
+      if (!isAdmin && e.paid_by !== u.id) return fail("Only the person who paid for this expense or the admin can edit it.", 403);
       const parsed = await parseExpense(db, gid, await body(req));
       if (parsed.error) return fail(parsed.error);
       const { desc, cents, paidBy, splitRows } = parsed;
@@ -725,16 +737,16 @@ async function api(req, env, url) {
         const myShareCents = rows.find(row => row.memberId === u.id)?.amountCents || 0;
         // Positive: others owe me on this expense ("you lent"); negative: I owe the payer ("you borrowed").
         const myEffectCents = x.paidBy === u.id ? x.amountCents - myShareCents : -myShareCents;
-        return { ...x, amount: rupees(x.amountCents), paidByName: nameOf(x.paidBy), createdByName: nameOf(x.createdBy), splitCount: rows.length, splits: rows, myShareCents, myEffectCents, canDelete: isAdmin || x.createdBy === u.id, canEdit: isAdmin || x.createdBy === u.id };
+        return { ...x, amount: rupees(x.amountCents), paidByName: nameOf(x.paidBy), createdByName: nameOf(x.createdBy), splitCount: rows.length, splits: rows, myShareCents, myEffectCents, canDelete: isAdmin || x.paidBy === u.id, canEdit: isAdmin || x.paidBy === u.id };
       });
       return json({ expenses });
     }
     const deleteExpense = tail.match(/^expenses\/([\w-]+)\/delete$/);
     if (method === "POST" && deleteExpense) {
       if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
-      const e = await db.prepare("SELECT id,created_by FROM appx_expenses WHERE id=? AND group_id=?").bind(deleteExpense[1], gid).first();
+      const e = await db.prepare("SELECT id,paid_by FROM appx_expenses WHERE id=? AND group_id=?").bind(deleteExpense[1], gid).first();
       if (!e) return fail("Expense not found.", 404);
-      if (!isAdmin && e.created_by !== u.id) return fail("Only the person who added this expense or the admin can delete it.", 403);
+      if (!isAdmin && e.paid_by !== u.id) return fail("Only the person who paid for this expense or the admin can delete it.", 403);
       await db.batch([
         db.prepare("DELETE FROM appx_splits WHERE expense_id=?").bind(e.id),
         db.prepare("DELETE FROM appx_expenses WHERE id=? AND group_id=?").bind(e.id, gid),
@@ -809,7 +821,7 @@ async function api(req, env, url) {
       return json({ settlements: r.results.map(x => ({
         ...x, amount: rupees(x.amountCents),
         canDecide: x.status === "pending" && (isAdmin || x.toMemberId === u.id),
-        canCancel: x.status === "pending" && (isAdmin || x.fromMemberId === u.id || x.createdBy === u.id),
+        canCancel: x.status === "pending" && (isAdmin || x.fromMemberId === u.id),
       })) });
     }
     if (method === "GET" && (tail === "settlements/mine" || tail === "debts")) {
@@ -888,7 +900,7 @@ async function api(req, env, url) {
       if (pay.status !== "pending") return fail(`This payment was already ${pay.status}.`, 409);
       const now = Date.now();
       if (action === "cancel") {
-        if (!isAdmin && pay.fromId !== u.id && pay.createdBy !== u.id) return fail("Only the person who recorded this payment can cancel it.", 403);
+        if (!isAdmin && pay.fromId !== u.id) return fail("Only the person who paid or the admin can cancel this payment.", 403);
         await db.prepare("DELETE FROM appx_settlements WHERE id=? AND status='pending'").bind(sid).run();
         return json({ ok: true, cancelled: true });
       }
