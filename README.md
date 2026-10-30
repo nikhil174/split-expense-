@@ -6,11 +6,11 @@ Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 - Public endpoint lists existing groups; visitors choose a group and submit their name, that group ID and a 4-digit PIN.
 - Group names are globally unique (case-insensitive, surrounding whitespace ignored), enforced by a D1 unique index.
 - Only the separate admin session can create groups or review membership requests.
-- Approving a request both activates the visitor's 3-hour access and adds them to the requested group.
+- Approving a request makes the visitor a member of the requested group. Approval does not expire: it lasts until the admin revokes or removes them, so there is no re-approval at sign-in.
 - Admin identity/session (`split_admin`) and regular member session (`split_session`) are separate. The admin can request membership in their own group and approve that request, then use the normal expense UI.
 - Members cannot create groups, directly add members, or bypass approval using invite codes.
 - The admin signs in with a PIN configured as the Worker secret `ADMIN_PIN`.
-- Approved members sign in with group + name + their 4-digit PIN for a server-side session lasting up to 3 hours.
+- Approved members sign in with group + name + their 4-digit PIN for a server-side session lasting up to 3 hours; after that they enter their PIN again.
 - The admin can reject pending requests or revoke approved access.
 - Group, expense, balance, and member reads verify both the active member session and group membership.
 - Group access is request/approval based; no invite-code bypass.
@@ -46,7 +46,7 @@ Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 - Older data may contain a separate member entry for the admin (same person, two identities). The Admin view flags it, and **Review merge → Merge into me** folds it into the admin: expenses paid, shares (added together on the same expense) and payments move over, payments between the two entries are dropped, and everyone else's balance is unchanged (`GET /api/admin/requests/:id/merge-preview`, `POST /api/admin/requests/:id/merge-into-admin`).
 
 ## Membership policy (as implemented)
-- Members who are approved (even if their 3-hour window lapsed) or pending re-approval stay selectable as payer/split members; acting in the app still requires an active session.
+- Approved members, and members waiting for approval, are selectable as payer/split members; acting in the app still requires an active session.
 - Revoked, removed or deleted members are not selectable for new expenses or member-recorded payments. Their `appx_group_members` row is kept so historical expenses, splits, settlements and balances still show their name.
 ## Member PINs (migration `0007`)
 - Every member has a 4-digit PIN, chosen when they request access and required at sign-in. Only a hash is stored (`appx_access_requests.pin_hash`): PBKDF2-SHA256, 100,000 iterations, a random 16-byte salt per member, with `SESSION_SECRET` mixed in as a pepper so a copy of the database alone cannot be brute-forced. The iteration count is stored with each hash.

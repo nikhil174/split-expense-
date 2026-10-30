@@ -102,3 +102,25 @@ test("PIN hashes are peppered with SESSION_SECRET: a copied database alone does 
   f.env.SESSION_SECRET = "a-different-secret";
   assert.equal((await f.signin("Bea", MEMBER_PIN)).status, 401);
 });
+
+test("approval does not expire: approved members sign in with their PIN, no new request to the admin", async t => {
+  const f = await fixture(t);
+  // Approving no longer sets an expiry.
+  assert.equal(f.raw.prepare("SELECT expires_at FROM appx_access_requests WHERE id=?").get(f.g.ids.Bea).expires_at, null);
+  // Members approved under the old 3-hour rule, long since lapsed, still get in.
+  f.raw.prepare("UPDATE appx_access_requests SET expires_at=? WHERE id=?").run(Date.now() - 30 * 86400000, f.g.ids.Bea);
+  assert.equal((await call(f.env, "/api/me", { cookie: f.g.cookies.Bea })).data.member?.name, "Bea", "existing session still valid");
+  const again = await f.signin("Bea", MEMBER_PIN);
+  assert.equal(again.status, 200);
+  assert.equal(f.raw.prepare("SELECT status FROM appx_access_requests WHERE id=?").get(f.g.ids.Bea).status, "approved", "no re-approval request");
+  const pending = (await call(f.env, "/api/admin/requests", { cookie: f.g.adminCookie })).data.requests.filter(r => r.status === "pending");
+  assert.equal(pending.length, 0);
+  // Asking for access again under an approved name just says to sign in.
+  const dup = await f.request("Bea", MEMBER_PIN);
+  assert.equal(dup.status, 409);
+  assert.match(dup.data.error, /Sign in with your PIN/);
+  // Revoking still locks them out immediately, sessions included.
+  await f.admin(`/api/admin/requests/${f.g.ids.Bea}/revoke`);
+  assert.equal((await call(f.env, "/api/me", { cookie: again.cookie })).data.member, null);
+  assert.equal((await f.signin("Bea", MEMBER_PIN)).status, 403);
+});

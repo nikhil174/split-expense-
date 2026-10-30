@@ -128,8 +128,10 @@ async function session(req, env) {
   const raw = cookie(req, "split_session");
   if (!raw) return null;
   const tokenHash = await hash(raw);
-  const s = await db.prepare("SELECT s.request_id,s.expires_at,r.display_name,r.status,r.expires_at AS access_expires FROM appx_sessions s JOIN appx_access_requests r ON r.id=s.request_id WHERE s.token_hash=?").bind(tokenHash).first();
-  if (!s || s.expires_at < Date.now() || s.access_expires < Date.now() || s.status !== "approved") {
+  // Approval does not expire (members prove who they are with their PIN);
+  // the session itself does, and revoking/removing a member ends it at once.
+  const s = await db.prepare("SELECT s.request_id,s.expires_at,r.display_name,r.status FROM appx_sessions s JOIN appx_access_requests r ON r.id=s.request_id WHERE s.token_hash=?").bind(tokenHash).first();
+  if (!s || s.expires_at < Date.now() || s.status !== "approved") {
     await db.prepare("DELETE FROM appx_sessions WHERE token_hash=?").bind(tokenHash).run();
     return null;
   }
@@ -242,7 +244,7 @@ async function api(req, env, url) {
     const now = Date.now();
     if (existing) {
       if (existing.status === "pending") return fail("An access request is already waiting for admin approval.", 409);
-      if (existing.status === "approved" && existing.expires_at && existing.expires_at > now) return fail("This name already has active access in this group.", 409);
+      if (existing.status === "approved") return fail("This name is already a member of this group. Sign in with your PIN instead.", 409);
       // Asking again under an existing name needs that name's PIN (or sets it,
       // for members from before PINs), so nobody can take over someone else's entry.
       const bad = await checkMemberPin(db, env, existing, pin, { create: true });
@@ -406,7 +408,7 @@ async function api(req, env, url) {
       if (action === "approve") {
         if (!reqRow.group_id) return fail("This request is not linked to a group.", 409);
         await db.batch([
-          db.prepare("UPDATE appx_access_requests SET status='approved',approved_at=?,expires_at=? WHERE id=?").bind(Date.now(), Date.now() + SESSION_MS, rid),
+          db.prepare("UPDATE appx_access_requests SET status='approved',approved_at=?,expires_at=NULL WHERE id=?").bind(Date.now(), rid),
           db.prepare("INSERT OR IGNORE INTO appx_group_members(group_id,member_id,name) VALUES(?,?,?)").bind(reqRow.group_id, rid, reqRow.display_name),
         ]);
       } else {
@@ -515,9 +517,9 @@ async function api(req, env, url) {
   if (method === "POST" && p === "/api/access/enter") {
     if (await rateLimited(db, "signin", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
     const b = await body(req), rid = textField(b?.requestId);
-    const r = await db.prepare("SELECT id,status,expires_at FROM appx_access_requests WHERE id=?").bind(rid).first();
-    if (!r || r.status !== "approved" || !r.expires_at || r.expires_at < Date.now()) return fail("This request is not approved or access has expired. Request approval again.", 403);
-    const token = id() + id(), tokenHash = await hash(token), expires = Math.min(Date.now() + SESSION_MS, r.expires_at);
+    const r = await db.prepare("SELECT id,status FROM appx_access_requests WHERE id=?").bind(rid).first();
+    if (!r || r.status !== "approved") return fail("This request is not approved. Ask the admin to approve it, or request access again.", 403);
+    const token = id() + id(), tokenHash = await hash(token), expires = Date.now() + SESSION_MS;
     await db.prepare("INSERT INTO appx_sessions(token_hash,request_id,expires_at) VALUES(?,?,?)").bind(tokenHash, rid, expires).run();
     return json({ ok: true }, 200, { "set-cookie": setCookie("split_session", token, Math.floor((expires - Date.now()) / 1000)) });
   }
@@ -533,15 +535,7 @@ async function api(req, env, url) {
     if (r.status !== "approved") return fail("Your access is not currently approved. Request access again to reactivate your existing entry.", 403);
     const bad = await checkMemberPin(db, env, r, pin, { create: b?.createPin === true });
     if (bad) return bad;
-    if (!r.expires_at || r.expires_at < Date.now()) {
-      const now = Date.now();
-      await db.batch([
-        db.prepare("UPDATE appx_access_requests SET status='pending',requested_at=?,approved_at=NULL,expires_at=NULL WHERE id=?").bind(now, r.id),
-        db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(r.id),
-      ]);
-      return fail("Your approval expired. We've sent a new approval request to the admin using your existing membership entry.", 403);
-    }
-    const token = id() + id(), tokenHash = await hash(token), expires = Math.min(Date.now() + SESSION_MS, r.expires_at);
+    const token = id() + id(), tokenHash = await hash(token), expires = Date.now() + SESSION_MS;
     await db.prepare("INSERT INTO appx_sessions(token_hash,request_id,expires_at) VALUES(?,?,?)").bind(tokenHash, r.id, expires).run();
     return json({ ok: true }, 200, { "set-cookie": setCookie("split_session", token, Math.floor((expires - Date.now()) / 1000)) });
   }

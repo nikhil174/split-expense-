@@ -4,10 +4,22 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Drawer as DrawerPrimitive } from "vaul"
 
+// Only the grab handle drags a sheet closed, so scrolling a long form inside
+// it can never dismiss it by accident (the close button and tapping outside
+// still close it).
 function Drawer({
+  handleOnly = true,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
-  return <DrawerPrimitive.Root data-slot="drawer" {...props} />
+  return <DrawerPrimitive.Root data-slot="drawer" handleOnly={handleOnly} {...props} />
+}
+
+// When a field inside a sheet gets focus, bring it to the middle of the
+// sheet once the on-screen keyboard has opened, so it is never hidden.
+function revealFocusedField(e: React.FocusEvent<HTMLDivElement>) {
+  const el = e.target as HTMLElement
+  if (!el.matches("input:not([type=checkbox]):not([type=radio]), textarea, select")) return
+  window.setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 320)
 }
 
 function DrawerTrigger({
@@ -62,9 +74,13 @@ function DrawerContent({
           "data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=left]:border-r data-[vaul-drawer-direction=left]:sm:max-w-sm",
           className
         )}
+        onFocus={revealFocusedField}
         {...props}
       >
-        <div className="mx-auto mt-2.5 hidden h-[5px] w-10 shrink-0 rounded-full bg-[#141716]/15 group-data-[vaul-drawer-direction=bottom]/drawer-content:block" />
+        {/* A full-width strip is the drag area; the pill is just what you see. */}
+        <DrawerPrimitive.Handle className="hidden !h-6 !w-full shrink-0 !rounded-none !bg-transparent !opacity-100 group-data-[vaul-drawer-direction=bottom]/drawer-content:block [&>[data-vaul-handle-hitarea]]:flex [&>[data-vaul-handle-hitarea]]:items-center [&>[data-vaul-handle-hitarea]]:justify-center">
+          <span className="block h-[5px] w-10 rounded-full bg-[#141716]/15" />
+        </DrawerPrimitive.Handle>
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>
