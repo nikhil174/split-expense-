@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { toast } from "sonner";
 import {
   get, post, type AccessRequest, type AdminDashboard, type AdminExpense, type AdminGroup, type Balance, type Dashboard,
-  type Debt, type Expense, type GroupDetail, type GroupSummary, type Me, type MergePreview, type MemberSummary, type Mine, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
+  type Debt, type Expense, type GroupDetail, type GroupSummary, type Me, type MergePreview, type MemberSummary, type GroupPaymentMethod, type Mine, type PaymentMethod, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
 } from "@/lib/api";
 
 export const keys = {
@@ -10,6 +10,7 @@ export const keys = {
   groups: ["groups"] as const,
   people: ["people-balances"] as const,
   pending: ["pending-payments"] as const,
+  paymentMethod: ["payment-method"] as const,
   group: (id: string) => ["group", id] as const,
   admin: ["admin"] as const,
 };
@@ -20,6 +21,17 @@ export const useGroups = (enabled = true) =>
 
 // Payments waiting for me to confirm, or that I sent and are waiting on someone else.
 export const usePendingPayments = () => useQuery({ queryKey: keys.pending, queryFn: () => get<{ toConfirm: PendingPayment[]; waiting: PendingPayment[] }>("/api/payments/pending"), refetchInterval: 60_000 });
+// My UPI details, and everyone's in a group.
+export const useMyPaymentMethod = () => useQuery({ queryKey: keys.paymentMethod, queryFn: () => get<{ method: PaymentMethod }>("/api/payment-method").then(d => d.method) });
+export const useGroupPaymentMethods = (id: string) => useQuery({ ...groupQuery<{ people: GroupPaymentMethod[] }>(id, "payment-methods", "/payment-methods"), select: d => d.people });
+export function useSavePaymentMethod() {
+  const qc = useQueryClient();
+  return useMutation({
+    // qr: a data URL to set it, null to remove it, undefined to keep it.
+    mutationFn: (body: { upiId: string; qr?: string | null } | "delete") => body === "delete" ? post<{ method: PaymentMethod }>("/api/payment-method/delete") : post<{ method: PaymentMethod }>("/api/payment-method", body),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: keys.paymentMethod }), qc.invalidateQueries({ queryKey: ["group"] })]),
+  });
+}
 export const usePeopleBalances = () => useQuery({ queryKey: keys.people, queryFn: () => get<PeopleBalances>("/api/balances") });
 
 // Every group-scoped query shares the ["group", id] prefix, so one

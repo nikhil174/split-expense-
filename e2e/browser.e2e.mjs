@@ -240,9 +240,25 @@ try {
   await shot(cy, "cy-person");
   step("group balance opens the people popup; person drill-down lists both shared expenses with a running balance");
 
+  // Bea adds her UPI ID and QR from the account menu; Cy then sees it when paying her.
+  await bea.getByRole("button", { name: "Account" }).click();
+  await bea.getByRole("menuitem", { name: "Your UPI" }).click();
+  const upiSheet = bea.getByRole("dialog");
+  await upiSheet.getByLabel("UPI ID").fill("bea.e2e@okaxis");
+  await upiSheet.getByLabel("Choose QR image").setInputFiles({ name: "qr.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64") });
+  await upiSheet.getByRole("img", { name: "Your UPI QR code" }).waitFor();
+  await upiSheet.getByRole("button", { name: "Save UPI details" }).click();
+  await toast(bea, "UPI details saved");
+  await upiSheet.waitFor({ state: "detached" });
+  step("member adds a UPI ID and QR code from the account menu");
+
   await cy.getByRole("button", { name: "Pay Bea E2E" }).click();
   const amount = cy.getByLabel("Amount paid");
   await amount.waitFor();
+  const upi = cy.getByTestId("pay-by-upi");
+  await upi.getByText("bea.e2e@okaxis").waitFor();
+  await upi.getByRole("img", { name: "Bea E2E's UPI QR code" }).waitFor();
+  assert.match(await upi.getByRole("link", { name: /in a UPI app/ }).getAttribute("href"), /^upi:\/\/pay\?pa=bea\.e2e@okaxis&pn=Bea%20E2E&cu=INR&am=55\.00/);
   assert.equal(await amount.inputValue(), "55.00", "prefilled with the full debt");
   await amount.fill("60");
   await cy.getByText("That's more than the ₹55.00 owed.").waitFor();

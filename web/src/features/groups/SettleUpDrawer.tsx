@@ -5,6 +5,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, PartyPopper } from "lucide-react
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { List, LoadingButton, PersonAvatar, SectionTitle, haptic, pressableRow } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
+import { PayByUpi } from "./UpiPayments";
 import { glitterBurst } from "@/components/app/glitter";
 import { useDebts, useMine, useRecordPayment } from "@/hooks/queries";
 import type { Debt } from "@/lib/api";
@@ -129,6 +130,7 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                   ))}
                   <button type="button" onClick={() => { setAmount(""); document.getElementById("settle-amount")?.focus(); }} className="cursor-pointer rounded-full bg-white px-4 py-2 text-[14px] font-medium text-foreground ring-1 ring-[#141716]/[0.08] transition-transform active:scale-95">Other amount</button>
                 </div>
+                {debt.fromMemberId === meId && <PayByUpi groupId={groupId} toMemberId={debt.toMemberId} amount={amount} />}
                 <p aria-live="polite" className={cn("footnote mt-4 min-h-5 text-center", over || error ? "text-negative" : left === 0 ? "text-positive" : "text-muted-foreground")}>
                   {error || (!amount.trim() ? "Enter how much was paid." : !cents ? "Enter an amount like 250 or 249.50." : over ? `That's more than the ${inr(debt.amountCents)} owed.` : left === 0 ? "This clears the full amount ✓" : `Partial payment · ${inr(left!)} will still be owed after this.`)}
                 </p>

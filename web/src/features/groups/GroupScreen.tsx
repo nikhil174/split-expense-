@@ -16,6 +16,7 @@ import { PeopleSheet } from "./PeopleSheet";
 import { MembersSheet } from "./MembersSheet";
 import { PendingPayments } from "./PendingPayments";
 import { MemberSheet } from "./MemberSheet";
+import { UpiPeople } from "./UpiPayments";
 import { PairSheet } from "./PairDetail";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
@@ -315,7 +316,9 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
   const payments = useSettlements(groupId);
   const who = (id: string, name: string) => (id === meId ? "You" : name);
   return (
-    <>
+    <div className="space-y-7">
+    <UpiPeople groupId={groupId} />
+    <div>
       <SectionTitle action={payments.data && payments.data.length > 0 ? <span className="tabular text-[13px] text-muted-foreground">Total {inr(payments.data.reduce((s, x) => s + (x.status === "confirmed" ? x.amountCents : 0), 0))}</span> : undefined}>
         {payments.data ? `${payments.data.length} ${payments.data.length === 1 ? "payment" : "payments"}` : "Payments"}
       </SectionTitle>
@@ -343,7 +346,8 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
           </table>
         )}
       </div>
-    </>
+    </div>
+    </div>
   );
 }
 
