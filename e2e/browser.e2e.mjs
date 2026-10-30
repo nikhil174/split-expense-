@@ -300,6 +300,28 @@ try {
   assert.equal(await admin.locator("tbody").getByText(/\bCy E2E\b/).count(), 0, "old name gone from history");
   step("admin renames a member; the new name shows on their past payments");
 
+  // Group screen: "N members" opens a popup; the admin edits a name right there.
+  await admin.getByRole("button", { name: /3 members/ }).click();
+  const members = admin.getByRole("dialog");
+  await members.getByRole("button", { name: "Rename Bea E2E" }).click();
+  await members.getByLabel("New name for Bea E2E").fill("Beatrice E2E");
+  await members.getByRole("button", { name: "Save name" }).click();
+  await toast(admin, "Renamed to “Beatrice E2E”");
+  await members.getByText("Beatrice E2E").waitFor();
+  assert.equal(await members.getByRole("button", { name: /^Rename E2E Admin/ }).count(), 0, "the admin's own name is not edited here");
+  await admin.keyboard.press("Escape");
+  await members.waitFor({ state: "detached" });
+  // A normal member sees who is in the group, but no Edit buttons.
+  await cy.goto(BASE + "/#/");
+  await cy.reload();
+  await openGroup(cy);
+  await cy.getByRole("button", { name: /3 members/ }).click();
+  await cy.getByRole("dialog").getByText("Beatrice E2E").waitFor();
+  assert.equal(await cy.getByRole("dialog").getByRole("button", { name: /^Rename / }).count(), 0, "members cannot rename");
+  await cy.keyboard.press("Escape");
+  await cy.getByRole("dialog").waitFor({ state: "detached" });
+  step("tap 'N members': admin edits a name in the popup; members only see the list");
+
   for (const page of [admin, cy]) {
     await page.getByRole("button", { name: "Account" }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
