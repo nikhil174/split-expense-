@@ -224,6 +224,14 @@ try {
   await cy.keyboard.press("Escape");
   await cy.getByRole("dialog").waitFor({ state: "detached" });
   await cy.getByRole("tab", { name: "Balances", exact: true }).click();
+  // "Who owes whom": tapping a line shows the expenses behind it.
+  await cy.locator("section", { has: cy.getByRole("heading", { name: "Who owes whom" }) }).getByRole("button", { name: /You\s*owe\s*Bea E2E/ }).click();
+  const between = cy.getByRole("dialog");
+  await between.getByText("You owe Bea E2E ₹55.00").first().waitFor();
+  assert.equal(await between.locator("li").count(), 2, "Dinner and Snacks");
+  await between.getByText("Dinner").waitFor();
+  await cy.keyboard.press("Escape");
+  await between.waitFor({ state: "detached" });
   await cy.getByRole("button", { name: /Bea E2E.*you owe.*₹55\.00/s }).click();
   await cy.getByRole("heading", { name: "You & Bea E2E" }).waitFor();
   await cy.getByText("You owe Bea E2E ₹55.00").waitFor();

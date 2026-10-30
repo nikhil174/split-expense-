@@ -291,3 +291,26 @@ test("member summary: anyone in the group can see one person's totals, debts, ex
   assert.equal((await f.get("Bea", "/members/" + other.ids.Zed)).status, 404);
   assert.equal((await call(f.env, f.G + "/members/" + ids.Cy)).status, 401);
 });
+
+test("pair view: anyone in the group can see what is between two other members, matching their debt", async t => {
+  const f = await fixture(t);
+  const { ids } = f;
+  await f.add("Bea", { description: "Dinner", amount: "90", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy, ids.admin] });
+  await f.add("Cy", { description: "Cab", amount: "40", paidBy: ids.Cy, memberIds: [ids.Cy, ids.Bea] });
+  await f.add("admin", { description: "Hotel", amount: "60", paidBy: ids.admin, memberIds: [ids.admin, ids.Cy] });
+  await f.pay("Cy", ids.Cy, ids.Bea, "5");
+  // The admin looks at Cy and Bea: Cy owes Bea 30 for dinner, Bea owes Cy 20 for the cab, Cy paid 5.
+  const v = (await f.get("admin", `/pair/${ids.Bea}/${ids.Cy}`)).data;
+  assert.deepEqual([v.me.name, v.other.name, v.netCents], ["Bea", "Cy", 500]);
+  assert.deepEqual(v.items.map(i => [i.type, i.description ?? null]).sort(), [["expense", "Cab"], ["expense", "Dinner"], ["payment", null]]);
+  assert.ok(!v.items.some(i => i.description === "Hotel"), "only what is between the two of them");
+  // Same answer as Bea's own view, and as the group's who-owes-whom.
+  assert.equal((await f.get("Bea", "/with/" + ids.Cy)).data.netCents, v.netCents);
+  const debt = (await f.get("admin", "/debts")).data.debts.find(d => d.fromMemberId === ids.Cy && d.toMemberId === ids.Bea);
+  assert.equal(debt.amountCents, v.netCents);
+  // Reversed order flips the sign.
+  assert.equal((await f.get("admin", `/pair/${ids.Cy}/${ids.Bea}`)).data.netCents, -500);
+  assert.equal((await f.get("admin", `/pair/${ids.Bea}/${ids.Bea}`)).status, 404);
+  assert.equal((await f.get("admin", `/pair/${ids.Bea}/nope`)).status, 404);
+  assert.equal((await call(f.env, `${f.G}/pair/${ids.Bea}/${ids.Cy}`)).status, 401);
+});

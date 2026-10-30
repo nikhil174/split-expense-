@@ -37,6 +37,9 @@ export const useDebts = (id: string) => useQuery({ ...groupQuery<{ debts: Debt[]
 export const useDashboard = (id: string) => useQuery(groupQuery<Dashboard>(id, "dashboard", "/dashboard"));
 export const useMemberSummary = (id: string, memberId: string | null) =>
   useQuery({ ...groupQuery<MemberSummary>(id, "member-" + memberId, "/members/" + encodeURIComponent(memberId || "")), enabled: !!memberId });
+// Everything between members a and b (positive netCents: b owes a).
+export const usePair = (id: string, a: string | null, b: string | null) =>
+  useQuery({ ...groupQuery<PersonView>(id, `pair-${a}-${b}`, `/pair/${encodeURIComponent(a || "")}/${encodeURIComponent(b || "")}`), enabled: !!a && !!b });
 export const usePerson = (id: string, memberId: string) => useQuery(groupQuery<PersonView>(id, "person-" + memberId, "/with/" + encodeURIComponent(memberId)));
 
 export function refreshGroup(qc: QueryClient, groupId: string) {

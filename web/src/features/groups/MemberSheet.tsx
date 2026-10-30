@@ -1,9 +1,10 @@
 import * as React from "react";
-import { ChevronRight, ReceiptText } from "lucide-react";
+import { ChevronLeft, ChevronRight, ReceiptText } from "lucide-react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DateBadge, EmptyState, List, PersonAvatar, SectionTitle, rowClass } from "@/components/app/bits";
+import { DateBadge, EmptyState, List, PersonAvatar, SectionTitle, pressableRow } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
+import { PairDetail } from "./PairDetail";
 import { useMemberSummary } from "@/hooks/queries";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
@@ -17,6 +18,9 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
   const [shown, setShown] = React.useState<string | null>(memberId);
   React.useEffect(() => { if (memberId) setShown(memberId); }, [memberId]);
   const q = useMemberSummary(groupId, shown);
+  // Tapping "Jagan owes Vicky" shows what is between those two, in this sheet.
+  const [pair, setPair] = React.useState<{ creditorId: string; debtorId: string } | null>(null);
+  React.useEffect(() => { setPair(null); }, [memberId]);
   const d = q.data;
   const name = d?.member.name ?? "";
   const label = (id: string, n: string) => (id === meId ? "you" : n);
@@ -28,7 +32,14 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
         <SheetHeader title={d ? name + (d.member.isMe ? " (you)" : "") : "Loading…"}
           description={!d ? "" : b > 0 ? `Gets back ${inr(b)} overall` : b < 0 ? `Owes ${inr(-b)} overall` : "Settled up"} />
         <div className="safe-bottom min-h-0 space-y-6 overflow-y-auto px-4 pt-1 pb-8">
-          {!d ? <div className="space-y-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full rounded-2xl" />)}</div> : (
+          {pair ? (
+            <div>
+              <button type="button" onClick={() => setPair(null)} className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[#141716]/[0.05] py-1.5 pr-3 pl-2 text-[13.5px] font-medium transition-transform active:scale-95">
+                <ChevronLeft className="size-4" strokeWidth={2.4} />{name}
+              </button>
+              <PairDetail groupId={groupId} creditorId={pair.creditorId} debtorId={pair.debtorId} meId={meId} />
+            </div>
+          ) : !d ? <div className="space-y-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full rounded-2xl" />)}</div> : (
             <>
               <div className="grid grid-cols-3 gap-2">
                 {[["Paid", d.paidCents, ""], ["Their share", d.shareCents, ""], [b >= 0 ? "Gets back" : "Owes", Math.abs(b), b > 0 ? "text-positive" : b < 0 ? "text-negative" : ""]].map(([t, c, cls]) => (
@@ -44,16 +55,18 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
                   <SectionTitle>Who {d.member.isMe ? "you owe and who owes you" : `${name} owes and who owes ${name}`}</SectionTitle>
                   <List>
                     {d.owes.map(x => (
-                      <div key={"o" + x.memberId} className={rowClass}>
+                      <button key={"o" + x.memberId} type="button" onClick={() => setPair({ creditorId: x.memberId, debtorId: d.member.id })} className={pressableRow}>
                         <span className="min-w-0 flex-1 truncate text-[15px]">{d.member.isMe ? "You owe" : "Owes"} <span className="font-medium">{label(x.memberId, x.name)}</span></span>
                         <span className="tabular text-[15px] font-medium text-negative">{inr(x.amountCents)}</span>
-                      </div>
+                        <ChevronRight className="size-[18px] shrink-0 text-[#141716]/25" strokeWidth={2.4} />
+                      </button>
                     ))}
                     {d.owedBy.map(x => (
-                      <div key={"b" + x.memberId} className={rowClass}>
+                      <button key={"b" + x.memberId} type="button" onClick={() => setPair({ creditorId: d.member.id, debtorId: x.memberId })} className={pressableRow}>
                         <span className="min-w-0 flex-1 truncate text-[15px]"><span className="font-medium">{x.memberId === meId ? "You" : x.name}</span> {x.memberId === meId ? "owe" : "owes"} {d.member.isMe ? "you" : name}</span>
                         <span className="tabular text-[15px] font-medium text-positive">{inr(x.amountCents)}</span>
-                      </div>
+                        <ChevronRight className="size-[18px] shrink-0 text-[#141716]/25" strokeWidth={2.4} />
+                      </button>
                     ))}
                   </List>
                 </section>

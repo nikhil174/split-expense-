@@ -722,19 +722,23 @@ async function api(req, env, url) {
         payments: payments.results.map(x => ({ ...x, fromName: nameOf(x.fromMemberId), toName: nameOf(x.toMemberId) })),
       });
     }
-    const withMember = tail.match(/^with\/([\w-]+)$/);
-    if (method === "GET" && withMember) {
-      const other = withMember[1];
+    // Everything between two members: expenses where one paid and the other
+    // had a share, and confirmed payments between them, with a running total
+    // from a's side (positive: b owes a). "with/:id" is me and that person;
+    // "pair/:a/:b" is any two members of the group (anyone in it may look).
+    const withMember = tail.match(/^with\/([\w-]+)$/), pair = tail.match(/^pair\/([\w-]+)\/([\w-]+)$/);
+    if (method === "GET" && (withMember || pair)) {
+      const a = withMember ? u.id : pair[1], other = withMember ? withMember[1] : pair[2];
       const members = await groupMembers(db, gid);
       const nameOf = nameLookup(members);
-      if (other === u.id || !members.some(x => x.id === other)) return fail("Choose another member of this group.", 404);
+      if (other === a || !members.some(x => x.id === other) || !members.some(x => x.id === a)) return fail("Choose two different members of this group.", 404);
       const [shares, settlements] = await Promise.all([
-        db.prepare("SELECT e.id AS expenseId,e.description,e.paid_by AS paidBy,e.amount_cents AS totalCents,e.created_at AS createdAt,s.member_id AS memberId,s.amount_cents AS amountCents FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?1 AND ((e.paid_by=?2 AND s.member_id=?3) OR (e.paid_by=?3 AND s.member_id=?2))").bind(gid, u.id, other).all(),
-        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt FROM appx_settlements WHERE group_id=?1 AND status='confirmed' AND ((from_member_id=?2 AND to_member_id=?3) OR (from_member_id=?3 AND to_member_id=?2))").bind(gid, u.id, other).all(),
+        db.prepare("SELECT e.id AS expenseId,e.description,e.paid_by AS paidBy,e.amount_cents AS totalCents,e.created_at AS createdAt,s.member_id AS memberId,s.amount_cents AS amountCents FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?1 AND ((e.paid_by=?2 AND s.member_id=?3) OR (e.paid_by=?3 AND s.member_id=?2))").bind(gid, a, other).all(),
+        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt FROM appx_settlements WHERE group_id=?1 AND status='confirmed' AND ((from_member_id=?2 AND to_member_id=?3) OR (from_member_id=?3 AND to_member_id=?2))").bind(gid, a, other).all(),
       ]);
-      const activity = pairwiseActivity({ shares: shares.results, settlements: settlements.results, me: u.id, other });
+      const activity = pairwiseActivity({ shares: shares.results, settlements: settlements.results, me: a, other });
       const otherMember = members.find(x => x.id === other);
-      return json({ me: { id: u.id, name: u.name }, other: { id: other, name: nameOf(other), active: otherMember.active }, netCents: activity.netCents, items: activity.items });
+      return json({ me: { id: a, name: withMember ? u.name : nameOf(a) }, other: { id: other, name: nameOf(other), active: otherMember.active }, netCents: activity.netCents, items: activity.items });
     }
     if (method === "GET" && tail === "settlements") {
       const r = await db.prepare("SELECT s.id,s.from_member_id AS fromMemberId,COALESCE(f.name,'" + FORMER_MEMBER + "') AS fromName,s.to_member_id AS toMemberId,COALESCE(t.name,'" + FORMER_MEMBER + "') AS toName,s.amount_cents AS amountCents,s.status,s.created_by AS createdBy,s.decided_at AS decidedAt,s.created_at AS createdAt,COALESCE(c.name,'" + FORMER_MEMBER + "') AS recordedByName FROM appx_settlements s LEFT JOIN appx_group_members f ON f.group_id=s.group_id AND f.member_id=s.from_member_id LEFT JOIN appx_group_members t ON t.group_id=s.group_id AND t.member_id=s.to_member_id LEFT JOIN appx_group_members c ON c.group_id=s.group_id AND c.member_id=s.created_by WHERE s.group_id=? ORDER BY s.created_at DESC LIMIT 200").bind(gid).all();
