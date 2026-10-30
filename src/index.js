@@ -1,6 +1,6 @@
 import { allocateEqualSplit, allocateManualSplit } from "./split-logic.js";
 import { parseAmountToCents } from "./money.js";
-import { computeBalances, computePairwiseDebts, debtsForMember, pairwiseActivity, validateSettlement, SettlementError } from "./settlement-logic.js";
+import { computeBalances, computePairwiseDebts, debtsForMember, outstandingDebt, pairwiseActivity, validateSettlement, SettlementError } from "./settlement-logic.js";
 
 const SESSION_MS = 3 * 60 * 60 * 1000;
 const INVITE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -177,7 +177,7 @@ async function loadLedger(db, gid) {
   const [paid, splits, settlements] = await Promise.all([
     db.prepare("SELECT paid_by AS memberId,SUM(amount_cents) AS amountCents FROM appx_expenses WHERE group_id=? GROUP BY paid_by").bind(gid).all(),
     db.prepare("SELECT e.paid_by AS payerId,s.member_id AS memberId,SUM(s.amount_cents) AS amountCents FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=? GROUP BY e.paid_by,s.member_id").bind(gid).all(),
-    db.prepare("SELECT from_member_id AS fromMemberId,to_member_id AS toMemberId,SUM(amount_cents) AS amountCents FROM appx_settlements WHERE group_id=? GROUP BY from_member_id,to_member_id").bind(gid).all(),
+    db.prepare("SELECT from_member_id AS fromMemberId,to_member_id AS toMemberId,SUM(amount_cents) AS amountCents FROM appx_settlements WHERE group_id=? AND status='confirmed' GROUP BY from_member_id,to_member_id").bind(gid).all(),
   ]);
   const ints = rows => rows.map(r => ({ ...r, amountCents: Number(r.amountCents) }));
   return { paidTotals: ints(paid.results), splitEdges: ints(splits.results), settlements: ints(settlements.results) };
@@ -221,6 +221,16 @@ async function parseExpense(db, gid, b) {
   if (splitRows.reduce((sum, row) => sum + row.amountCents, 0) !== cents) throw new Error("Split rows do not add up to the expense total");
   return { desc, cents, paidBy, splitRows };
 }
+
+// SQL for what member f still owes member t in group g (each a placeholder
+// like "?2"), from expenses and confirmed payments. With reserve, payments
+// from f to t still waiting for confirmation are subtracted too, so pending
+// payments can never add up to more than is owed.
+const owedSql = (g, f, t, reserve = false) => "("
+  + `COALESCE((SELECT SUM(s.amount_cents) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=${g} AND e.paid_by=${t} AND s.member_id=${f}),0)`
+  + `-COALESCE((SELECT SUM(s.amount_cents) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=${g} AND e.paid_by=${f} AND s.member_id=${t}),0)`
+  + `-COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=${g} AND from_member_id=${f} AND to_member_id=${t} AND status ${reserve ? "IN ('confirmed','pending')" : "='confirmed'"}),0)`
+  + `+COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=${g} AND from_member_id=${t} AND to_member_id=${f} AND status='confirmed'),0))`;
 
 async function api(req, env, url) {
   const db = env['split-expense'];
@@ -551,8 +561,8 @@ async function api(req, env, url) {
     const r = await db.prepare("SELECT g.id,g.name,"
       + "COALESCE((SELECT SUM(amount_cents) FROM appx_expenses WHERE group_id=g.id AND paid_by=?1),0)"
       + "-COALESCE((SELECT SUM(s.amount_cents) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=g.id AND s.member_id=?1),0)"
-      + "+COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND from_member_id=?1),0)"
-      + "-COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND to_member_id=?1),0) AS myBalanceCents "
+      + "+COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND from_member_id=?1 AND status='confirmed'),0)"
+      + "-COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND to_member_id=?1 AND status='confirmed'),0) AS myBalanceCents "
       + "FROM appx_groups g JOIN appx_group_members m ON m.group_id=g.id WHERE m.member_id=?1 ORDER BY g.created_at DESC").bind(u.id).all();
     return json({ groups: r.results });
   }
@@ -578,6 +588,13 @@ async function api(req, env, url) {
     const owedToYouCents = people.reduce((s, x) => s + Math.max(0, x.netCents), 0);
     const youOweCents = people.reduce((s, x) => s + Math.max(0, -x.netCents), 0);
     return json({ people, owedToYouCents, youOweCents, netCents: owedToYouCents - youOweCents });
+  }
+  // Payments waiting on me (to confirm) or on someone else (that I sent),
+  // across all my groups. Admins see only their own here too.
+  if (method === "GET" && p === "/api/payments/pending") {
+    const r = await db.prepare("SELECT s.id,s.group_id AS groupId,g.name AS groupName,s.from_member_id AS fromMemberId,COALESCE(f.name,'" + FORMER_MEMBER + "') AS fromName,s.to_member_id AS toMemberId,COALESCE(t.name,'" + FORMER_MEMBER + "') AS toName,s.amount_cents AS amountCents,s.created_at AS createdAt FROM appx_settlements s JOIN appx_groups g ON g.id=s.group_id JOIN appx_group_members me ON me.group_id=s.group_id AND me.member_id=?1 LEFT JOIN appx_group_members f ON f.group_id=s.group_id AND f.member_id=s.from_member_id LEFT JOIN appx_group_members t ON t.group_id=s.group_id AND t.member_id=s.to_member_id WHERE s.status='pending' AND (s.to_member_id=?1 OR s.from_member_id=?1) ORDER BY s.created_at DESC LIMIT 100").bind(u.id).all();
+    const rows = r.results.map(x => ({ ...x, incoming: x.toMemberId === u.id }));
+    return json({ toConfirm: rows.filter(x => x.incoming), waiting: rows.filter(x => !x.incoming) });
   }
   if (method === "POST" && p === "/api/groups") return fail("Only an administrator can create groups.", 403);
   if (method === "POST" && p === "/api/groups/join") return fail("Invite codes do not bypass group approval. Request access to the group instead.", 403);
@@ -685,15 +702,19 @@ async function api(req, env, url) {
       if (other === u.id || !members.some(x => x.id === other)) return fail("Choose another member of this group.", 404);
       const [shares, settlements] = await Promise.all([
         db.prepare("SELECT e.id AS expenseId,e.description,e.paid_by AS paidBy,e.amount_cents AS totalCents,e.created_at AS createdAt,s.member_id AS memberId,s.amount_cents AS amountCents FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?1 AND ((e.paid_by=?2 AND s.member_id=?3) OR (e.paid_by=?3 AND s.member_id=?2))").bind(gid, u.id, other).all(),
-        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt FROM appx_settlements WHERE group_id=?1 AND ((from_member_id=?2 AND to_member_id=?3) OR (from_member_id=?3 AND to_member_id=?2))").bind(gid, u.id, other).all(),
+        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt FROM appx_settlements WHERE group_id=?1 AND status='confirmed' AND ((from_member_id=?2 AND to_member_id=?3) OR (from_member_id=?3 AND to_member_id=?2))").bind(gid, u.id, other).all(),
       ]);
       const activity = pairwiseActivity({ shares: shares.results, settlements: settlements.results, me: u.id, other });
       const otherMember = members.find(x => x.id === other);
       return json({ me: { id: u.id, name: u.name }, other: { id: other, name: nameOf(other), active: otherMember.active }, netCents: activity.netCents, items: activity.items });
     }
     if (method === "GET" && tail === "settlements") {
-      const r = await db.prepare("SELECT s.id,s.from_member_id AS fromMemberId,COALESCE(f.name,'" + FORMER_MEMBER + "') AS fromName,s.to_member_id AS toMemberId,COALESCE(t.name,'" + FORMER_MEMBER + "') AS toName,s.amount_cents AS amountCents,s.created_at AS createdAt,COALESCE(c.name,'" + FORMER_MEMBER + "') AS recordedByName FROM appx_settlements s LEFT JOIN appx_group_members f ON f.group_id=s.group_id AND f.member_id=s.from_member_id LEFT JOIN appx_group_members t ON t.group_id=s.group_id AND t.member_id=s.to_member_id LEFT JOIN appx_group_members c ON c.group_id=s.group_id AND c.member_id=s.created_by WHERE s.group_id=? ORDER BY s.created_at DESC LIMIT 200").bind(gid).all();
-      return json({ settlements: r.results.map(x => ({ ...x, amount: rupees(x.amountCents) })) });
+      const r = await db.prepare("SELECT s.id,s.from_member_id AS fromMemberId,COALESCE(f.name,'" + FORMER_MEMBER + "') AS fromName,s.to_member_id AS toMemberId,COALESCE(t.name,'" + FORMER_MEMBER + "') AS toName,s.amount_cents AS amountCents,s.status,s.created_by AS createdBy,s.decided_at AS decidedAt,s.created_at AS createdAt,COALESCE(c.name,'" + FORMER_MEMBER + "') AS recordedByName FROM appx_settlements s LEFT JOIN appx_group_members f ON f.group_id=s.group_id AND f.member_id=s.from_member_id LEFT JOIN appx_group_members t ON t.group_id=s.group_id AND t.member_id=s.to_member_id LEFT JOIN appx_group_members c ON c.group_id=s.group_id AND c.member_id=s.created_by WHERE s.group_id=? ORDER BY s.created_at DESC LIMIT 200").bind(gid).all();
+      return json({ settlements: r.results.map(x => ({
+        ...x, amount: rupees(x.amountCents),
+        canDecide: x.status === "pending" && (isAdmin || x.toMemberId === u.id),
+        canCancel: x.status === "pending" && (isAdmin || x.fromMemberId === u.id || x.createdBy === u.id),
+      })) });
     }
     if (method === "GET" && (tail === "settlements/mine" || tail === "debts")) {
       const [members, ledger] = await Promise.all([groupMembers(db, gid), loadLedger(db, gid)]);
@@ -704,7 +725,10 @@ async function api(req, env, url) {
       // active member. The admin may record any payment (including to or from
       // a removed member, so such debts can still be cleared).
       const canRecord = d => isAdmin || (d.fromMemberId === u.id && activeIds.has(d.toMemberId));
-      const describe = d => ({ ...describeDebt(d, nameOf), canRecord: canRecord(d), counterpartyActive: activeIds.has(d.fromMemberId === u.id ? d.toMemberId : d.fromMemberId) });
+      const waiting = new Map((await db.prepare("SELECT from_member_id AS f,to_member_id AS t,SUM(amount_cents) AS c FROM appx_settlements WHERE group_id=? AND status='pending' GROUP BY from_member_id,to_member_id").bind(gid).all()).results.map(x => [x.f + ">" + x.t, Number(x.c)]));
+      // waitingCents: already sent and waiting for the receiver to confirm, so
+      // at most amountCents - waitingCents more can be recorded.
+      const describe = d => ({ ...describeDebt(d, nameOf), waitingCents: waiting.get(d.fromMemberId + ">" + d.toMemberId) || 0, canRecord: canRecord(d), counterpartyActive: activeIds.has(d.fromMemberId === u.id ? d.toMemberId : d.fromMemberId) });
       if (tail === "debts") return json({ model: "direct-expense-attribution", debts: debts.map(describe) });
       const mine = debtsForMember(debts, u.id);
       return json({
@@ -738,18 +762,49 @@ async function api(req, env, url) {
         if (error instanceof SettlementError) return fail(error.message, error.status);
         throw error;
       }
+      // Money already sent to this person and waiting for them to confirm
+      // counts against what can still be paid.
+      const waiting = Number((await db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS c FROM appx_settlements WHERE group_id=? AND from_member_id=? AND to_member_id=? AND status='pending'").bind(gid, from, to).first())?.c || 0);
+      if (waiting) {
+        const due = outstandingDebt(computePairwiseDebts(await loadLedger(db, gid)), from, to);
+        if (cents > due - waiting) return fail(`₹${(waiting / 100).toFixed(2)} is already waiting for ${byId.get(to).name} to confirm, so at most ₹${(Math.max(0, due - waiting) / 100).toFixed(2)} more can be recorded now.`, 409);
+      }
+      // The receiver has to confirm a payment before it counts, unless the
+      // receiver is the one recording it, or (admin only) can no longer sign
+      // in to confirm it.
+      const status = to === u.id || (isAdmin && !byId.get(to).active) ? "confirmed" : "pending";
       // Re-check the outstanding amount inside the INSERT itself so two
       // concurrent payments can never overpay the same debt.
-      const settlementId = id();
+      const settlementId = id(), now = Date.now();
       const result = await db.prepare(
-        "INSERT INTO appx_settlements(id,group_id,from_member_id,to_member_id,amount_cents,created_by,created_at) SELECT ?1,?2,?3,?4,?5,?6,?7 WHERE ?5 <= ("
-        + "COALESCE((SELECT SUM(s.amount_cents) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?2 AND e.paid_by=?4 AND s.member_id=?3),0)"
-        + "-COALESCE((SELECT SUM(s.amount_cents) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?2 AND e.paid_by=?3 AND s.member_id=?4),0)"
-        + "-COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=?2 AND from_member_id=?3 AND to_member_id=?4),0)"
-        + "+COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=?2 AND from_member_id=?4 AND to_member_id=?3),0))"
-      ).bind(settlementId, gid, from, to, cents, u.id, Date.now()).run();
+        "INSERT INTO appx_settlements(id,group_id,from_member_id,to_member_id,amount_cents,created_by,created_at,status,decided_by,decided_at) SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10 WHERE ?5 <= " + owedSql("?2", "?3", "?4", true)
+      ).bind(settlementId, gid, from, to, cents, u.id, now, status, status === "confirmed" ? u.id : null, status === "confirmed" ? now : null).run();
       if (changesOf(result) !== 1) return fail("The outstanding amount changed. Refresh and try again.", 409);
-      return json({ ok: true, id: settlementId, amountCents: cents }, 201);
+      return json({ ok: true, id: settlementId, amountCents: cents, status }, 201);
+    }
+    // The receiver (or the admin) confirms or rejects a pending payment; the
+    // payer (or the admin) can cancel it while it is still pending.
+    const decide = tail.match(/^settlements\/([\w-]+)\/(confirm|reject|cancel)$/);
+    if (method === "POST" && decide) {
+      const [, sid, action] = decide;
+      const pay = await db.prepare("SELECT id,from_member_id AS fromId,to_member_id AS toId,amount_cents AS cents,status,created_by AS createdBy FROM appx_settlements WHERE id=? AND group_id=?").bind(sid, gid).first();
+      if (!pay) return fail("Payment not found.", 404);
+      if (pay.status !== "pending") return fail(`This payment was already ${pay.status}.`, 409);
+      const now = Date.now();
+      if (action === "cancel") {
+        if (!isAdmin && pay.fromId !== u.id && pay.createdBy !== u.id) return fail("Only the person who recorded this payment can cancel it.", 403);
+        await db.prepare("DELETE FROM appx_settlements WHERE id=? AND status='pending'").bind(sid).run();
+        return json({ ok: true, cancelled: true });
+      }
+      if (!isAdmin && pay.toId !== u.id) return fail("Only the person who received this payment can confirm or reject it.", 403);
+      if (action === "reject") {
+        await db.prepare("UPDATE appx_settlements SET status='rejected',decided_by=?,decided_at=? WHERE id=? AND status='pending'").bind(u.id, now, sid).run();
+        return json({ ok: true, status: "rejected" });
+      }
+      // Confirm only while it still fits what is owed (expenses may have changed).
+      const result = await db.prepare("UPDATE appx_settlements SET status='confirmed',decided_by=?1,decided_at=?2 WHERE id=?3 AND status='pending' AND amount_cents <= " + owedSql("?4", "?5", "?6")).bind(u.id, now, sid, gid, pay.fromId, pay.toId).run();
+      if (changesOf(result) !== 1) return fail("This payment is now more than what is owed, because expenses changed since it was sent. Reject it and ask for a new one.", 409);
+      return json({ ok: true, status: "confirmed" });
     }
     if (method === "GET" && tail === "balances") {
       const [members, ledger] = await Promise.all([groupMembers(db, gid), loadLedger(db, gid)]);

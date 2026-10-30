@@ -61,6 +61,18 @@ export async function call(env, path, { method = "GET", body, cookie, headers: e
   return { status: response.status, data, cookie: setCookie?.split(";")[0], setCookie };
 }
 
+// Records a payment and, if it is waiting for the receiver, has the receiver
+// confirm it, so it counts like a completed payment. Returns the record call.
+export async function payAndConfirm(env, groupId, g, cookie, body) {
+  const res = await call(env, `/api/groups/${groupId}/settlements`, { method: "POST", cookie, body });
+  if (res.status === 201 && res.data.status === "pending") {
+    const receiver = Object.keys(g.ids).find(name => g.ids[name] === body.toMemberId);
+    const ok = await call(env, `/api/groups/${groupId}/settlements/${res.data.id}/confirm`, { method: "POST", cookie: g.cookies[receiver], body: {} });
+    if (ok.status !== 200) throw new Error("confirm failed: " + JSON.stringify(ok.data));
+  }
+  return res;
+}
+
 // Builds a group with an admin plus the named members, all approved and
 // signed in. Returns ids and cookies keyed by name ("admin" for the admin).
 export async function setupGroup(env, groupName, memberNames, { adminCookie } = {}) {

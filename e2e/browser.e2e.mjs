@@ -248,11 +248,24 @@ try {
   await slow(cy, "**/settlements");
   await cy.getByRole("button", { name: "Record ₹20.00 payment" }).click();
   await cy.getByRole("button", { name: "Recording payment…" }).waitFor();
-  await toast(cy, "Recorded ₹20.00 from Cy E2E to Bea E2E");
+  // The payment waits for Bea to confirm it; until then nothing changes.
+  await toast(cy, "Sent ₹20.00 to Bea E2E to confirm");
   await cy.unroute("**/settlements");
+  await cy.getByText("₹20.00 you sent is waiting for Bea E2E to confirm").waitFor();
+  await cy.getByText("You owe Bea E2E ₹55.00").waitFor();
+  assert.equal(await cy.locator("tbody tr").count(), 2, "a pending payment is not in the history yet");
+  // Bea sees it on Home and confirms.
+  await bea.goto(BASE + "/#/");
+  await bea.reload();
+  await bea.getByText("Cy E2E says they paid you ₹20.00").waitFor();
+  await shot(bea, "bea-confirm");
+  await bea.getByRole("button", { name: "Confirm ₹20.00 from Cy E2E" }).click();
+  await toast(bea, "Confirmed ₹20.00 from Cy E2E");
+  await bea.getByTestId("pending-payments").waitFor({ state: "detached" });
+  await cy.reload();
   await cy.getByText("You owe Bea E2E ₹35.00").waitFor();
   assert.equal(await cy.locator("tbody tr").count(), 3);
-  step("partial repayment ₹20 from the drill-down; overpay blocked; Half works; busy while recording");
+  step("partial repayment ₹20 waits for Bea; Bea confirms it on Home; then it counts");
 
   await cy.goBack();
   await cy.getByRole("heading", { name: GROUP }).waitFor();
@@ -260,16 +273,32 @@ try {
   await cy.getByRole("button", { name: "Settle up" }).click();
   assert.equal(await cy.getByLabel("Amount paid").inputValue(), "35.00", "only debt opens straight to payment, prefilled");
   await cy.getByRole("button", { name: "Record ₹35.00 payment" }).click();
-  await toast(cy, "All settled between them");
+  await toast(cy, "Sent ₹35.00 to Bea E2E to confirm");
+  await cy.getByText("You paid Bea E2E ₹35.00").waitFor();
+  // Bea says it never arrived: it is rejected and does not count.
+  await bea.reload();
+  await bea.getByRole("button", { name: "Reject ₹35.00 from Cy E2E" }).click();
+  await toast(bea, "Rejected Cy E2E's payment");
+  await cy.reload();
+  await cy.getByRole("tab", { name: "Payments", exact: true }).click();
+  await cy.getByText("Rejected by Bea E2E").waitFor();
+  // Cy pays again; Bea confirms; everyone is settled.
+  await cy.getByRole("button", { name: "Settle up" }).click();
+  await cy.getByRole("button", { name: "Record ₹35.00 payment" }).click();
+  await toast(cy, "Sent ₹35.00 to Bea E2E to confirm");
+  await bea.reload();
+  await bea.getByRole("button", { name: "Confirm ₹35.00 from Cy E2E" }).click();
+  await toast(bea, "Confirmed ₹35.00 from Cy E2E");
+  await cy.reload();
   await cy.getByText("You are all settled up").waitFor();
   await cy.getByRole("tab", { name: "Payments", exact: true }).click();
-  await cy.locator("tbody tr").nth(1).waitFor();
-  assert.equal(await cy.locator("tbody tr").count(), 2);
+  await cy.locator("tbody tr").nth(2).waitFor();
+  assert.equal(await cy.locator("tbody tr").count(), 3, "two confirmed payments and the rejected one");
   assert.match(await cy.locator("tbody").innerText(), /You paid Bea E2E/);
   await cy.getByRole("tab", { name: "Balances", exact: true }).click();
   await cy.getByText("Everyone is settled up").waitFor();
   await noHorizontalOverflow(cy, "balances");
-  step("header Settle up clears the rest; payments table shows both; everyone settled");
+  step("Settle up sends ₹35 for Bea to confirm; a rejected payment never counts; after confirming everyone is settled");
 
   await admin.getByRole("tab", { name: "Home", exact: true }).click();
   await openGroup(admin);

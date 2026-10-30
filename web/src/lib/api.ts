@@ -39,6 +39,8 @@ export type Expense = {
 };
 export type Debt = {
   fromMemberId: string; fromName: string; toMemberId: string; toName: string; amountCents: number;
+  // Already sent and waiting for the receiver to confirm.
+  waitingCents: number;
   canRecord: boolean; counterpartyActive: boolean;
 };
 export type Mine = {
@@ -49,6 +51,12 @@ export type Balance = { memberId: string; name: string; balanceCents: number };
 export type Settlement = {
   id: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
   amountCents: number; createdAt: number; recordedByName: string;
+  // A payment counts only once the receiver confirms it.
+  status: "pending" | "confirmed" | "rejected"; canDecide: boolean; canCancel: boolean;
+};
+export type PendingPayment = {
+  id: string; groupId: string; groupName: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
+  amountCents: number; createdAt: number; incoming: boolean;
 };
 export type Spending = { memberId: string; name: string; paidCents: number; shareCents: number };
 export type Dashboard = { totalSpentCents: number; expenseCount: number; spending: Spending[] };

@@ -14,6 +14,7 @@ import {
 import { AquaCard, cardTap } from "./GroupsScreen";
 import { PeopleSheet } from "./PeopleSheet";
 import { MembersSheet } from "./MembersSheet";
+import { PendingPayments } from "./PendingPayments";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
 import { useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
@@ -81,6 +82,8 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
           <HandCoins className="size-5" />Settle up
         </Button>
       </AquaCard>
+
+      <PendingPayments groupId={groupId} className="mt-7" />
 
       <AnimatePresence mode="wait" initial={false}>
         <m.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }} className="mt-7">
@@ -304,7 +307,7 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
   const who = (id: string, name: string) => (id === meId ? "You" : name);
   return (
     <>
-      <SectionTitle action={payments.data && payments.data.length > 0 ? <span className="tabular text-[13px] text-muted-foreground">Total {inr(payments.data.reduce((s, x) => s + x.amountCents, 0))}</span> : undefined}>
+      <SectionTitle action={payments.data && payments.data.length > 0 ? <span className="tabular text-[13px] text-muted-foreground">Total {inr(payments.data.reduce((s, x) => s + (x.status === "confirmed" ? x.amountCents : 0), 0))}</span> : undefined}>
         {payments.data ? `${payments.data.length} ${payments.data.length === 1 ? "payment" : "payments"}` : "Payments"}
       </SectionTitle>
       <div className="panel overflow-hidden">
@@ -318,12 +321,13 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
                 <tr key={s.id} className={tr}>
                   <td className="py-3 pr-1 pl-4"><DateBadge ts={s.createdAt} /></td>
                   <td className="w-full max-w-0 px-2 py-3">
-                    <span className="block truncate text-[15px] font-medium">{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</span>
+                    <span className={cn("block truncate text-[15px] font-medium", s.status === "rejected" && "text-muted-foreground line-through")}>{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</span>
                     <span className="block truncate text-[12.5px] text-muted-foreground">
-                      {new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}{s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
+                      {s.status === "pending" ? <span className="font-medium text-[#9a6b12]">Waiting for {s.toMemberId === meId ? "you" : s.toName} to confirm</span> : s.status === "rejected" ? <span className="font-medium text-negative">Rejected by {s.toMemberId === meId ? "you" : s.toName}</span> : new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}
+                      {s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
                     </span>
                   </td>
-                  <td className="tabular py-3 pr-4 pl-2 text-right text-[15px] font-medium whitespace-nowrap">{inr(s.amountCents)}</td>
+                  <td className={cn("tabular py-3 pr-4 pl-2 text-right text-[15px] font-medium whitespace-nowrap", s.status !== "confirmed" && "text-muted-foreground")}>{inr(s.amountCents)}</td>
                 </tr>
               ))}
             </tbody>

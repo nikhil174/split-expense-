@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedMoney, EASE, EmptyState, List, Page, PersonAvatar, SectionTitle, listItem, pressableRow } from "@/components/app/bits";
 import { GlitterDust, Sheen, Sparkles } from "@/components/app/glitter";
 import { PeopleSheet, type PeopleFilter } from "./PeopleSheet";
+import { PendingPayments } from "./PendingPayments";
 import { useGroups, usePeopleBalances } from "@/hooks/queries";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
@@ -73,6 +74,8 @@ export function GroupsScreen({ name }: { name: string }) {
         </button>
       </AquaCard>
       <PeopleSheet open={sheetOpen} onOpenChange={setSheetOpen} filter={filter} />
+
+      <PendingPayments className="mt-7" />
 
       <div className="mt-7">
         <SectionTitle>Your groups</SectionTitle>
