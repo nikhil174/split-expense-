@@ -1,7 +1,8 @@
 import * as React from "react";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion } from "motion/react";
-import { Download, LogOut, Wallet } from "lucide-react";
+import { Download, LogOut, Pencil, Wallet } from "lucide-react";
+import { ChangeNameDialog } from "@/components/app/ChangeNameDialog";
 import { PaymentMethodSheet } from "@/features/groups/UpiPayments";
 import { useInstallApp } from "@/components/app/InstallApp";
 import { Toaster } from "@/components/ui/sonner";
@@ -70,6 +71,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
   const [signingOut, setSigningOut] = React.useState(false);
   const install = useInstallApp();
   const [upiOpen, setUpiOpen] = React.useState(false);
+  const [nameOpen, setNameOpen] = React.useState(false);
   // Members never see the admin view.
   React.useEffect(() => { if (route.name === "admin" && !isAdmin) navigate({ name: "home" }, { replace: true }); }, [route.name, isAdmin]);
 
@@ -111,6 +113,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
                 <p className="text-xs text-muted-foreground">{isAdmin ? "Administrator · also a member" : "Member"}</p>
                 <p className="mt-1.5 text-[11px] text-muted-foreground/70">Build {__BUILD__}</p>
               </DropdownMenuLabel>
+              {!isAdmin && <DropdownMenuItem onSelect={() => setNameOpen(true)}><Pencil />Change your name</DropdownMenuItem>}
               <DropdownMenuItem onSelect={() => setUpiOpen(true)}><Wallet />Your UPI</DropdownMenuItem>
               {install.available && <DropdownMenuItem onSelect={() => install.start()}><Download />Install app</DropdownMenuItem>}
               <DropdownMenuSeparator />
@@ -119,6 +122,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
           </DropdownMenu>
           {install.dialog}
           <PaymentMethodSheet open={upiOpen} onOpenChange={setUpiOpen} />
+          <ChangeNameDialog open={nameOpen} onClose={() => setNameOpen(false)} current={user.name} />
         </div>
         <TopProgress />
       </header>

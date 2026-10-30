@@ -306,6 +306,14 @@ try {
   await cy.reload();
   await cy.getByRole("tab", { name: "Payments", exact: true }).click();
   await cy.getByText("Rejected by Bea E2E").waitFor();
+  // Pay by UPI: tapping a person opens their QR and UPI ID; tapping the ID copies it.
+  await cy.getByRole("button", { name: "Pay Bea E2E by UPI" }).click();
+  const qrPop = cy.getByRole("alertdialog");
+  await qrPop.getByRole("img", { name: "Bea E2E's UPI QR code" }).waitFor();
+  await qrPop.getByRole("button", { name: "Copy UPI ID bea.e2e@okaxis" }).click();
+  await cy.locator("[data-sonner-toast]").filter({ hasText: /UPI ID copied|bea\.e2e@okaxis/ }).first().waitFor();
+  await qrPop.getByRole("button", { name: "Done" }).click();
+  await qrPop.waitFor({ state: "detached" });
   // Cy pays again; Bea confirms; everyone is settled.
   await cy.getByRole("button", { name: "Settle up" }).click();
   await cy.getByRole("button", { name: "Record ₹35.00 payment" }).click();
@@ -384,10 +392,21 @@ try {
   await openGroup(cy);
   await cy.getByRole("button", { name: /3 members/ }).click();
   await cy.getByRole("dialog").getByText("Beatrice E2E").waitFor();
-  assert.equal(await cy.getByRole("dialog").getByRole("button", { name: /^Rename / }).count(), 0, "members cannot rename");
+  // A member can edit only their own name.
+  assert.deepEqual(await cy.getByRole("dialog").getByRole("button", { name: /^Rename / }).evaluateAll(els => els.map(e => e.getAttribute("aria-label"))), ["Rename Cyrus E2E"], "members rename only themselves");
   await cy.keyboard.press("Escape");
   await cy.getByRole("dialog").waitFor({ state: "detached" });
-  step("tap 'N members': admin edits a name in the popup; members only see the list");
+  // ...also from the account menu.
+  await cy.getByRole("button", { name: "Account" }).click();
+  await cy.getByRole("menuitem", { name: "Change your name" }).click();
+  await cy.getByRole("alertdialog").getByLabel("Your name").fill("Cy Final");
+  await cy.getByRole("button", { name: "Save name" }).click();
+  await toast(cy, "You're now “Cy Final”");
+  await cy.getByRole("button", { name: /3 members/ }).click();
+  await cy.getByRole("dialog").getByText("Cy Final").waitFor();
+  await cy.keyboard.press("Escape");
+  await cy.getByRole("dialog").waitFor({ state: "detached" });
+  step("tap 'N members': admin edits anyone's name; a member edits only their own (popup or account menu)");
 
   for (const page of [admin, cy]) {
     await page.getByRole("button", { name: "Account" }).click();
