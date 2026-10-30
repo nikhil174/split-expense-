@@ -46,6 +46,59 @@ async function secretEquals(given, expected) {
   return diff === 0;
 }
 
+// Member PINs: exactly 4 digits, stored only as a salted PBKDF2-SHA256 hash.
+// SESSION_SECRET is mixed in as a pepper, so a copy of the database alone is
+// not enough to brute-force the 10,000 possible PINs (rotating SESSION_SECRET
+// therefore means members must have their PINs reset). The iteration count is
+// stored with each hash, so it can be raised later without breaking old PINs.
+const PIN_RE = /^\d{4}$/;
+const PIN_ITERATIONS = 100000; // the maximum PBKDF2 iterations Workers allows
+const PIN_MAX_FAILURES = 5, PIN_LOCK_MS = 15 * MINUTE;
+const fromHex = s => new Uint8Array((s.match(/../g) || []).map(x => parseInt(x, 16)));
+async function derivePin(pin, env, salt, iterations) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin + "\u0000" + (env.SESSION_SECRET || "")), "PBKDF2", false, ["deriveBits"]);
+  return hex(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, key, 256));
+}
+async function hashPin(pin, env) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iterations = Number(env.PIN_HASH_ITERATIONS) || PIN_ITERATIONS;
+  return `pbkdf2-sha256$${iterations}$${hex(salt)}$${await derivePin(pin, env, salt, iterations)}`;
+}
+async function pinMatches(pin, stored, env) {
+  const [scheme, iterations, salt, expected] = String(stored || "").split("$");
+  if (scheme !== "pbkdf2-sha256" || !expected || !(Number(iterations) > 0)) return false;
+  const actual = await derivePin(pin, env, fromHex(salt), Number(iterations));
+  let diff = actual.length ^ expected.length;
+  for (let i = 0; i < Math.min(actual.length, expected.length); i++) diff |= actual.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+// Checks a member's PIN against their access request row, counting failures
+// and locking the member for a while after too many. Returns an error
+// Response, or null when the PIN is correct (or was just created).
+async function checkMemberPin(db, env, r, pin, { create = false } = {}) {
+  const now = Date.now();
+  if (r.pin_locked_until && r.pin_locked_until > now) {
+    const mins = Math.ceil((r.pin_locked_until - now) / MINUTE);
+    return fail(`Too many wrong PINs. Try again in ${mins} minute${mins === 1 ? "" : "s"}, or ask the admin to reset your PIN.`, 429);
+  }
+  if (!r.pin_hash) {
+    // Existing member from before PINs: they choose one now.
+    if (!create) return json({ error: "Create a 4-digit PIN for your account.", code: "pin_not_set" }, 409);
+    await db.prepare("UPDATE appx_access_requests SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=? AND pin_hash IS NULL").bind(await hashPin(pin, env), r.id).run();
+    const saved = await db.prepare("SELECT pin_hash FROM appx_access_requests WHERE id=?").bind(r.id).first();
+    // Someone else set it a moment earlier: their PIN wins, so check against it.
+    return await pinMatches(pin, saved?.pin_hash, env) ? null : fail("Incorrect PIN.", 401);
+  }
+  if (await pinMatches(pin, r.pin_hash, env)) {
+    if (r.pin_failures) await db.prepare("UPDATE appx_access_requests SET pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(r.id).run();
+    return null;
+  }
+  const failures = Number(r.pin_failures || 0) + 1, locked = failures >= PIN_MAX_FAILURES;
+  await db.prepare("UPDATE appx_access_requests SET pin_failures=?,pin_locked_until=? WHERE id=?").bind(locked ? 0 : failures, locked ? now + PIN_LOCK_MS : null, r.id).run();
+  if (locked) return fail("Too many wrong PINs. Try again in 15 minutes, or ask the admin to reset your PIN.", 429);
+  const left = PIN_MAX_FAILURES - failures;
+  return fail(`Incorrect PIN. ${left} ${left === 1 ? "try" : "tries"} left.`, 401);
+}
+
 async function body(req) {
   if (Number(req.headers.get("content-length") || 0) > MAX_BODY_BYTES) throw new HttpError("Request body is too large.", 413);
   const text = await req.text();
@@ -179,15 +232,21 @@ async function api(req, env, url) {
     const b = await body(req);
     const name = cleanName(b?.name);
     const groupId = textField(b?.groupId);
+    const pin = textField(b?.pin);
     if (name.length < 2 || name.length > 60) return fail("Enter a name between 2 and 60 characters.");
+    if (!PIN_RE.test(pin)) return fail("Choose a 4-digit PIN.");
     if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Sign in with Admin login to use the app as yourself.", 409);
     const g = await db.prepare("SELECT id FROM appx_groups WHERE id=?").bind(groupId).first();
     if (!g) return fail("Choose an existing group before requesting access.");
-    const existing = await db.prepare("SELECT id,status,expires_at FROM appx_access_requests WHERE group_id=? AND lower(display_name)=lower(?) ORDER BY requested_at DESC LIMIT 1").bind(groupId, name).first();
+    const existing = await db.prepare("SELECT id,status,expires_at,pin_hash,pin_failures,pin_locked_until FROM appx_access_requests WHERE group_id=? AND lower(display_name)=lower(?) ORDER BY requested_at DESC LIMIT 1").bind(groupId, name).first();
     const now = Date.now();
     if (existing) {
       if (existing.status === "pending") return fail("An access request is already waiting for admin approval.", 409);
       if (existing.status === "approved" && existing.expires_at && existing.expires_at > now) return fail("This name already has active access in this group.", 409);
+      // Asking again under an existing name needs that name's PIN (or sets it,
+      // for members from before PINs), so nobody can take over someone else's entry.
+      const bad = await checkMemberPin(db, env, existing, pin, { create: true });
+      if (bad) return bad;
       await db.batch([
         db.prepare("UPDATE appx_access_requests SET status='pending',requested_at=?,approved_at=NULL,expires_at=NULL WHERE id=?").bind(now, existing.id),
         db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(existing.id),
@@ -195,7 +254,7 @@ async function api(req, env, url) {
       return json({ ok: true, requestId: existing.id, message: "Access request sent again using your existing membership entry." }, 200);
     }
     const requestId = id();
-    await db.prepare("INSERT INTO appx_access_requests(id,display_name,status,requested_at,group_id) VALUES(?,?,'pending',?,?)").bind(requestId, name, now, groupId).run();
+    await db.prepare("INSERT INTO appx_access_requests(id,display_name,status,requested_at,group_id,pin_hash) VALUES(?,?,'pending',?,?,?)").bind(requestId, name, now, groupId, await hashPin(pin, env)).run();
     return json({ ok: true, requestId, message: "Group access request submitted." }, 201);
   }
   if (method === "POST" && p === "/api/admin/login") {
@@ -225,8 +284,8 @@ async function api(req, env, url) {
   if (p.startsWith("/api/admin/")) {
     if (!await admin(req, env)) return fail("Admin login required.", 401);
     if (method === "GET" && p === "/api/admin/requests") {
-      const r = await db.prepare("SELECT a.id,a.display_name AS name,a.status,a.requested_at AS requestedAt,a.expires_at AS expiresAt,a.group_id AS groupId,g.name AS groupName FROM appx_access_requests a LEFT JOIN appx_groups g ON g.id=a.group_id ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END,a.requested_at DESC LIMIT 200").all();
-      return json({ requests: r.results });
+      const r = await db.prepare("SELECT a.id,a.display_name AS name,a.status,a.requested_at AS requestedAt,a.expires_at AS expiresAt,a.group_id AS groupId,g.name AS groupName,a.pin_hash IS NOT NULL AS hasPin FROM appx_access_requests a LEFT JOIN appx_groups g ON g.id=a.group_id ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END,a.requested_at DESC LIMIT 200").all();
+      return json({ requests: r.results.map(x => ({ ...x, hasPin: !!x.hasPin })) });
     }
     if (method === "GET" && p === "/api/admin/dashboard") {
       const [groups, members, pending, expenses, spent] = await Promise.all([
@@ -283,6 +342,19 @@ async function api(req, env, url) {
     // Renaming a member changes their name everywhere: past expenses and
     // payments (stored by id) and the name they sign in with. Their current
     // session keeps working.
+    // Forgotten PIN: clear it and sign the member out everywhere; they choose
+    // a new PIN on their next sign-in.
+    const resetPin = p.match(/^\/api\/admin\/requests\/([\w-]+)\/reset-pin$/);
+    if (method === "POST" && resetPin) {
+      const rid = resetPin[1];
+      const r = await db.prepare("SELECT id FROM appx_access_requests WHERE id=?").bind(rid).first();
+      if (!r) return fail("Member not found.", 404);
+      await db.batch([
+        db.prepare("UPDATE appx_access_requests SET pin_hash=NULL,pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(rid),
+        db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(rid),
+      ]);
+      return json({ ok: true });
+    }
     const renameMember = p.match(/^\/api\/admin\/requests\/([\w-]+)\/rename$/);
     if (method === "POST" && renameMember) {
       const rid = renameMember[1], name = cleanName((await body(req))?.name);
@@ -440,13 +512,16 @@ async function api(req, env, url) {
   }
   if (method === "POST" && p === "/api/access/signin") {
     if (await rateLimited(db, "signin", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
-    const b = await body(req), name = cleanName(b?.name), gid = textField(b?.groupId);
+    const b = await body(req), name = cleanName(b?.name), gid = textField(b?.groupId), pin = textField(b?.pin);
     if (name.length < 2 || name.length > 60 || !gid) return fail("Enter your name and choose a group.");
+    if (!PIN_RE.test(pin)) return fail("Enter your 4-digit PIN.");
     if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Use Admin login (name + PIN) to sign in as yourself.", 403);
-    const r = await db.prepare("SELECT id,status,expires_at FROM appx_access_requests WHERE group_id=? AND lower(display_name)=lower(?) ORDER BY requested_at DESC LIMIT 1").bind(gid, name).first();
+    const r = await db.prepare("SELECT id,status,expires_at,pin_hash,pin_failures,pin_locked_until FROM appx_access_requests WHERE group_id=? AND lower(display_name)=lower(?) ORDER BY requested_at DESC LIMIT 1").bind(gid, name).first();
     if (!r) return fail("No access request found for that name in this group. Request access first.", 403);
     if (r.status === "pending") return fail("Your access request is waiting for admin approval.", 403);
     if (r.status !== "approved") return fail("Your access is not currently approved. Request access again to reactivate your existing entry.", 403);
+    const bad = await checkMemberPin(db, env, r, pin, { create: b?.createPin === true });
+    if (bad) return bad;
     if (!r.expires_at || r.expires_at < Date.now()) {
       const now = Date.now();
       await db.batch([

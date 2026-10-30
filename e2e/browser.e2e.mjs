@@ -46,9 +46,11 @@ async function adminSignIn(page) {
   await page.getByRole("button", { name: "Sign in as admin" }).click();
   await page.getByRole("tab", { name: "Home", exact: true }).waitFor();
 }
-async function memberSignIn(page, name) {
+const MEMBER_PIN = "2468";
+async function memberSignIn(page, name, pin = MEMBER_PIN) {
   await page.getByLabel("Group").selectOption({ label: GROUP });
   await page.getByLabel("Your approved name").fill(name);
+  await page.getByLabel("PIN", { exact: true }).fill(pin);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("heading", { name: "Your groups" }).waitFor();
 }
@@ -74,6 +76,8 @@ try {
     await page.getByLabel("Your name").waitFor();
     await page.getByLabel("Group").selectOption({ label: GROUP });
     await page.getByLabel("Your name").fill(name);
+    await page.getByLabel("Choose a PIN").fill(MEMBER_PIN);
+    await page.getByLabel("Confirm PIN").fill(MEMBER_PIN);
     await page.getByRole("button", { name: "Request access" }).click();
     await page.getByText("Waiting for approval").waitFor();
   }
@@ -83,6 +87,8 @@ try {
   await dup.getByLabel("Your name").waitFor();
   await dup.getByLabel("Group").selectOption({ label: GROUP });
   await dup.getByLabel("Your name").fill(ADMIN);
+  await dup.getByLabel("Choose a PIN").fill("1357");
+  await dup.getByLabel("Confirm PIN").fill("1357");
   await dup.getByRole("button", { name: "Request access" }).click();
   await toast(dup, "administrator's name");
   await dup.context().close();
@@ -102,10 +108,16 @@ try {
   await cy.getByRole("button", { name: "Request with a different name or group" }).click();
   await cy.getByRole("tab", { name: "Sign in", exact: true }).click();
   await cy.getByLabel("Your approved name").waitFor();
+  // A wrong PIN is refused (with the tries left); the right one gets in.
+  await cy.getByLabel("Group").selectOption({ label: GROUP });
+  await cy.getByLabel("Your approved name").fill("Cy E2E");
+  await cy.getByLabel("PIN", { exact: true }).fill("1111");
+  await cy.getByRole("button", { name: "Sign in", exact: true }).click();
+  await toast(cy, "Incorrect PIN. 4 tries left.");
   await memberSignIn(cy, "Cy E2E");
   await bea.reload();
   await bea.getByRole("heading", { name: "Your groups" }).waitFor();
-  step("approved member continued; session survives a reload");
+  step("members request with a PIN; wrong PIN refused, right PIN signs in; session survives a reload");
 
   await openGroup(bea);
   await noHorizontalOverflow(bea, "group page");

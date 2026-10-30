@@ -41,9 +41,9 @@ test("session cookies are HttpOnly, Secure and SameSite=Lax", async t => {
   const login = await call(env, "/api/admin/login", { method: "POST", body: ADMIN });
   assert.match(login.setCookie, /^split_admin=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=10800$/);
   const g = await setupGroup(env, "Group A", [], { adminCookie: login.cookie });
-  const req = await call(env, "/api/access/request", { method: "POST", body: { name: "Bea", groupId: g.groupId } });
+  const req = await call(env, "/api/access/request", { method: "POST", body: { name: "Bea", groupId: g.groupId, pin: "1234" } });
   await call(env, `/api/admin/requests/${req.data.requestId}/approve`, { method: "POST", cookie: login.cookie, body: {} });
-  const signin = await call(env, "/api/access/signin", { method: "POST", body: { name: "bea", groupId: g.groupId } });
+  const signin = await call(env, "/api/access/signin", { method: "POST", body: { name: "bea", groupId: g.groupId, pin: "1234" } });
   assert.match(signin.setCookie, /^split_session=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=\d+$/);
 });
 
@@ -67,10 +67,10 @@ test("member sign-in and access requests are rate limited per client", async t =
   const g = await setupGroup(env, "Group A", []);
   const headers = { "CF-Connecting-IP": "203.0.113.7" };
   const statuses = [];
-  for (let i = 0; i < 11; i++) statuses.push((await call(env, "/api/access/request", { method: "POST", headers, body: { name: "Person " + i, groupId: g.groupId } })).status);
+  for (let i = 0; i < 11; i++) statuses.push((await call(env, "/api/access/request", { method: "POST", headers, body: { name: "Person " + i, groupId: g.groupId, pin: "1234" } })).status);
   assert.deepEqual(statuses, [...Array(10).fill(201), 429]);
   const signins = [];
-  for (let i = 0; i < 21; i++) signins.push((await call(env, "/api/access/signin", { method: "POST", headers, body: { name: "Nobody", groupId: g.groupId } })).status);
+  for (let i = 0; i < 21; i++) signins.push((await call(env, "/api/access/signin", { method: "POST", headers, body: { name: "Nobody", groupId: g.groupId, pin: "1234" } })).status);
   assert.deepEqual(signins, [...Array(20).fill(403), 429]);
 });
 

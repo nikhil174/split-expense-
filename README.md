@@ -3,14 +3,14 @@
 Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 
 ## Architecture and access model
-- Public endpoint lists existing groups; visitors choose a group and submit their name plus that group ID.
+- Public endpoint lists existing groups; visitors choose a group and submit their name, that group ID and a 4-digit PIN.
 - Group names are globally unique (case-insensitive, surrounding whitespace ignored), enforced by a D1 unique index.
 - Only the separate admin session can create groups or review membership requests.
 - Approving a request both activates the visitor's 3-hour access and adds them to the requested group.
 - Admin identity/session (`split_admin`) and regular member session (`split_session`) are separate. The admin can request membership in their own group and approve that request, then use the normal expense UI.
 - Members cannot create groups, directly add members, or bypass approval using invite codes.
 - The admin signs in with a PIN configured as the Worker secret `ADMIN_PIN`.
-- Approved visitors can activate a passwordless, server-side session lasting up to 3 hours.
+- Approved members sign in with group + name + their 4-digit PIN for a server-side session lasting up to 3 hours.
 - The admin can reject pending requests or revoke approved access.
 - Group, expense, balance, and member reads verify both the active member session and group membership.
 - Group access is request/approval based; no invite-code bypass.
@@ -42,13 +42,19 @@ Mobile-first expense sharing for a group, hosted on Cloudflare Workers + D1.
 
 ## One admin, two views
 - The administrator is one person. An admin session always acts as the `admin` member in every group, and the top bar switches between **My groups** (normal-user view) and **Admin** (dashboard, requests, groups, all expenses).
-- The admin's saved name is reserved: nobody can request access or do the passwordless member sign-in with it.
+- The admin's saved name is reserved: nobody can request access or sign in as a member with it.
 - Older data may contain a separate member entry for the admin (same person, two identities). The Admin view flags it, and **Review merge → Merge into me** folds it into the admin: expenses paid, shares (added together on the same expense) and payments move over, payments between the two entries are dropped, and everyone else's balance is unchanged (`GET /api/admin/requests/:id/merge-preview`, `POST /api/admin/requests/:id/merge-into-admin`).
 
 ## Membership policy (as implemented)
 - Members who are approved (even if their 3-hour window lapsed) or pending re-approval stay selectable as payer/split members; acting in the app still requires an active session.
 - Revoked, removed or deleted members are not selectable for new expenses or member-recorded payments. Their `appx_group_members` row is kept so historical expenses, splits, settlements and balances still show their name.
-- Low-friction tradeoff: member sign-in is passwordless (group + approved name), so anyone who knows an approved member's name can sign in as them while their approval is active. Admin approval and the 3-hour expiry are the only guards. Adding a per-member PIN would close this; ask the owner before changing it.
+## Member PINs (migration `0007`)
+- Every member has a 4-digit PIN, chosen when they request access and required at sign-in. Only a hash is stored (`appx_access_requests.pin_hash`): PBKDF2-SHA256, 100,000 iterations, a random 16-byte salt per member, with `SESSION_SECRET` mixed in as a pepper so a copy of the database alone cannot be brute-forced. The iteration count is stored with each hash.
+- **Rotating `SESSION_SECRET` invalidates every member PIN** (members then need an admin PIN reset).
+- 5 wrong PINs in a row lock that member for 15 minutes (on top of the per-IP sign-in limit). Someone who knows a member's name can trigger this lock, but cannot sign in.
+- Members from before PINs have no hash yet: their next sign-in asks them to choose and confirm one. Until they do, anyone who knows their name could set it first; the Admin view shows "no PIN yet" for them, and **Reset PIN** fixes a wrong one.
+- Asking for access again under an existing name requires that name's PIN, so nobody can take over someone else's entry.
+- **Reset PIN** (Admin → member menu, `POST /api/admin/requests/:id/reset-pin`) clears the PIN and lock and signs the member out; they choose a new PIN on their next sign-in.
 
 ## Security controls
 - `HttpOnly; Secure; SameSite=Lax` cookies; cross-site writes (foreign `Origin`) are refused; JSON bodies are capped at 16 KB; split lists are capped at 100 members.

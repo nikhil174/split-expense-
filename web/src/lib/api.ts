@@ -2,9 +2,11 @@
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -17,7 +19,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   let data: unknown = {};
   try { data = await res.json(); } catch { /* empty body */ }
-  if (!res.ok) throw new ApiError((data as { error?: string }).error || "Something went wrong. Please try again.", res.status);
+  if (!res.ok) throw new ApiError((data as { error?: string }).error || "Something went wrong. Please try again.", res.status, (data as { code?: string }).code);
   return data as T;
 }
 export const get = <T,>(path: string) => request<T>(path);
@@ -60,6 +62,7 @@ export type PersonView = { me: Identity; other: Identity & { active: boolean }; 
 
 export type AccessRequest = {
   id: string; name: string; status: MemberStatus; requestedAt: number; expiresAt: number | null; groupId: string | null; groupName: string | null;
+  hasPin?: boolean;
 };
 export type AdminGroup = { id: string; name: string; createdAt: number; memberCount: number };
 export type AdminExpense = { id: string; description: string; amountCents: number; createdAt: number; groupId: string; groupName: string; paidBy: string };

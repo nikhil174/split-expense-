@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
-import { Check, FolderPlus, MoreHorizontal, Pencil, ReceiptText, ShieldCheck, Trash2, UserCheck, Users, X } from "lucide-react";
+import { Check, FolderPlus, KeyRound, MoreHorizontal, Pencil, ReceiptText, ShieldCheck, Trash2, UserCheck, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -112,7 +112,7 @@ function RequestsTab({ onMerge }: { onMerge: (r: AccessRequest) => void }) {
                   <PersonAvatar id={r.id} name={r.name} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px] font-medium">{r.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{r.groupName || "No group"} · {new Date(r.requestedAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}</p>
+                    <p className="truncate text-xs text-muted-foreground">{r.groupName || "No group"} · {new Date(r.requestedAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}{r.hasPin === false && " · no PIN yet"}</p>
                   </div>
                   <Badge variant="outline" className={cn("rounded-full border-0 px-2.5 py-0.5 text-[12px] font-medium capitalize", STATUS_STYLE[r.status])}>{r.status}</Badge>
                   {r.status === "pending" ? (
@@ -125,6 +125,9 @@ function RequestsTab({ onMerge }: { onMerge: (r: AccessRequest) => void }) {
                       <DropdownMenuTrigger asChild><Button size="icon-sm" variant="ghost" aria-label={"Actions for " + r.name}><MoreHorizontal /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-56">
                         <DropdownMenuItem onSelect={() => setRenaming({ kind: "member", id: r.id, name: r.name })}><Pencil />Rename</DropdownMenuItem>
+                        {r.hasPin && (
+                          <DropdownMenuItem onSelect={() => setConfirm({ title: `Reset ${r.name}'s PIN?`, body: "They are signed out and choose a new 4-digit PIN the next time they sign in. Use this if they forgot their PIN or got locked out.", action: "Reset PIN", run: () => act.mutateAsync({ id: r.id, action: "reset-pin", label: r.name + "'s PIN was reset." }) })}><KeyRound />Reset PIN</DropdownMenuItem>
+                        )}
                         {r.status === "approved" && <DropdownMenuItem onSelect={() => act.mutate({ id: r.id, action: "revoke", label: r.name + "'s access revoked." })}>Revoke access</DropdownMenuItem>}
                         {(r.status === "rejected" || r.status === "revoked") && <DropdownMenuItem onSelect={() => act.mutate({ id: r.id, action: "approve", label: r.name + " approved." })}>Approve again</DropdownMenuItem>}
                         {r.groupId && <DropdownMenuItem onSelect={() => onMerge(r)}><UserCheck />This is me — merge</DropdownMenuItem>}

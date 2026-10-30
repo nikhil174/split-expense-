@@ -26,12 +26,12 @@ test("the admin's name is reserved: no separate member request or passwordless s
   t.after(() => raw.close());
   const g = await setupGroup(env, "Trip", []);
   for (const name of [ADMIN.name, "  alex   ADMIN "]) {
-    const r = await call(env, "/api/access/request", { method: "POST", body: { name, groupId: g.groupId } });
+    const r = await call(env, "/api/access/request", { method: "POST", body: { name, groupId: g.groupId, pin: "1234" } });
     assert.equal(r.status, 409);
     assert.match(r.data.error, /Admin login/);
   }
   legacyDuplicateOfAdmin(raw, g.groupId);
-  const signin = await call(env, "/api/access/signin", { method: "POST", body: { name: ADMIN.name, groupId: g.groupId } });
+  const signin = await call(env, "/api/access/signin", { method: "POST", body: { name: ADMIN.name, groupId: g.groupId, pin: "1234" } });
   assert.equal(signin.status, 403, "nobody can become the admin's member entry without the PIN");
 });
 

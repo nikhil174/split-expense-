@@ -27,7 +27,7 @@ test("group creation and repeated expense split changes work end-to-end", async 
 
   // A second member requests access; the admin approves them.
   const requested = await call(env, "/api/access/request", {
-    method: "POST", body: { name: "Sam Member", groupId },
+    method: "POST", body: { name: "Sam Member", groupId, pin: "1357" },
   });
   assert.equal(requested.status, 201);
   const approved = await call(env, "/api/admin/requests/" + requested.data.requestId + "/approve", {
@@ -36,7 +36,7 @@ test("group creation and repeated expense split changes work end-to-end", async 
   assert.equal(approved.status, 200);
 
   const memberLogin = await call(env, "/api/access/signin", {
-    method: "POST", body: { name: "Sam Member", groupId },
+    method: "POST", body: { name: "Sam Member", groupId, pin: "1357" },
   });
   assert.equal(memberLogin.status, 200);
   const memberCookie = memberLogin.cookie;

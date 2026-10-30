@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { EASE, LoadingButton, NativeSelect, Segmented, Wordmark, fieldClass, haptic } from "@/components/app/bits";
-import { get, post } from "@/lib/api";
+import { ApiError, get, post } from "@/lib/api";
 import { keys } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +37,15 @@ function Field({ label, htmlFor, children, hint }: { label: string; htmlFor: str
   );
 }
 
+// Four-digit PIN box: digits only, masked, numeric keypad on phones.
+function PinInput({ id, value, onChange, autoComplete = "current-password", autoFocus }: { id: string; value: string; onChange: (v: string) => void; autoComplete?: string; autoFocus?: boolean }) {
+  return (
+    <Input id={id} type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} required autoComplete={autoComplete} autoFocus={autoFocus}
+      placeholder="••••" value={value} onChange={e => onChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
+      className={cn(fieldClass, "tabular text-center text-[22px] tracking-[0.6em] placeholder:tracking-[0.6em]")} />
+  );
+}
+
 const fade = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 }, transition: { duration: 0.25, ease: EASE } };
 
 export function AuthScreen() {
@@ -46,7 +55,9 @@ export function AuthScreen() {
   const [busy, setBusy] = React.useState(false);
   const [requestId, setRequestId] = React.useState(storage.get);
   const groups = useQuery({ queryKey: ["public-groups"], queryFn: () => get<{ groups: PublicGroup[] }>("/api/groups/public").then(d => d.groups) });
-  const [form, setForm] = React.useState({ groupId: "", name: "", adminName: "", pin: "", requestName: "", requestGroup: "" });
+  const [form, setForm] = React.useState({ groupId: "", name: "", memberPin: "", confirmPin: "", adminName: "", pin: "", requestName: "", requestGroup: "", requestPin: "", requestPin2: "" });
+  // Existing members from before PINs pick one on their next sign-in.
+  const [creatingPin, setCreatingPin] = React.useState(false);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement> | string) => setForm(f => ({ ...f, [k]: typeof e === "string" ? e : e.target.value }));
 
   const run = async (fn: () => Promise<void>) => {
@@ -79,15 +90,32 @@ export function AuthScreen() {
                   <Segmented id="auth-mode" value={mode} onChange={setMode} options={[{ value: "member", label: "Member" }, { value: "admin", label: "Admin" }]} />
                   {mode === "member" ? (
                     <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
-                      await post("/api/access/signin", { name: form.name.trim(), groupId: form.groupId });
-                      setForm(f => ({ ...f, name: "" }));
-                      await signedIn("Welcome back.");
+                      if (creatingPin && form.memberPin !== form.confirmPin) throw new Error("The two PINs don't match.");
+                      try {
+                        await post("/api/access/signin", { name: form.name.trim(), groupId: form.groupId, pin: form.memberPin, createPin: creatingPin });
+                      } catch (err) {
+                        if (err instanceof ApiError && err.code === "pin_not_set") { setCreatingPin(true); setForm(f => ({ ...f, confirmPin: "" })); return; }
+                        throw err;
+                      }
+                      setForm(f => ({ ...f, name: "", memberPin: "", confirmPin: "" }));
+                      setCreatingPin(false);
+                      await signedIn(creatingPin ? "PIN created. Welcome back." : "Welcome back.");
                     }); }}>
-                      <Field label="Group" htmlFor="signin-group"><GroupSelect id="signin-group" value={form.groupId} onChange={set("groupId")} groups={groups.data} /></Field>
-                      <Field label="Your approved name" htmlFor="signin-name" hint="No password — your name must be approved for this group.">
-                        <Input id="signin-name" required minLength={2} maxLength={60} autoComplete="name" placeholder="Name used in your request" value={form.name} onChange={set("name")} className={fieldClass} />
+                      <Field label="Group" htmlFor="signin-group"><GroupSelect id="signin-group" value={form.groupId} onChange={v => { set("groupId")(v); setCreatingPin(false); }} groups={groups.data} /></Field>
+                      <Field label="Your approved name" htmlFor="signin-name">
+                        <Input id="signin-name" required minLength={2} maxLength={60} autoComplete="username" placeholder="Name used in your request" value={form.name} onChange={e => { set("name")(e); setCreatingPin(false); }} className={fieldClass} />
                       </Field>
-                      <LoadingButton type="submit" size="xl" className="w-full" loading={busy} loadingText="Signing in…">Sign in</LoadingButton>
+                      <Field label={creatingPin ? "New PIN" : "PIN"} htmlFor="signin-pin" hint={creatingPin ? "First time signing in with a PIN. Choose 4 digits only you know, then type them again below. You'll use this PIN from now on." : undefined}>
+                        <PinInput id="signin-pin" value={form.memberPin} onChange={set("memberPin")} autoComplete={creatingPin ? "new-password" : "current-password"} />
+                      </Field>
+                      <AnimatePresence initial={false}>
+                        {creatingPin && (
+                          <m.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.25, ease: EASE }} className="overflow-hidden">
+                            <Field label="Confirm PIN" htmlFor="signin-pin2"><PinInput id="signin-pin2" value={form.confirmPin} onChange={set("confirmPin")} autoComplete="new-password" autoFocus /></Field>
+                          </m.div>
+                        )}
+                      </AnimatePresence>
+                      <LoadingButton type="submit" size="xl" className="w-full" disabled={form.memberPin.length !== 4 || (creatingPin && form.confirmPin.length !== 4)} loading={busy} loadingText="Signing in…">{creatingPin ? "Create PIN and sign in" : "Sign in"}</LoadingButton>
                     </form>
                   ) : (
                     <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
@@ -111,18 +139,24 @@ export function AuthScreen() {
                     <RequestStatus requestId={requestId} busy={busy} run={run} onReset={() => { storage.set(""); setRequestId(""); }} onEntered={() => signedIn("You're in.")} />
                   ) : (
                     <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
-                      const d = await post<{ requestId: string; message: string }>("/api/access/request", { name: form.requestName.trim(), groupId: form.requestGroup });
+                      if (form.requestPin !== form.requestPin2) throw new Error("The two PINs don't match.");
+                      const d = await post<{ requestId: string; message: string }>("/api/access/request", { name: form.requestName.trim(), groupId: form.requestGroup, pin: form.requestPin });
                       storage.set(d.requestId);
                       setRequestId(d.requestId);
-                      setForm(f => ({ ...f, requestName: "" }));
+                      setForm(f => ({ ...f, requestName: "", requestPin: "", requestPin2: "" }));
                       haptic();
                       toast.success(d.message);
                     }); }}>
                       <Field label="Group" htmlFor="request-group"><GroupSelect id="request-group" value={form.requestGroup} onChange={set("requestGroup")} groups={groups.data} /></Field>
-                      <Field label="Your name" htmlFor="request-name" hint="Once the admin approves you, sign in with this name.">
-                        <Input id="request-name" required minLength={2} maxLength={60} autoComplete="name" placeholder="Full name" value={form.requestName} onChange={set("requestName")} className={fieldClass} />
+                      <Field label="Your name" htmlFor="request-name">
+                        <Input id="request-name" required minLength={2} maxLength={60} autoComplete="username" placeholder="Full name" value={form.requestName} onChange={set("requestName")} className={fieldClass} />
                       </Field>
-                      <LoadingButton type="submit" size="xl" className="w-full" loading={busy} loadingText="Sending request…">Request access</LoadingButton>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Field label="Choose a PIN" htmlFor="request-pin"><PinInput id="request-pin" value={form.requestPin} onChange={set("requestPin")} autoComplete="new-password" /></Field>
+                        <Field label="Confirm PIN" htmlFor="request-pin2"><PinInput id="request-pin2" value={form.requestPin2} onChange={set("requestPin2")} autoComplete="new-password" /></Field>
+                      </div>
+                      <p className="footnote -mt-2 px-1 text-muted-foreground">Once the admin approves you, sign in with your name and this 4-digit PIN.</p>
+                      <LoadingButton type="submit" size="xl" className="w-full" disabled={form.requestPin.length !== 4 || form.requestPin2.length !== 4} loading={busy} loadingText="Sending request…">Request access</LoadingButton>
                     </form>
                   )}
                 </m.div>

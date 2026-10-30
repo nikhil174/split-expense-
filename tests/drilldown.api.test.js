@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeEnv, call, setupGroup } from "./helpers/d1.js";
+import { makeEnv, call, setupGroup, MEMBER_PIN } from "./helpers/d1.js";
 import { computePairwiseDebts, outstandingDebt, pairwiseActivity } from "../src/settlement-logic.js";
 import { allocateEqualSplit } from "../src/split-logic.js";
 
@@ -197,8 +197,8 @@ test("admin can rename a member and a group; names update everywhere and the mem
   assert.equal((await f.get("Bea", "/with/" + ids.Cy)).data.other.name, "Cyrus");
   // Cy's current session keeps working and shows the new name; signing in uses it too.
   assert.equal((await call(f.env, "/api/me", { cookie: f.cookies.Cy })).data.member.name, "Cyrus");
-  assert.equal((await call(f.env, "/api/access/signin", { method: "POST", body: { name: "Cyrus", groupId: f.groupId } })).status, 200);
-  assert.equal((await call(f.env, "/api/access/signin", { method: "POST", body: { name: "Cy", groupId: f.groupId } })).status, 403);
+  assert.equal((await call(f.env, "/api/access/signin", { method: "POST", body: { name: "Cyrus", groupId: f.groupId, pin: MEMBER_PIN } })).status, 200);
+  assert.equal((await call(f.env, "/api/access/signin", { method: "POST", body: { name: "Cy", groupId: f.groupId, pin: MEMBER_PIN } })).status, 403);
 
   // Group rename: admin only, unique, and members see it.
   const other = await setupGroup(f.env, "Office", [], { adminCookie: f.adminCookie });
