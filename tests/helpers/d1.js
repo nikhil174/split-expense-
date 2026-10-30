@@ -39,11 +39,13 @@ export async function applyMigrations(raw) {
 }
 
 export const ADMIN = { name: "Alex Admin", pin: "test-pin-4821" };
+// Every test member uses this PIN unless a test says otherwise.
+export const MEMBER_PIN = "2468";
 
 export async function makeEnv() {
   const raw = new DatabaseSync(":memory:", { enableForeignKeyConstraints: true });
   await applyMigrations(raw);
-  return { raw, env: { "split-expense": new D1Mock(raw), ADMIN_PIN: ADMIN.pin, SESSION_SECRET: "test-session-secret", ENVIRONMENT: "development" } };
+  return { raw, env: { "split-expense": new D1Mock(raw), ADMIN_PIN: ADMIN.pin, SESSION_SECRET: "test-session-secret", ENVIRONMENT: "development", PIN_HASH_ITERATIONS: "1000" } };
 }
 
 export async function call(env, path, { method = "GET", body, cookie, headers: extra = {} } = {}) {
@@ -72,11 +74,11 @@ export async function setupGroup(env, groupName, memberNames, { adminCookie } = 
   const groupId = created.data.group.id;
   const ids = { admin: "admin" }, cookies = { admin: adminCookie };
   for (const name of memberNames) {
-    const requested = await call(env, "/api/access/request", { method: "POST", body: { name, groupId } });
+    const requested = await call(env, "/api/access/request", { method: "POST", body: { name, groupId, pin: MEMBER_PIN } });
     if (requested.status !== 201) throw new Error("request failed: " + JSON.stringify(requested.data));
     const approved = await call(env, "/api/admin/requests/" + requested.data.requestId + "/approve", { method: "POST", cookie: adminCookie, body: {} });
     if (approved.status !== 200) throw new Error("approve failed");
-    const signin = await call(env, "/api/access/signin", { method: "POST", body: { name, groupId } });
+    const signin = await call(env, "/api/access/signin", { method: "POST", body: { name, groupId, pin: MEMBER_PIN } });
     if (signin.status !== 200) throw new Error("signin failed: " + JSON.stringify(signin.data));
     ids[name] = requested.data.requestId;
     cookies[name] = signin.cookie;
