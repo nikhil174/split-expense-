@@ -3,6 +3,7 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DateBadge, EmptyState, PersonAvatar } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
+import { ExpandableExpense } from "./ExpenseBreakdown";
 import { usePair } from "@/hooks/queries";
 import { inr } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -13,12 +14,17 @@ import * as React from "react";
 // adding up to that amount. creditor/debtor only set which side reads first.
 export function PairDetail({ groupId, creditorId, debtorId, meId }: { groupId: string; creditorId: string; debtorId: string; meId?: string }) {
   const q = usePair(groupId, creditorId, debtorId);
+  const [openExpense, setOpenExpense] = React.useState<string | null>(null);
   const d = q.data;
   if (!d) return <div className="space-y-3 pt-2">{[0, 1, 2].map(i => <Skeleton key={i} className="h-12 w-full rounded-2xl" />)}</div>;
   const A = d.me, B = d.other; // netCents > 0: B owes A
   const nm = (id: string, name: string) => (id === meId ? "You" : name);
   const nameOf = (id: string) => (id === A.id ? A.name : B.name);
   const n = d.netCents;
+  // Expenses open their full split when tapped; payments are plain rows.
+  const row = (key: string, expenseId: string | null, children: React.ReactNode) => expenseId
+    ? <ExpandableExpense key={key} groupId={groupId} expenseId={expenseId} meId={meId} open={openExpense === expenseId} onToggle={() => setOpenExpense(o => (o === expenseId ? null : expenseId))}>{children}</ExpandableExpense>
+    : <li key={key} className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-0">{children}</li>;
   const owes = (debtor: { id: string; name: string }, creditor: { id: string; name: string }, cents: number) =>
     `${nm(debtor.id, debtor.name)} ${debtor.id === meId ? "owe" : "owes"} ${creditor.id === meId ? "you" : creditor.name} ${inr(cents)}`;
   return (
@@ -39,8 +45,7 @@ export function PairDetail({ groupId, creditorId, debtorId, meId }: { groupId: s
             {d.items.map(it => {
               // effectCents > 0 means B owes A more because of this item.
               const debtor = it.effectCents > 0 ? B : A, creditor = it.effectCents > 0 ? A : B;
-              return (
-                <li key={it.type + it.id} className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-0">
+              return row(it.type + it.id, it.type === "expense" ? it.id : null, <>
                   <DateBadge ts={it.createdAt} />
                   <span className="min-w-0 flex-1">
                     {it.type === "expense" ? (
@@ -63,8 +68,7 @@ export function PairDetail({ groupId, creditorId, debtorId, meId }: { groupId: s
                     </span>
                     <span className="block text-[11.5px] whitespace-nowrap text-muted-foreground">{it.type === "payment" ? "paid back" : `${nm(debtor.id, debtor.name)} ${debtor.id === meId ? "owe" : "owes"}`}</span>
                   </span>
-                </li>
-              );
+                </>);
             })}
           </ul>
         )}

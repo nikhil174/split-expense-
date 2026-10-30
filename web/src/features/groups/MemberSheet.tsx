@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DateBadge, EmptyState, List, PersonAvatar, SectionTitle, pressableRow } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
 import { PairDetail } from "./PairDetail";
+import { ExpandableExpense } from "./ExpenseBreakdown";
 import { useMemberSummary } from "@/hooks/queries";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
@@ -21,6 +22,9 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
   // Tapping "Jagan owes Vicky" shows what is between those two, in this sheet.
   const [pair, setPair] = React.useState<{ creditorId: string; debtorId: string } | null>(null);
   React.useEffect(() => { setPair(null); }, [memberId]);
+  // Tapping an expense opens its full split in place.
+  const [openExpense, setOpenExpense] = React.useState<string | null>(null);
+  React.useEffect(() => { setOpenExpense(null); }, [memberId]);
   const d = q.data;
   const name = d?.member.name ?? "";
   const label = (id: string, n: string) => (id === meId ? "you" : n);
@@ -78,7 +82,7 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
                   {!d.expenses.length ? <EmptyState icon={<ReceiptText />} title="No expenses">{name} isn't part of any expense yet.</EmptyState> : (
                     <ul>
                       {d.expenses.map(x => (
-                        <li key={x.id} className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-0">
+                        <ExpandableExpense key={x.id} groupId={groupId} expenseId={x.id} meId={meId} open={openExpense === x.id} onToggle={() => setOpenExpense(o => (o === x.id ? null : x.id))}>
                           <DateBadge ts={x.createdAt} />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[15px] font-medium">{x.description}</span>
@@ -87,7 +91,7 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
                           <span className={cn("tabular text-right text-[14.5px] font-medium whitespace-nowrap", x.effectCents > 0 ? "text-positive" : x.effectCents < 0 ? "text-negative" : "text-muted-foreground")}>
                             {x.effectCents > 0 ? "lent " + inr(x.effectCents) : x.effectCents < 0 ? "owes " + inr(-x.effectCents) : "—"}
                           </span>
-                        </li>
+                        </ExpandableExpense>
                       ))}
                     </ul>
                   )}
