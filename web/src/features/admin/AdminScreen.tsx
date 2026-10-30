@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AnimatedMoney, DateBadge, EASE, EmptyState, LoadingButton, NativeSelect, Page, PersonAvatar, SectionTitle, Segmented, fieldClass, listItem } from "@/components/app/bits";
 import { AquaCard } from "@/features/groups/GroupsScreen";
+import { ExpenseBreakdown } from "@/features/groups/ExpenseBreakdown";
 import { useAdminAction, useAdminDashboard, useAdminExpenses, useAdminGroups, useAdminRequests, useMergePreview } from "@/hooks/queries";
 import { post, type AccessRequest } from "@/lib/api";
 import { inr } from "@/lib/money";
@@ -194,6 +195,8 @@ function GroupsTab() {
 
 function ExpensesTab() {
   const expenses = useAdminExpenses();
+  const [open, setOpen] = React.useState<string | null>(null);
+  const toggle = (id: string) => setOpen(o => (o === id ? null : id));
   const [groupId, setGroupId] = React.useState("");
   const groupNames = React.useMemo(() => [...new Map((expenses.data || []).map(x => [x.groupId, x.groupName]))], [expenses.data]);
   const rows = (expenses.data || []).filter(x => !groupId || x.groupId === groupId);
@@ -211,12 +214,19 @@ function ExpensesTab() {
           <TableHeader><TableRow className="hover:bg-transparent"><TableHead className="w-12 pl-4">Date</TableHead><TableHead>Expense</TableHead><TableHead>Paid by</TableHead><TableHead className="pr-4 text-right">Amount</TableHead></TableRow></TableHeader>
           <TableBody>
             {rows.map(x => (
-              <TableRow key={x.id}>
-                <TableCell className="pl-4"><DateBadge ts={x.createdAt} /></TableCell>
-                <TableCell className="max-w-0 w-full"><span className="block truncate font-medium">{x.description}</span><span className="block truncate text-xs text-muted-foreground">{x.groupName}</span></TableCell>
-                <TableCell className="max-w-24 truncate text-sm">{x.paidBy}</TableCell>
-                <TableCell className="tabular pr-4 text-right">{inr(x.amountCents)}</TableCell>
-              </TableRow>
+              <React.Fragment key={x.id}>
+                {/* Tap an expense to see its full split. */}
+                <TableRow role="button" tabIndex={0} aria-expanded={open === x.id} onClick={() => toggle(x.id)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(x.id); } }}
+                  className={cn("cursor-pointer", open === x.id && "border-b-0 bg-[#141716]/[0.025]")}>
+                  <TableCell className="pl-4"><DateBadge ts={x.createdAt} /></TableCell>
+                  <TableCell className="max-w-0 w-full"><span className="block truncate font-medium">{x.description}</span><span className="block truncate text-xs text-muted-foreground">{x.groupName}</span></TableCell>
+                  <TableCell className="max-w-24 truncate text-sm">{x.paidBy}</TableCell>
+                  <TableCell className="tabular pr-4 text-right">{inr(x.amountCents)}</TableCell>
+                </TableRow>
+                {open === x.id && (
+                  <TableRow className="bg-[#141716]/[0.025] hover:bg-[#141716]/[0.025]"><TableCell colSpan={4} className="p-0 pt-1 whitespace-normal"><ExpenseBreakdown groupId={x.groupId} expenseId={x.id} meId="admin" /></TableCell></TableRow>
+                )}
+              </React.Fragment>
             ))}
           </TableBody>
         </Table>
