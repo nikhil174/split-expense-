@@ -1,7 +1,7 @@
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Pencil, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet } from "lucide-react";
+import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Pencil, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet, Paperclip } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,11 +17,12 @@ import { MembersSheet } from "./MembersSheet";
 import { PendingPayments } from "./PendingPayments";
 import { MemberSheet } from "./MemberSheet";
 import { UpiPeople } from "./UpiPayments";
+import { AwaitingBadge, ProofDialog, proofSrc } from "./Awaiting";
 import { PairSheet } from "./PairDetail";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
 import { useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
-import type { Expense } from "@/lib/api";
+import type { Expense, Settlement } from "@/lib/api";
 import { inr, shortDate } from "@/lib/money";
 import { goBack, navigate, type GroupTab } from "@/lib/route";
 import { cn } from "@/lib/utils";
@@ -38,7 +39,7 @@ export function BackButton({ label, onClick }: { label: string; onClick: () => v
   );
 }
 
-export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }) {
+export function GroupScreen({ groupId, tab, expenseId }: { groupId: string; tab: GroupTab; expenseId?: string }) {
   const group = useGroup(groupId);
   const mine = useMine(groupId);
   const [adding, setAdding] = React.useState(false);
@@ -90,7 +91,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
 
       <AnimatePresence mode="wait" initial={false}>
         <m.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }} className="mt-7">
-          {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} onAdd={() => setAdding(true)} onEdit={x => setEditing({ open: true, x })} />}
+          {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} focusId={expenseId} onAdd={() => setAdding(true)} onEdit={x => setEditing({ open: true, x })} />}
           {tab === "balances" && <BalancesTab groupId={groupId} />}
           {tab === "payments" && <PaymentsTab groupId={groupId} meId={mine.data?.memberId} />}
           {tab === "insights" && <InsightsTab groupId={groupId} />}
@@ -127,10 +128,19 @@ function TableHead({ cols }: { cols: [string, string?][] }) {
 const tr = "border-b border-hairline last:border-0";
 
 // ----- Expenses -----
-function ExpensesTab({ groupId, meId, onAdd, onEdit }: { groupId: string; meId?: string; onAdd: () => void; onEdit: (x: Expense) => void }) {
+function ExpensesTab({ groupId, meId, focusId, onAdd, onEdit }: { groupId: string; meId?: string; focusId?: string; onAdd: () => void; onEdit: (x: Expense) => void }) {
   const expenses = useExpenses(groupId);
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState<string | null>(null);
+  // Opened from a notification (#/g/:id/e/:expenseId): expand that expense
+  // and bring it into view, or say it is gone.
+  React.useEffect(() => {
+    if (!focusId || !expenses.data) return;
+    if (!expenses.data.some(x => x.id === focusId)) { toast.message("That expense was deleted."); return; }
+    setQuery(""); setOpen(focusId);
+    const t = window.setTimeout(() => document.getElementById("expense-" + focusId)?.scrollIntoView({ block: "center", behavior: "smooth" }), 350);
+    return () => window.clearTimeout(t);
+  }, [focusId, !!expenses.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const q = query.toLowerCase();
   const list = (expenses.data || []).filter(x => !q || x.description.toLowerCase().includes(q) || x.paidByName.toLowerCase().includes(q));
   const total = (expenses.data || []).reduce((s, x) => s + x.amountCents, 0);
@@ -169,7 +179,7 @@ function ExpenseRow({ x, meId, groupId, open, onToggle, onEdit }: { x: Expense; 
   const d = shortDate(x.createdAt);
   return (
     <>
-      <tr aria-expanded={open} tabIndex={0} onClick={onToggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+      <tr id={"expense-" + x.id} aria-expanded={open} tabIndex={0} onClick={onToggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
         className={cn("cursor-pointer transition-colors duration-150 active:bg-[#141716]/[0.04]", !open && tr, open && "bg-[#141716]/[0.025]")}>
         <td className="w-full max-w-0 py-3 pr-2 pl-4">
           <span className="flex items-center gap-3">
@@ -245,10 +255,11 @@ function BalancesTab({ groupId }: { groupId: string }) {
   const [pairOpen, setPairOpen] = React.useState<{ creditorId: string; debtorId: string } | null>(null);
   const people = React.useMemo(() => {
     if (!mine.data || !group.data) return null;
-    const net = new Map<string, { name: string; cents: number }>();
-    for (const d of mine.data.owedToYou) net.set(d.fromMemberId, { name: d.fromName, cents: d.amountCents });
-    for (const d of mine.data.youOwe) net.set(d.toMemberId, { name: d.toName, cents: -d.amountCents });
-    for (const mm of group.data.members) if (mm.id !== meId && !net.has(mm.id)) net.set(mm.id, { name: mm.name, cents: 0 });
+    // waiting: payments between us awaiting approval (either way).
+    const net = new Map<string, { name: string; cents: number; waiting: number }>();
+    for (const d of mine.data.owedToYou) net.set(d.fromMemberId, { name: d.fromName, cents: d.amountCents, waiting: d.waitingCents || 0 });
+    for (const d of mine.data.youOwe) net.set(d.toMemberId, { name: d.toName, cents: -d.amountCents, waiting: d.waitingCents || 0 });
+    for (const mm of group.data.members) if (mm.id !== meId && !net.has(mm.id)) net.set(mm.id, { name: mm.name, cents: 0, waiting: 0 });
     return [...net].sort((a, b) => Math.abs(b[1].cents) - Math.abs(a[1].cents) || a[1].name.localeCompare(b[1].name));
   }, [mine.data, group.data, meId]);
   return (
@@ -262,6 +273,7 @@ function BalancesTab({ groupId }: { groupId: string }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[16px] font-medium">{p.name}</span>
                 <span className={cn("block text-[13px]", p.cents > 0 ? "text-positive" : p.cents < 0 ? "text-negative" : "text-muted-foreground")}>{p.cents > 0 ? "owes you" : p.cents < 0 ? "you owe" : "settled up"}</span>
+                {p.waiting > 0 && <AwaitingBadge cents={p.waiting} className="mt-1" />}
               </span>
               {p.cents !== 0 && <span className={cn("tabular text-[16px] font-medium", p.cents > 0 ? "text-positive" : "text-negative")}>{inr(Math.abs(p.cents))}</span>}
               <ChevronRight className={CHEVRON} strokeWidth={2.4} />
@@ -314,6 +326,7 @@ function BalancesTab({ groupId }: { groupId: string }) {
 // ----- Payments -----
 function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
   const payments = useSettlements(groupId);
+  const [proof, setProof] = React.useState<Settlement | null>(null);
   const who = (id: string, name: string) => (id === meId ? "You" : name);
   return (
     <div className="space-y-7">
@@ -335,17 +348,21 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
                   <td className="w-full max-w-0 px-2 py-3">
                     <span className={cn("block truncate text-[15px] font-medium", s.status === "rejected" && "text-muted-foreground line-through")}>{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</span>
                     <span className="block truncate text-[12.5px] text-muted-foreground">
-                      {s.status === "pending" ? <span className="font-medium text-[#9a6b12]">Waiting for {s.toMemberId === meId ? "you" : s.toName} to confirm</span> : s.status === "rejected" ? <span className="font-medium text-negative">Rejected by {s.toMemberId === meId ? "you" : s.toName}</span> : new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}
+                      {s.status === "pending" ? <AwaitingBadge label={`awaiting ${s.toMemberId === meId ? "your" : s.toName + "'s"} approval`} /> : s.status === "rejected" ? <span className="font-medium text-negative">Rejected by {s.toMemberId === meId ? "you" : s.toName}</span> : new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}
                       {s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
                     </span>
                   </td>
-                  <td className={cn("tabular py-3 pr-4 pl-2 text-right text-[15px] font-medium whitespace-nowrap", s.status !== "confirmed" && "text-muted-foreground")}>{inr(s.amountCents)}</td>
+                  <td className={cn("tabular py-3 pr-4 pl-2 text-right text-[15px] font-medium whitespace-nowrap", s.status !== "confirmed" && "text-muted-foreground")}>
+                    {inr(s.amountCents)}
+                    {s.hasProof && <button type="button" aria-label="View payment screenshot" onClick={() => setProof(s)} className="mt-0.5 flex w-full cursor-pointer items-center justify-end gap-1 text-[12px] font-normal text-tint"><Paperclip className="size-3" />Screenshot</button>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+    <ProofDialog src={proof ? proofSrc(groupId, proof.id) : null} title={proof ? `${proof.fromName}'s payment` : ""} onClose={() => setProof(null)} />
     </div>
     </div>
   );

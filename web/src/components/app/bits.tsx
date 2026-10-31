@@ -237,7 +237,7 @@ export function Wordmark({ large }: { large?: boolean }) {
           ? [{ x: "86%", y: "-8%", size: 18, delay: 0.3 }, { x: "-10%", y: "78%", size: 10, delay: 1.9 }, { x: "102%", y: "60%", size: 8, delay: 2.8, opacity: 0.8 }]
           : [{ x: "84%", y: "-14%", size: 11, delay: 0.6 }, { x: "-12%", y: "74%", size: 6, delay: 2.1, opacity: 0.8 }]} />
       </span>
-      {!large && <span className="text-[18px] font-medium tracking-[-0.03em]">Split It</span>}
+      {!large && <span className="text-[18px] font-medium tracking-[-0.03em] whitespace-nowrap">Split It</span>}
     </span>
   );
 }

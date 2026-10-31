@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { toast } from "sonner";
 import {
   get, post, type AccessRequest, type AdminDashboard, type AdminExpense, type AdminGroup, type Balance, type Dashboard,
-  type Debt, type Expense, type GroupDetail, type GroupSummary, type Me, type MergePreview, type MemberSummary, type GroupPaymentMethod, type Mine, type PaymentMethod, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
+  type Debt, type Expense, type GroupDetail, type GroupSummary, type Me, type MergePreview, type MemberSummary, type AppNotification, type GroupPaymentMethod, type Mine, type PaymentMethod, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
 } from "@/lib/api";
 
 export const keys = {
@@ -11,6 +11,7 @@ export const keys = {
   people: ["people-balances"] as const,
   pending: ["pending-payments"] as const,
   paymentMethod: ["payment-method"] as const,
+  notifications: ["notifications"] as const,
   group: (id: string) => ["group", id] as const,
   admin: ["admin"] as const,
 };
@@ -31,6 +32,12 @@ export function useSavePaymentMethod() {
     mutationFn: (body: { upiId: string; qr?: string | null } | "delete") => body === "delete" ? post<{ method: PaymentMethod }>("/api/payment-method/delete") : post<{ method: PaymentMethod }>("/api/payment-method", body),
     onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: keys.paymentMethod }), qc.invalidateQueries({ queryKey: ["group"] })]),
   });
+}
+// My notifications; checked every 45 s and when the app comes back to the front.
+export const useNotifications = () => useQuery({ queryKey: keys.notifications, queryFn: () => get<{ items: AppNotification[]; unread: number }>("/api/notifications"), refetchInterval: 45_000 });
+export function useMarkNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: () => post("/api/notifications/read"), onSuccess: () => qc.invalidateQueries({ queryKey: keys.notifications }) });
 }
 export const usePeopleBalances = () => useQuery({ queryKey: keys.people, queryFn: () => get<PeopleBalances>("/api/balances") });
 
@@ -96,7 +103,8 @@ export function useDeleteExpense(groupId: string) {
 export function useRecordPayment(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { fromMemberId: string; toMemberId: string; amount: string }) => post<{ id: string; status: "pending" | "confirmed" }>(`/api/groups/${groupId}/settlements`, body),
+    // proof: optional screenshot of the payment (data URL).
+    mutationFn: (body: { fromMemberId: string; toMemberId: string; amount: string; proof?: string }) => post<{ id: string; status: "pending" | "confirmed" }>(`/api/groups/${groupId}/settlements`, body),
     onSuccess: () => refreshGroup(qc, groupId),
   });
 }

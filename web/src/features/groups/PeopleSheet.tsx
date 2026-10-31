@@ -5,6 +5,7 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DateBadge, EmptyState, List, PersonAvatar, SectionTitle, pressableRow } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
+import { AwaitingBadge } from "./Awaiting";
 import { ExpandableExpense } from "./ExpenseBreakdown";
 import { usePeopleBalances, usePerson } from "@/hooks/queries";
 import type { PersonBalance } from "@/lib/api";
@@ -81,6 +82,7 @@ function Rows({ title, people, showGroup, onPick }: { title: string | null; peop
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15.5px] font-medium">{x.name}</span>
                 <span className="block truncate text-[13px] text-muted-foreground">{sub || (c > 0 ? "owes you" : "you owe")}</span>
+                {(x.waitingOutCents || x.waitingInCents) > 0 && <AwaitingBadge cents={x.waitingOutCents || x.waitingInCents} label={x.waitingOutCents ? "sent, awaiting approval" : "awaiting your approval"} className="mt-1" />}
               </span>
               <span className={cn("tabular text-right text-[15.5px] font-medium whitespace-nowrap", c > 0 ? "text-positive" : "text-negative")}>{inr(Math.abs(c))}</span>
               <ChevronRight className="size-[18px] shrink-0 text-[#141716]/25" strokeWidth={2.4} />

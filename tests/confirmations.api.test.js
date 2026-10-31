@@ -119,3 +119,30 @@ test("confirm/reject/cancel are scoped to the group and need a session", async t
   assert.equal((await call(f.env, `${f.G}/settlements/${r.data.id}/confirm`, { method: "POST", body: {} })).status, 401);
   assert.equal((await call(f.env, "/api/payments/pending")).status, 401);
 });
+
+test("a payment can carry a screenshot for the receiver; balances show what is awaiting approval", async t => {
+  const f = await fixture(t);
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+  const bad = await f.post("Bea", "/settlements", { fromMemberId: f.g.ids.Bea, toMemberId: f.g.ids.Cy, amount: "5", proof: "data:image/jpeg;base64," + PNG });
+  assert.equal(bad.status, 400, "the bytes must match the type");
+  const r = await f.post("Bea", "/settlements", { fromMemberId: f.g.ids.Bea, toMemberId: f.g.ids.Cy, amount: "20", proof: "data:image/png;base64," + PNG });
+  assert.equal(r.status, 201);
+  // Cy sees it waiting, with the screenshot, and can open it.
+  const waiting = (await call(f.env, "/api/payments/pending", { cookie: f.g.cookies.Cy })).data.toConfirm[0];
+  assert.deepEqual([waiting.amountCents, waiting.hasProof], [2000, true]);
+  assert.equal((await f.get("Cy", "/settlements")).data.settlements.find(x => x.id === r.data.id).hasProof, true);
+  const img = await call(f.env, `${f.G}/settlements/${r.data.id}/proof`, { cookie: f.g.cookies.Cy, raw: true });
+  assert.deepEqual([img.status, img.response.headers.get("content-type"), img.response.headers.get("x-content-type-options")], [200, "image/png", "nosniff"]);
+  // Not from another group, nor signed out.
+  const other = await setupGroup(f.env, "Office", ["Zed"], { adminCookie: f.g.adminCookie });
+  assert.equal((await call(f.env, `/api/groups/${other.groupId}/settlements/${r.data.id}/proof`, { cookie: f.g.adminCookie, raw: true })).status, 404);
+  assert.equal((await call(f.env, `${f.G}/settlements/${r.data.id}/proof`, { raw: true })).status, 401);
+  // Both sides see the amount awaiting approval next to the person.
+  const bea = (await call(f.env, "/api/balances", { cookie: f.g.cookies.Bea })).data.people.find(p => p.memberId === f.g.ids.Cy);
+  const cy = (await call(f.env, "/api/balances", { cookie: f.g.cookies.Cy })).data.people.find(p => p.memberId === f.g.ids.Bea);
+  assert.deepEqual([bea.netCents, bea.waitingOutCents, bea.waitingInCents], [-2000, 2000, 0]);
+  assert.deepEqual([cy.netCents, cy.waitingOutCents, cy.waitingInCents], [2000, 0, 2000]);
+  // Cancelling removes the screenshot too.
+  await f.post("Bea", `/settlements/${r.data.id}/cancel`);
+  assert.equal(f.raw.prepare("SELECT COUNT(*) AS n FROM appx_payment_proofs").get().n, 0);
+});
