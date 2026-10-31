@@ -1,72 +1,154 @@
 import * as React from "react";
-import { Check, Pencil, X } from "lucide-react";
+import { toast } from "sonner";
+import { Check, Clock3, LogOut, MoreHorizontal, Pencil, ShieldCheck, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
-import { List, LoadingButton, PersonAvatar, rowClass } from "@/components/app/bits";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { List, LoadingButton, PersonAvatar, SectionTitle, fieldClass, rowClass } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
-import { useAdminAction, useGroup } from "@/hooks/queries";
-import { post } from "@/lib/api";
+import { useAccountAction, useGroup } from "@/hooks/queries";
+import { post, type Member } from "@/lib/api";
+import { navigate } from "@/lib/route";
 import { cn } from "@/lib/utils";
 
-// Everyone in the group. The admin can rename a member right here: the new
-// name shows on all their past expenses and payments (history is stored by
-// id) and is the name they sign in with from now on.
+type Confirm = { title: string; body: string; action: string; run: () => Promise<unknown>; after?: () => void };
+
+// Everyone in the group, with who is admin. Admins invite people by username
+// or email, let in people waiting, make others admin, remove people, and
+// rename or delete the group. Anyone can leave.
 export function MembersSheet({ groupId, open, onOpenChange }: { groupId: string; open: boolean; onOpenChange: (o: boolean) => void }) {
   const group = useGroup(groupId);
-  const members = group.data?.members || [];
-  const me = group.data?.me;
-  const [editing, setEditing] = React.useState<string | null>(null);
-  const [name, setName] = React.useState("");
-  // The admin renames anyone; a member renames only themselves.
-  const rename = useAdminAction((v: { id: string; name: string }) => v.id === me?.id && !me?.isAdmin ? post("/api/me/name", { name: v.name }) : post(`/api/admin/requests/${v.id}/rename`, { name: v.name }), v => `Renamed to “${v.name}”.`);
-  React.useEffect(() => { if (!open) setEditing(null); }, [open]);
-
-  const start = (id: string, current: string) => { setEditing(id); setName(current); };
-  const clean = name.trim().replace(/\s+/g, " ");
-  const current = members.find(mm => mm.id === editing);
-  const ok = !!current && clean.length >= 2 && clean.length <= 60 && clean !== current.name;
-  const save = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (ok && editing) rename.mutate({ id: editing, name: clean }, { onSuccess: () => setEditing(null) });
-  };
+  const members = group.data?.members || [], waiting = group.data?.waiting || [];
+  const me = group.data?.me, isAdmin = !!me?.isAdmin;
+  const G = `/api/groups/${groupId}`;
+  const act = useAccountAction((v: { path: string; body?: unknown; done?: string }) => post(G + v.path, v.body ?? {}), v => v.done || "Done.");
+  const [confirm, setConfirm] = React.useState<Confirm | null>(null);
+  const [renaming, setRenaming] = React.useState(false);
+  const [groupName, setGroupName] = React.useState("");
+  const adminCount = members.filter(m => m.role === "admin").length;
+  // Admins first, then by name; you are marked "(you)".
+  const sorted = [...members].sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === "admin" ? -1 : 1));
 
   return (
-    <Drawer open={open} onOpenChange={o => { if (!rename.isPending) onOpenChange(o); }} repositionInputs={false}>
+    <Drawer open={open} onOpenChange={o => { if (!act.isPending) onOpenChange(o); }} repositionInputs={false}>
       <DrawerContent className="mx-auto max-h-[90dvh] max-w-xl rounded-t-[28px] border-0">
         <SheetHeader title={`${members.length} ${members.length === 1 ? "member" : "members"}`}
-          description={me?.isAdmin ? "Tap Edit to rename someone. Their new name shows on all past expenses." : "Everyone in this group. Tap Edit on your own name to change it."} disabled={rename.isPending} />
-        <div className="safe-bottom min-h-0 overflow-y-auto px-4 pt-1 pb-6">
-          <List inset={60}>
-            {members.map(mm => {
-              const isMe = mm.id === me?.id, canRename = me?.isAdmin ? mm.id !== "admin" : isMe;
-              return editing === mm.id ? (
-                <form key={mm.id} onSubmit={save} className={cn(rowClass, "gap-2")}>
-                  <PersonAvatar id={mm.id} name={clean || mm.name} size="sm" />
-                  <Input aria-label={"New name for " + mm.name} autoFocus required minLength={2} maxLength={60} value={name} onChange={e => setName(e.target.value)}
-                    className="h-10 min-w-0 flex-1 rounded-[12px] border-[#141716]/[0.1] bg-white px-3 text-[15px]" />
-                  <button type="button" aria-label="Cancel" disabled={rename.isPending} onClick={() => setEditing(null)} className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-[#141716]/[0.06] transition-transform active:scale-90 disabled:opacity-40"><X className="size-4" strokeWidth={2.4} /></button>
-                  <LoadingButton type="submit" size="icon" aria-label="Save name" disabled={!ok} loading={rename.isPending} className="size-9 shrink-0 rounded-full"><Check className="size-4" strokeWidth={2.6} /></LoadingButton>
+          description={isAdmin ? "You're an admin: invite people, let them in and manage the group." : "Everyone in this group. Admins manage who's in it."} disabled={act.isPending} />
+        <div className="safe-bottom min-h-0 space-y-6 overflow-y-auto px-4 pt-1 pb-6">
+          {isAdmin && <InviteForm groupId={groupId} />}
+
+          {isAdmin && waiting.length > 0 && (
+            <section data-testid="waiting">
+              <SectionTitle>Waiting</SectionTitle>
+              <List inset={60}>
+                {waiting.map(w => (
+                  <div key={w.id} className={rowClass}>
+                    <PersonAvatar id={w.id} name={w.name} size="sm" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-medium">{w.name}</span>
+                      <span className="flex items-center gap-1 text-[12.5px] text-muted-foreground"><Clock3 className="size-3" />{w.status === "invited" ? "Invited, hasn't answered" : "Asked to join"}{w.username ? " · @" + w.username : ""}</span>
+                    </span>
+                    {w.status === "pending" ? (
+                      <span className="flex gap-1.5">
+                        <button type="button" aria-label={"Turn away " + w.name} disabled={act.isPending} onClick={() => act.mutate({ path: `/members/${w.id}/reject`, done: `${w.name} was turned away.` })} className="grid size-9 cursor-pointer place-items-center rounded-full bg-[#141716]/[0.06] transition-transform active:scale-90"><X className="size-4" strokeWidth={2.4} /></button>
+                        <button type="button" aria-label={"Let in " + w.name} disabled={act.isPending} onClick={() => act.mutate({ path: `/members/${w.id}/approve`, done: `${w.name} is in.` })} className="grid size-9 cursor-pointer place-items-center rounded-full bg-[#141716] text-white transition-transform active:scale-90"><Check className="size-4" strokeWidth={2.6} /></button>
+                      </span>
+                    ) : (
+                      <button type="button" disabled={act.isPending} onClick={() => act.mutate({ path: `/members/${w.id}/cancel-invite`, done: "Invitation cancelled." })} className="cursor-pointer rounded-full bg-[#141716]/[0.05] px-3 py-1.5 text-[13px] font-medium transition-transform active:scale-95">Cancel</button>
+                    )}
+                  </div>
+                ))}
+              </List>
+            </section>
+          )}
+
+          <section>
+            {isAdmin && <SectionTitle>In the group</SectionTitle>}
+            <List inset={60}>
+              {sorted.map(mm => <MemberRow key={mm.id} m={mm} isMe={mm.id === me?.id} isAdmin={isAdmin} lastAdmin={mm.role === "admin" && adminCount <= 1} busy={act.isPending}
+                onAction={(path, done) => act.mutate({ path, done })}
+                onRemove={() => setConfirm({ title: `Remove ${mm.name}?`, body: "They leave the group. Their past expenses and payments stay, and any balance with them can still be settled.", action: "Remove", run: () => act.mutateAsync({ path: `/members/${mm.id}/remove`, done: `${mm.name} was removed.` }) })} />)}
+            </List>
+          </section>
+
+          <section>
+            <SectionTitle>Group</SectionTitle>
+            <List inset={16}>
+              {isAdmin && (renaming ? (
+                <form className={cn(rowClass, "gap-2")} onSubmit={e => { e.preventDefault(); const n = groupName.trim(); if (n.length >= 2) act.mutate({ path: "/rename", body: { name: n }, done: `Renamed to “${n}”.` }, { onSuccess: () => setRenaming(false) }); }}>
+                  <Input aria-label="Group name" autoFocus required minLength={2} maxLength={80} value={groupName} onChange={e => setGroupName(e.target.value)} className="h-10 min-w-0 flex-1 rounded-[12px] border-[#141716]/[0.1] bg-white px-3 text-[15px]" />
+                  <button type="button" aria-label="Cancel" onClick={() => setRenaming(false)} className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-[#141716]/[0.06]"><X className="size-4" strokeWidth={2.4} /></button>
+                  <LoadingButton type="submit" size="icon" aria-label="Save group name" loading={act.isPending} className="size-9 shrink-0 rounded-full"><Check className="size-4" strokeWidth={2.6} /></LoadingButton>
                 </form>
               ) : (
-                <div key={mm.id} className={rowClass}>
-                  <PersonAvatar id={mm.id} name={mm.name} size="sm" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-medium">{mm.name}{isMe && <span className="font-normal text-muted-foreground"> (you)</span>}</span>
-                    <span className="block text-[12.5px] text-muted-foreground">{mm.id === "admin" ? "Admin" : mm.status === "pending" ? "Waiting for approval" : "Member"}</span>
-                  </span>
-                  {canRename && (
-                    <button type="button" aria-label={"Rename " + mm.name} onClick={() => start(mm.id, mm.name)}
-                      className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[#141716]/[0.05] py-1.5 pr-3 pl-2.5 text-[13.5px] font-medium transition-transform active:scale-95">
-                      <Pencil className="size-3.5" />Edit
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </List>
-          {me?.isAdmin && <p className="footnote mt-3 px-2 text-muted-foreground">Renamed members sign in with their new name. To remove someone or reset their PIN, use Admin → Requests.</p>}
+                <button type="button" onClick={() => { setGroupName(group.data?.group.name || ""); setRenaming(true); }} className={cn(rowClass, "cursor-pointer gap-3 text-[15px]")}><Pencil className="size-[18px] text-muted-foreground" />Rename group</button>
+              ))}
+              <button type="button" onClick={() => setConfirm({ title: "Leave this group?", body: "You won't see it any more. Your past expenses and payments stay in it.", action: "Leave", run: () => act.mutateAsync({ path: "/leave", done: "You left the group." }), after: () => { onOpenChange(false); navigate({ name: "home" }, { replace: true }); } })}
+                className={cn(rowClass, "cursor-pointer gap-3 text-[15px]")}><LogOut className="size-[18px] text-muted-foreground" />Leave group</button>
+              {isAdmin && (
+                <button type="button" onClick={() => setConfirm({ title: `Delete “${group.data?.group.name}”?`, body: "This deletes the group with all its expenses and payments, for everyone. It can't be undone.", action: "Delete group", run: () => act.mutateAsync({ path: "/delete", done: "Group deleted." }), after: () => { onOpenChange(false); navigate({ name: "home" }, { replace: true }); } })}
+                  className={cn(rowClass, "cursor-pointer gap-3 text-[15px] text-negative")}><Trash2 className="size-[18px]" />Delete group</button>
+              )}
+            </List>
+          </section>
         </div>
+        <AlertDialog open={!!confirm} onOpenChange={o => { if (!o && !act.isPending) setConfirm(null); }}>
+          <AlertDialogContent className="max-w-[360px] rounded-[26px] border-0 p-6">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="title-2">{confirm?.title}</AlertDialogTitle>
+              <AlertDialogDescription>{confirm?.body}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={act.isPending} className="rounded-full border-0 bg-[#141716]/[0.06] shadow-none">Cancel</AlertDialogCancel>
+              <LoadingButton variant="destructive" loading={act.isPending} loadingText="Working…" onClick={async () => { const c = confirm; if (!c) return; try { await c.run(); setConfirm(null); c.after?.(); } catch { /* toast shown */ } }}>{confirm?.action}</LoadingButton>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DrawerContent>
     </Drawer>
+  );
+}
+
+function MemberRow({ m, isMe, isAdmin, lastAdmin, busy, onAction, onRemove }: {
+  m: Member; isMe: boolean; isAdmin: boolean; lastAdmin: boolean; busy: boolean; onAction: (path: string, done: string) => void; onRemove: () => void;
+}) {
+  return (
+    <div className={rowClass}>
+      <PersonAvatar id={m.id} name={m.name} size="sm" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-medium">{m.name}{isMe && <span className="font-normal text-muted-foreground"> (you)</span>}</span>
+        <span className="block truncate text-[12.5px] text-muted-foreground">{m.username ? "@" + m.username : "Member"}</span>
+      </span>
+      {m.role === "admin" && <span className="inline-flex items-center gap-1 rounded-full bg-tint-soft px-2 py-0.5 text-[12px] font-medium text-tint"><ShieldCheck className="size-3.5" />Admin</span>}
+      {isAdmin && !(isMe && lastAdmin) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" aria-label={"Manage " + m.name} disabled={busy} className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-[#141716]/[0.05] transition-transform active:scale-90"><MoreHorizontal className="size-4" /></button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52 rounded-[16px]">
+            {m.role === "admin"
+              ? !lastAdmin && <DropdownMenuItem onSelect={() => onAction(`/members/${m.id}/make-member`, isMe ? "You're a regular member now." : `${m.name} is a regular member now.`)}><UserMinus />{isMe ? "Stop being admin" : "Remove as admin"}</DropdownMenuItem>
+              : <DropdownMenuItem onSelect={() => onAction(`/members/${m.id}/make-admin`, `${m.name} is now an admin.`)}><ShieldCheck />Make admin</DropdownMenuItem>}
+            {!isMe && !lastAdmin && <DropdownMenuItem variant="destructive" onSelect={onRemove}><Trash2 />Remove from group</DropdownMenuItem>}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
+  );
+}
+
+function InviteForm({ groupId }: { groupId: string }) {
+  const [login, setLogin] = React.useState("");
+  const invite = useAccountAction((v: string) => post<{ status: "invited" | "active"; name: string }>(`/api/groups/${groupId}/members/invite`, { login: v }));
+  return (
+    <form data-testid="invite-form" className="panel space-y-3 p-4" onSubmit={e => { e.preventDefault(); const v = login.trim(); if (v) invite.mutate(v, { onSuccess: d => { setLogin(""); toast.success(d.status === "active" ? `${d.name} is in.` : `Invited ${d.name}. They join when they accept.`); } }); }}>
+      <p className="flex items-center gap-2 text-[15px] font-medium"><UserPlus className="size-[18px]" />Invite someone</p>
+      <div className="flex gap-2">
+        <Input aria-label="Username or email to invite" autoCapitalize="none" spellCheck={false} placeholder="Username or email" value={login} onChange={e => setLogin(e.target.value)} className={cn(fieldClass, "h-11 min-w-0 flex-1")} />
+        <LoadingButton type="submit" className="h-11 shrink-0 rounded-full px-5" disabled={!login.trim()} loading={invite.isPending} loadingText="Inviting…">Invite</LoadingButton>
+      </div>
+      <p className="text-[12.5px] text-muted-foreground">They need a Split It account. They'll see the invitation when they open the app.</p>
+    </form>
   );
 }

@@ -1,13 +1,17 @@
 import * as React from "react";
 import { m } from "motion/react";
-import { ChevronRight, Users } from "lucide-react";
+import { AtSign, ChevronRight, Plus, Users } from "lucide-react";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AnimatedMoney, EASE, EmptyState, List, Page, PersonAvatar, SectionTitle, listItem, pressableRow } from "@/components/app/bits";
+import { AnimatedMoney, EASE, EmptyState, List, LoadingButton, Page, PersonAvatar, SectionTitle, fieldClass, listItem, pressableRow } from "@/components/app/bits";
 import { GlitterDust, Sheen, Sparkles } from "@/components/app/glitter";
 import { PeopleSheet, type PeopleFilter } from "./PeopleSheet";
 import { PendingPayments } from "./PendingPayments";
 import { InstallCard } from "@/components/app/InstallApp";
-import { useGroups, usePeopleBalances } from "@/hooks/queries";
+import { useAccountAction, useGroups, useInvitations, usePeopleBalances } from "@/hooks/queries";
+import { post, type User } from "@/lib/api";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
 import { cn } from "@/lib/utils";
@@ -34,7 +38,9 @@ export function AquaCard({ children, className }: { children: React.ReactNode; c
 // Tap targets inside a balance card: they press in place and open the people sheet.
 export const cardTap = "block w-full cursor-pointer rounded-[14px] text-left transition-transform duration-150 active:scale-[0.97]";
 
-export function GroupsScreen({ name }: { name: string }) {
+export function GroupsScreen({ user }: { user: User }) {
+  const name = user.name;
+  const [creating, setCreating] = React.useState(false);
   const groups = useGroups(), people = usePeopleBalances();
   const list = groups.data || [];
   // The filter stays put while the sheet animates closed.
@@ -76,17 +82,25 @@ export function GroupsScreen({ name }: { name: string }) {
       </AquaCard>
       <PeopleSheet open={sheetOpen} onOpenChange={setSheetOpen} filter={filter} />
 
+      {user.legacy && (
+        <button type="button" onClick={() => navigate({ name: "profile" })} className="panel mt-5 flex w-full cursor-pointer items-center gap-3 p-4 text-left transition-transform active:scale-[0.98]">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-tint-soft text-tint"><AtSign className="size-5" /></span>
+          <span className="min-w-0 flex-1"><span className="block text-[15px] font-medium">Choose your username</span><span className="block text-[13px] text-muted-foreground">You sign in with it from now on. Yours for now: @{user.username}</span></span>
+          <ChevronRight className="size-[18px] text-[#141716]/25" strokeWidth={2.4} />
+        </button>
+      )}
+      <Invitations />
       <PendingPayments className="mt-7" />
       <InstallCard className="mt-5" />
 
       <div className="mt-7">
-        <SectionTitle>Your groups</SectionTitle>
+        <SectionTitle action={<button type="button" onClick={() => setCreating(true)} className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[#141716] py-1.5 pr-3.5 pl-2.5 text-[13.5px] font-medium text-white transition-transform active:scale-95"><Plus className="size-4" strokeWidth={2.4} />New group</button>}>Your groups</SectionTitle>
         <List inset={68}>
           {groups.isPending && [0, 1, 2].map(i => (
             <div key={i} className="flex items-center gap-3 px-4 py-3.5"><Skeleton className="size-10 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-20" /></div></div>
           ))}
           {groups.data?.length === 0 && (
-            <EmptyState icon={<Users />} title="No groups yet">Only the admin can create groups. Ask them to add you to one.</EmptyState>
+            <EmptyState icon={<Users />} title="No groups yet">Create one for a trip, your flat or friends, then invite people by their username or email.</EmptyState>
           )}
           {list.map((g, i) => {
             const c = Number(g.myBalanceCents || 0);
@@ -96,7 +110,7 @@ export function GroupsScreen({ name }: { name: string }) {
                 <PersonAvatar id={g.id} name={g.name} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15.5px] font-medium">{g.name}</span>
-                  <span className={cn("block text-[13px]", c > 0 ? "text-positive" : c < 0 ? "text-negative" : "text-muted-foreground")}>{c > 0 ? "you are owed " + inr(c) : c < 0 ? "you owe " + inr(-c) : "settled up"}</span>
+                  <span className={cn("block text-[13px]", c > 0 ? "text-positive" : c < 0 ? "text-negative" : "text-muted-foreground")}>{c > 0 ? "you are owed " + inr(c) : c < 0 ? "you owe " + inr(-c) : "settled up"}<span className="text-muted-foreground">{" · " + g.memberCount + (g.memberCount === 1 ? " member" : " members") + (g.role === "admin" ? " · admin" : "")}</span></span>
                 </span>
                 <span className="sr-only">Open dashboard</span>
                 <ChevronRight className="size-[18px] text-[#141716]/25" strokeWidth={2.4} />
@@ -105,6 +119,64 @@ export function GroupsScreen({ name }: { name: string }) {
           })}
         </List>
       </div>
+      <NewGroupDialog open={creating} onClose={() => setCreating(false)} />
     </Page>
+  );
+}
+
+// Groups I've been invited to: join or decline.
+function Invitations() {
+  const q = useInvitations();
+  const answer = useAccountAction((v: { groupId: string; groupName: string; action: "accept" | "decline" }) => post(`/api/groups/${v.groupId}/invitation/${v.action}`),
+    v => v.action === "accept" ? `You joined “${v.groupName}”.` : "Invitation declined.");
+  if (!q.data?.length) return null;
+  return (
+    <section className="mt-7" data-testid="invitations">
+      <SectionTitle>{q.data.length === 1 ? "You're invited" : `${q.data.length} invitations`}</SectionTitle>
+      <div className="panel overflow-hidden [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-hairline">
+        {q.data.map(i => {
+          const busy = answer.isPending && answer.variables?.groupId === i.groupId;
+          return (
+            <div key={i.groupId} className="px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <PersonAvatar id={i.groupId} name={i.groupName} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-medium">{i.groupName}</p>
+                  <p className="truncate text-[13px] text-muted-foreground">{i.invitedBy} invited you · {i.memberCount} {i.memberCount === 1 ? "member" : "members"}</p>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <LoadingButton variant="secondary" className="rounded-full" disabled={answer.isPending} loading={busy && answer.variables?.action === "decline"} loadingText="Declining…" onClick={() => answer.mutate({ ...i, action: "decline" })}>Decline</LoadingButton>
+                <LoadingButton className="rounded-full" aria-label={`Join ${i.groupName}`} disabled={answer.isPending} loading={busy && answer.variables?.action === "accept"} loadingText="Joining…" onClick={() => answer.mutate({ ...i, action: "accept" }, { onSuccess: () => navigate({ name: "group", groupId: i.groupId, tab: "expenses" }) })}>Join</LoadingButton>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function NewGroupDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [name, setName] = React.useState("");
+  React.useEffect(() => { if (open) setName(""); }, [open]);
+  const create = useAccountAction((n: string) => post<{ group: { id: string; name: string } }>("/api/groups", { name: n }));
+  const clean = name.trim().replace(/\s+/g, " ");
+  return (
+    <AlertDialog open={open} onOpenChange={o => { if (!o && !create.isPending) onClose(); }}>
+      <AlertDialogContent className="max-w-[360px] rounded-[26px] border-0 p-6">
+        <form className="space-y-4" onSubmit={e => { e.preventDefault(); if (clean.length >= 2) create.mutate(clean, { onSuccess: d => { toast.success(`“${d.group.name}” created. Invite people from Members.`); onClose(); navigate({ name: "group", groupId: d.group.id, tab: "expenses" }); } }); }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="title-2">New group</AlertDialogTitle>
+            <AlertDialogDescription>You'll be its admin. Then invite people by their username or email.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input aria-label="Group name" autoFocus required minLength={2} maxLength={80} placeholder="e.g. Goa Trip" value={name} onChange={e => setName(e.target.value)} className={cn(fieldClass, "h-11")} />
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button" disabled={create.isPending} className="rounded-full border-0 bg-[#141716]/[0.06] shadow-none">Cancel</AlertDialogCancel>
+            <LoadingButton type="submit" disabled={clean.length < 2} loading={create.isPending} loadingText="Creating…">Create group</LoadingButton>
+          </AlertDialogFooter>
+        </form>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

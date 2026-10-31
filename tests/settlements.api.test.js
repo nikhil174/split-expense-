@@ -128,7 +128,7 @@ test("API: cross-group payments, history and debts are isolated", async t => {
   const a = await setupGroup(env, "Group A", ["Bea", "Cy"]);
   const b = await setupGroup(env, "Group B", ["Dee"], { adminCookie: a.adminCookie });
   await call(env, `/api/groups/${a.groupId}/expenses`, { method: "POST", cookie: a.cookies.Bea, body: { description: "A", amount: "50", paidBy: a.ids.Bea, memberIds: [a.ids.Bea, a.ids.Cy] } });
-  await call(env, `/api/groups/${b.groupId}/expenses`, { method: "POST", cookie: b.cookies.Dee, body: { description: "B", amount: "80", paidBy: b.ids.Dee, memberIds: [b.ids.Dee, "admin"] } });
+  await call(env, `/api/groups/${b.groupId}/expenses`, { method: "POST", cookie: b.cookies.Dee, body: { description: "B", amount: "80", paidBy: b.ids.Dee, memberIds: [b.ids.Dee, a.ids.admin] } });
 
   // Member of group A cannot read or write group B at all.
   for (const tail of ["", "/balances", "/settlements", "/settlements/mine", "/debts", "/expenses", "/dashboard"]) {
@@ -139,8 +139,8 @@ test("API: cross-group payments, history and debts are isolated", async t => {
   assert.equal((await call(env, `/api/groups/${a.groupId}/settlements`, { method: "POST", cookie: a.adminCookie, body: { fromMemberId: b.ids.Dee, toMemberId: a.ids.Bea, amount: "1" } })).status, 400);
   // Admin's group-B debt is not visible or payable in group A.
   assert.equal(owe(await (await call(env, `/api/groups/${a.groupId}/settlements/mine`, { cookie: a.adminCookie })).data, "Dee"), 0);
-  assert.equal((await call(env, `/api/groups/${a.groupId}/settlements`, { method: "POST", cookie: a.adminCookie, body: { fromMemberId: "admin", toMemberId: b.ids.Dee, amount: "1" } })).status, 400);
-  assert.equal((await call(env, `/api/groups/${b.groupId}/settlements`, { method: "POST", cookie: a.adminCookie, body: { fromMemberId: "admin", toMemberId: b.ids.Dee, amount: "40" } })).status, 201);
+  assert.equal((await call(env, `/api/groups/${a.groupId}/settlements`, { method: "POST", cookie: a.adminCookie, body: { fromMemberId: a.ids.admin, toMemberId: b.ids.Dee, amount: "1" } })).status, 400);
+  assert.equal((await call(env, `/api/groups/${b.groupId}/settlements`, { method: "POST", cookie: a.adminCookie, body: { fromMemberId: a.ids.admin, toMemberId: b.ids.Dee, amount: "40" } })).status, 201);
   assert.equal((await call(env, `/api/groups/${a.groupId}/settlements`, { method: "POST", cookie: a.cookies.Cy, body: { fromMemberId: a.ids.Cy, toMemberId: a.ids.Bea, amount: "25" } })).status, 201);
 
   const histA = (await call(env, `/api/groups/${a.groupId}/settlements`, { cookie: a.adminCookie })).data.settlements;
@@ -154,10 +154,11 @@ test("API: removed members keep history, cannot be chosen by members, and the ad
   const { ids } = f;
   await f.expense("Cy", { description: "Tickets", amount: "60", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy] });
   await f.expense("Cy", { description: "Fuel", amount: "40", paidBy: ids.Cy, memberIds: [ids.Bea, ids.Cy, ids.admin] });
-  assert.equal((await call(f.env, `/api/admin/requests/${ids.Bea}/remove`, { method: "POST", cookie: f.adminCookie, body: {} })).status, 200);
+  assert.equal((await call(f.env, `/api/groups/${f.groupId}/members/${ids.Bea}/remove`, { method: "POST", cookie: f.cookies.Cy, body: {} })).status, 403, "only a group admin");
+  assert.equal((await call(f.env, `/api/groups/${f.groupId}/members/${ids.Bea}/remove`, { method: "POST", cookie: f.adminCookie, body: {} })).status, 200);
 
-  // Bea's session is gone; she no longer appears as a selectable member.
-  assert.equal((await call(f.env, `/api/groups/${f.groupId}`, { cookie: f.cookies.Bea })).status, 401);
+  // Bea can no longer open the group; she no longer appears as a selectable member.
+  assert.equal((await call(f.env, `/api/groups/${f.groupId}`, { cookie: f.cookies.Bea })).status, 404);
   const group = (await call(f.env, `/api/groups/${f.groupId}`, { cookie: f.cookies.Cy })).data;
   assert.deepEqual(group.members.map(m => m.name).sort(), ["Alex Admin", "Cy"]);
   assert.equal((await f.expense("Cy", { description: "New", amount: "10", paidBy: ids.Bea, memberIds: [ids.Cy] })).status, 400);
@@ -179,22 +180,22 @@ test("API: removed members keep history, cannot be chosen by members, and the ad
   // …the admin can, so the debt is not stuck forever.
   assert.equal((await f.pay("admin", ids.Cy, ids.Bea, "16.66")).status, 201);
 
-  // Deleting the revoked access record still keeps the historical name.
-  assert.equal((await call(f.env, `/api/admin/requests/${ids.Bea}/delete`, { method: "POST", cookie: f.adminCookie, body: {} })).status, 200);
+  // The history keeps her name.
   const after = (await call(f.env, `/api/groups/${f.groupId}/settlements`, { cookie: f.cookies.Cy })).data.settlements;
   assert.deepEqual(after.map(h => [h.fromName, h.toName]), [["Cy", "Bea"]]);
   assert.equal(sumCents(await f.balances("Cy")), 0);
 });
 
-test("API: deleting a group with settlements and access requests succeeds (foreign keys on)", async t => {
+test("API: a group admin can delete a group with settlements and members (foreign keys on)", async t => {
   const f = await fixture(t);
   const { ids } = f;
   await f.expense("Bea", { description: "Lunch", amount: "100", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy] });
   await f.pay("Cy", ids.Cy, ids.Bea, "10");
   assert.equal(f.raw.prepare("PRAGMA foreign_keys").get().foreign_keys, 1);
-  const deleted = await call(f.env, `/api/admin/groups/${f.groupId}/delete`, { method: "POST", cookie: f.adminCookie, body: {} });
+  assert.equal((await call(f.env, `/api/groups/${f.groupId}/delete`, { method: "POST", cookie: f.cookies.Bea, body: {} })).status, 403, "only a group admin");
+  const deleted = await call(f.env, `/api/groups/${f.groupId}/delete`, { method: "POST", cookie: f.adminCookie, body: {} });
   assert.equal(deleted.status, 200, JSON.stringify(deleted.data));
-  for (const table of ["appx_groups", "appx_expenses", "appx_splits", "appx_settlements", "appx_access_requests", "appx_sessions"]) {
+  for (const table of ["appx_groups", "appx_expenses", "appx_splits", "appx_settlements", "appx_group_members"]) {
     assert.equal(f.raw.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0, table);
   }
 });

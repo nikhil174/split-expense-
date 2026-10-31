@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeEnv, call, setupGroup, payAndConfirm, MEMBER_PIN } from "./helpers/d1.js";
+import { makeEnv, call, setupGroup, payAndConfirm } from "./helpers/d1.js";
 import { computePairwiseDebts, outstandingDebt, pairwiseActivity } from "../src/settlement-logic.js";
 import { allocateEqualSplit } from "../src/split-logic.js";
 
@@ -114,8 +114,8 @@ test("balances list everyone I owe or who owes me across groups, matching group 
   await f.add("Cy", { description: "Cab", amount: "40", paidBy: ids.Cy, memberIds: [ids.Cy, ids.admin] });
   await f.add("Bea", { description: "Snacks", amount: "10", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy] });
   const other = await setupGroup(f.env, "Office", ["Zed"], { adminCookie: f.adminCookie });
-  await call(f.env, `/api/groups/${other.groupId}/expenses`, { method: "POST", cookie: other.cookies.Zed, body: { description: "Lunch", amount: "30", paidBy: other.ids.Zed, memberIds: [other.ids.Zed, "admin"] } });
-  const paid = await call(f.env, `/api/groups/${other.groupId}/settlements`, { method: "POST", cookie: f.adminCookie, body: { fromMemberId: "admin", toMemberId: other.ids.Zed, amount: "5" } });
+  await call(f.env, `/api/groups/${other.groupId}/expenses`, { method: "POST", cookie: other.cookies.Zed, body: { description: "Lunch", amount: "30", paidBy: other.ids.Zed, memberIds: [other.ids.Zed, ids.admin] } });
+  const paid = await call(f.env, `/api/groups/${other.groupId}/settlements`, { method: "POST", cookie: f.adminCookie, body: { fromMemberId: ids.admin, toMemberId: other.ids.Zed, amount: "5" } });
   assert.equal(paid.status, 201);
   assert.equal((await call(f.env, `/api/groups/${other.groupId}/settlements/${paid.data.id}/confirm`, { method: "POST", cookie: other.cookies.Zed, body: {} })).status, 200);
 
@@ -172,69 +172,36 @@ test("payer or admin can edit an expense: amount, payer and who is in the split;
   // Unknown expense, or one from another group, is not found.
   assert.equal((await edit("Bea", { description: "x", amount: "1", paidBy: ids.Bea, memberIds: [ids.Bea] }, "nope")).status, 404);
   const other = await setupGroup(f.env, "Other group", ["Zed"], { adminCookie: f.adminCookie });
-  assert.equal((await call(f.env, `/api/groups/${other.groupId}/expenses/${e.data.id}/edit`, { method: "POST", cookie: f.adminCookie, body: { description: "x", amount: "1", paidBy: "admin", memberIds: ["admin"] } })).status, 404);
+  assert.equal((await call(f.env, `/api/groups/${other.groupId}/expenses/${e.data.id}/edit`, { method: "POST", cookie: f.adminCookie, body: { description: "x", amount: "1", paidBy: ids.admin, memberIds: [ids.admin] } })).status, 404);
 });
 
-test("admin can rename a member and a group; names update everywhere and the member signs in with the new name", async t => {
+test("names belong to the person: they rename themselves everywhere; group admins rename the group", async t => {
   const f = await fixture(t);
   const { ids } = f;
   await f.add("Cy", { description: "Cab", amount: "40", paidBy: ids.Cy, memberIds: [ids.Cy, ids.Bea] });
-  const rename = (who, rid, name) => call(f.env, `/api/admin/requests/${rid}/rename`, { method: "POST", cookie: who, body: { name } });
-
-  // Only the admin can rename.
-  assert.equal((await rename(f.cookies.Cy, ids.Cy, "Cyrus")).status, 401);
-  // Name rules: length, not the admin's, unique in the group.
-  assert.equal((await rename(f.adminCookie, ids.Cy, "C")).status, 400);
-  assert.equal((await rename(f.adminCookie, ids.Cy, "alex admin")).status, 409);
-  assert.equal((await rename(f.adminCookie, ids.Cy, "BEA")).status, 409);
-  assert.equal((await rename(f.adminCookie, "nope", "Cyrus")).status, 404);
-  // Changing only the case of your own name is fine.
-  assert.equal((await rename(f.adminCookie, ids.Cy, "cy")).status, 200);
-
-  const r = await rename(f.adminCookie, ids.Cy, "  Cyrus  ");
-  assert.deepEqual([r.status, r.data.name], [200, "Cyrus"]);
-  // Past expenses, members and debts show the new name.
+  const me = (who, name) => call(f.env, "/api/me/name", { method: "POST", cookie: f.cookies[who], body: { name } });
+  assert.equal((await me("Cy", "C")).status, 400);
+  const r = await me("Cy", "  Cyrus  ");
+  assert.deepEqual([r.status, r.data.name, r.data.id], [200, "Cyrus", ids.Cy], "renames only the caller");
+  // Past expenses, members and debts show the new name; history is by id.
   const cab = (await f.get("Bea", "/expenses")).data.expenses[0];
-  assert.deepEqual([cab.paidByName, cab.splits.map(s => s.name).sort()], ["Cyrus", ["Bea", "Cyrus"]]);
+  assert.deepEqual([cab.paidBy, cab.paidByName, cab.splits.map(s => s.name).sort()], [ids.Cy, "Cyrus", ["Bea", "Cyrus"]]);
   assert.ok((await f.get("Bea", "")).data.members.some(m => m.id === ids.Cy && m.name === "Cyrus"));
   assert.equal((await f.get("Bea", "/with/" + ids.Cy)).data.other.name, "Cyrus");
-  // Cy's current session keeps working and shows the new name; signing in uses it too.
-  assert.equal((await call(f.env, "/api/me", { cookie: f.cookies.Cy })).data.member.name, "Cyrus");
-  assert.equal((await call(f.env, "/api/access/signin", { method: "POST", body: { name: "Cyrus", groupId: f.groupId, pin: MEMBER_PIN } })).status, 200);
-  assert.equal((await call(f.env, "/api/access/signin", { method: "POST", body: { name: "Cy", groupId: f.groupId, pin: MEMBER_PIN } })).status, 403);
+  assert.equal((await call(f.env, "/api/me", { cookie: f.cookies.Cy })).data.user.name, "Cyrus");
+  // Two different people may share a name; their usernames tell them apart.
+  assert.equal((await me("Bea", "cyrus")).status, 200);
+  const members = (await f.get("Cy", "")).data.members.filter(m => m.name.toLowerCase() === "cyrus");
+  assert.equal(new Set(members.map(m => m.username)).size, 2);
+  assert.equal((await call(f.env, "/api/me/name", { method: "POST", body: { name: "X Y" } })).status, 401);
 
-  // Group rename: admin only, unique, and members see it.
-  const other = await setupGroup(f.env, "Office", [], { adminCookie: f.adminCookie });
-  const renameGroup = (who, gid, name) => call(f.env, `/api/admin/groups/${gid}/rename`, { method: "POST", cookie: who, body: { name } });
-  assert.equal((await renameGroup(f.cookies.Bea, f.groupId, "Goa 2026")).status, 401);
-  assert.equal((await renameGroup(f.adminCookie, f.groupId, "office")).status, 409);
-  assert.equal((await renameGroup(f.adminCookie, "nope", "Goa 2026")).status, 404);
-  assert.equal((await renameGroup(f.adminCookie, f.groupId, "Goa 2026")).status, 200);
+  // Group rename: a group admin only; members see it.
+  const renameGroup = (who, name) => call(f.env, `${f.G}/rename`, { method: "POST", cookie: who, body: { name } });
+  assert.equal((await renameGroup(f.cookies.Bea, "Goa 2026")).status, 403);
+  assert.equal((await renameGroup(f.adminCookie, "G")).status, 400);
+  assert.equal((await renameGroup(f.adminCookie, "Goa 2026")).status, 200);
   assert.equal((await f.get("Bea", "")).data.group.name, "Goa 2026");
   assert.equal((await call(f.env, "/api/groups", { cookie: f.cookies.Bea })).data.groups[0].name, "Goa 2026");
-  assert.ok(other.groupId);
-});
-
-test("names are unique per group in the database itself; people are tracked by a permanent id", async t => {
-  const f = await fixture(t);
-  const { ids } = f;
-  const insert = (id, name, gid = f.groupId) => f.raw.prepare("INSERT INTO appx_access_requests(id,display_name,status,requested_at,group_id) VALUES(?,?,'pending',?,?)").run(id, name, Date.now(), gid);
-  // Even bypassing the API, a second "bea" in the same group is impossible...
-  assert.throws(() => insert("dup-1", "bEA"), /UNIQUE/);
-  // ...but the same name in another group is fine (it is a different membership).
-  const other = await setupGroup(f.env, "Office", [], { adminCookie: f.adminCookie });
-  insert("other-bea", "Bea", other.groupId);
-
-  // History points at ids, not names: rename Cy, then a new person may take the old name.
-  await f.add("Cy", { description: "Cab", amount: "40", paidBy: ids.Cy, memberIds: [ids.Cy, ids.Bea] });
-  assert.equal((await call(f.env, `/api/admin/requests/${ids.Cy}/rename`, { method: "POST", cookie: f.adminCookie, body: { name: "Cyrus" } })).status, 200);
-  const newCy = await call(f.env, "/api/access/request", { method: "POST", body: { name: "Cy", groupId: f.groupId, pin: "1357" } });
-  assert.equal(newCy.status, 201);
-  assert.notEqual(newCy.data.requestId, ids.Cy, "a new person gets a new id");
-  const cab = (await f.get("Bea", "/expenses")).data.expenses[0];
-  assert.deepEqual([cab.paidBy, cab.paidByName], [ids.Cy, "Cyrus"], "the old expense still belongs to the renamed person");
-  // Renaming someone onto a name already in use is refused.
-  assert.equal((await call(f.env, `/api/admin/requests/${ids.Bea}/rename`, { method: "POST", cookie: f.adminCookie, body: { name: "cyrus" } })).status, 409);
 });
 
 test("admin can edit and delete any expense; members only the ones they paid for", async t => {
@@ -264,27 +231,6 @@ test("admin can edit and delete any expense; members only the ones they paid for
   assert.equal((await del("Cy", cyPaid)).status, 200);
   assert.equal((await del("admin", adminPaid)).status, 200);
   assert.equal(f.raw.prepare("SELECT COUNT(*) AS n FROM appx_expenses").get().n, 0);
-});
-
-test("members can change their own name (not anyone else's); the admin's login name is not changed here", async t => {
-  const f = await fixture(t);
-  const { ids } = f;
-  await f.add("Bea", { description: "Dinner", amount: "90", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy] });
-  const me = (who, name) => call(f.env, "/api/me/name", { method: "POST", cookie: f.cookies[who], body: { name } });
-  const r = await me("Bea", "Beatrice");
-  assert.deepEqual([r.status, r.data.name, r.data.id], [200, "Beatrice", ids.Bea], "renames only the caller");
-  assert.equal((await call(f.env, "/api/me", { cookie: f.cookies.Bea })).data.member.name, "Beatrice");
-  assert.equal((await f.get("Cy", "/expenses")).data.expenses[0].paidByName, "Beatrice", "past expenses show the new name");
-  // Same rules as the admin's rename.
-  assert.equal((await me("Bea", "cy")).status, 409, "taken in the group");
-  assert.equal((await me("Bea", "Alex Admin")).status, 409, "the admin's name");
-  assert.equal((await me("Bea", "B")).status, 400);
-  // Members cannot rename others through the admin route.
-  assert.equal((await call(f.env, `/api/admin/requests/${ids.Cy}/rename`, { method: "POST", cookie: f.cookies.Bea, body: { name: "Cyrus" } })).status, 401);
-  assert.equal((await me("admin", "New Admin")).status, 403);
-  assert.equal((await call(f.env, "/api/me/name", { method: "POST", body: { name: "X Y" } })).status, 401);
-  // Signing in uses the new name.
-  assert.equal((await call(f.env, "/api/access/signin", { method: "POST", body: { name: "Beatrice", groupId: f.groupId, pin: MEMBER_PIN } })).status, 200);
 });
 
 test("member summary: anyone in the group can see one person's totals, debts, expenses and payments", async t => {

@@ -26,11 +26,22 @@ export const get = <T,>(path: string) => request<T>(path);
 export const post = <T = { ok: true },>(path: string, body: unknown = {}) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
 
 export type Identity = { id: string; name: string };
-export type Me = { admin: Identity | null; member: Identity | null };
-export type GroupSummary = { id: string; name: string; myBalanceCents: number };
-export type MemberStatus = "admin" | "approved" | "pending" | "removed" | "revoked" | "rejected";
-export type Member = { id: string; name: string; status: MemberStatus };
-export type GroupDetail = { group: { id: string; name: string }; members: Member[]; me: Identity & { isAdmin: boolean } };
+// The signed-in account. legacy: from before accounts (auto username, may
+// still sign in with group + name) until they choose a username.
+export type User = Identity & { username: string; email: string | null; legacy: boolean; hasPin: boolean;
+  // Only for the site owner: the Admin tab, and whether this session entered the admin key.
+  siteAdmin?: boolean; adminUnlocked?: boolean };
+export type AdminOverview = { users: number; groups: number; expenses: number; totalSpentCents: number; newUsersThisWeek: number };
+export type AdminUser = { id: string; name: string; username: string; email: string | null; createdAt: number; legacy: boolean; siteAdmin: boolean; hasPin: boolean; locked: boolean; groupCount: number };
+export type AdminGroup = { id: string; name: string; createdAt: number; memberCount: number; admins: string | null; expenseCount: number; totalCents: number; lastActivity: number | null };
+export type Me = { user: User | null };
+export type Role = "admin" | "member";
+export type GroupSummary = { id: string; name: string; myBalanceCents: number; role: Role; memberCount: number };
+// active: in the group; pending: asked to join; invited: not answered yet.
+export type MemberStatus = "active" | "pending" | "invited" | "removed";
+export type Member = { id: string; name: string; username: string | null; role: Role; status: MemberStatus };
+export type GroupDetail = { group: { id: string; name: string }; members: Member[]; waiting: Member[]; me: Identity & { isAdmin: boolean; role: Role } };
+export type Invitation = { groupId: string; groupName: string; invitedBy: string; memberCount: number };
 export type Split = { memberId: string; name: string; amountCents: number };
 export type Expense = {
   id: string; description: string; amountCents: number; createdAt: number; paidBy: string; paidByName: string;
@@ -85,17 +96,3 @@ export type PersonBalance = { groupId: string; groupName: string; memberId: stri
 export type PeopleBalances = { people: PersonBalance[]; owedToYouCents: number; youOweCents: number; netCents: number };
 export type PersonView = { me: Identity; other: Identity & { active: boolean }; netCents: number; items: ActivityItem[] };
 
-export type AccessRequest = {
-  id: string; name: string; status: MemberStatus; requestedAt: number; expiresAt: number | null; groupId: string | null; groupName: string | null;
-  hasPin?: boolean;
-};
-export type AdminGroup = { id: string; name: string; createdAt: number; memberCount: number };
-export type AdminExpense = { id: string; description: string; amountCents: number; createdAt: number; groupId: string; groupName: string; paidBy: string };
-export type AdminDashboard = {
-  stats: { groups: number; members: number; pending: number; expenses: number; totalSpentCents: number };
-  recent: Omit<AdminExpense, "id" | "groupId">[];
-};
-export type MergePreview = {
-  memberName: string; adminName: string; groupName: string; expensesPaid: number; shares: number;
-  payments: number; paymentsWithAdmin: number; memberBalanceCents: number; adminBalanceCents: number;
-};

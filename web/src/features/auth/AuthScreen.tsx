@@ -1,34 +1,17 @@
 import * as React from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { Check, Clock3, Download } from "lucide-react";
+import { Check, Download, X } from "lucide-react";
 import { useInstallApp } from "@/components/app/InstallApp";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { EASE, LoadingButton, NativeSelect, Segmented, Wordmark, fieldClass, haptic } from "@/components/app/bits";
+import { EASE, LoadingButton, Segmented, Wordmark, fieldClass, haptic } from "@/components/app/bits";
 import { ApiError, get, post } from "@/lib/api";
 import { keys } from "@/hooks/queries";
 import { cn } from "@/lib/utils";
 
-type PublicGroup = { id: string; name: string };
-const REQUEST_KEY = "splitRequest";
-const storage = {
-  get: () => { try { return localStorage.getItem(REQUEST_KEY) || ""; } catch { return ""; } },
-  set: (v: string) => { try { if (v) localStorage.setItem(REQUEST_KEY, v); else localStorage.removeItem(REQUEST_KEY); } catch { /* private mode */ } },
-};
-
-function GroupSelect({ id, value, onChange, groups }: { id: string; value: string; onChange: (v: string) => void; groups: PublicGroup[] | undefined }) {
-  return (
-    <NativeSelect id={id} required value={value} onChange={e => onChange(e.target.value)} disabled={!groups?.length}>
-      <option value="">{groups === undefined ? "Loading groups…" : groups.length ? "Choose a group" : "No groups yet — ask the admin"}</option>
-      {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-    </NativeSelect>
-  );
-}
-
-function Field({ label, htmlFor, children, hint }: { label: string; htmlFor: string; children: React.ReactNode; hint?: string }) {
+export function Field({ label, htmlFor, children, hint }: { label: string; htmlFor: string; children: React.ReactNode; hint?: string }) {
   return (
     <div>
       <Label htmlFor={htmlFor} className="eyebrow mb-2 block px-1">{label}</Label>
@@ -39,7 +22,7 @@ function Field({ label, htmlFor, children, hint }: { label: string; htmlFor: str
 }
 
 // Four-digit PIN box: digits only, masked, numeric keypad on phones.
-function PinInput({ id, value, onChange, autoComplete = "current-password", autoFocus }: { id: string; value: string; onChange: (v: string) => void; autoComplete?: string; autoFocus?: boolean }) {
+export function PinInput({ id, value, onChange, autoComplete = "current-password", autoFocus }: { id: string; value: string; onChange: (v: string) => void; autoComplete?: string; autoFocus?: boolean }) {
   return (
     <Input id={id} type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} required autoComplete={autoComplete} autoFocus={autoFocus}
       placeholder="••••" value={value} onChange={e => onChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
@@ -48,19 +31,60 @@ function PinInput({ id, value, onChange, autoComplete = "current-password", auto
 }
 
 const fade = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 }, transition: { duration: 0.25, ease: EASE } };
+const reveal = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.25, ease: EASE } };
+
+// A username suggestion from a name: "Vicky Rao" -> "vickyrao_4821".
+export function suggestUsername(name: string) {
+  let base = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  if (!/^[a-z]/.test(base)) base = "user" + base;
+  return base.slice(0, 20) + "_" + String(Math.floor(1000 + Math.random() * 9000));
+}
+export const USERNAME_RE = /^[a-z][a-z0-9_.]{2,29}$/;
+const cleanUsername = (v: string) => v.trim().replace(/^@/, "").toLowerCase();
+
+// Live "is this username free?" check, a moment after typing stops.
+export function useUsernameCheck(value: string) {
+  const [state, setState] = React.useState<"idle" | "checking" | "free" | "taken" | "invalid">("idle");
+  React.useEffect(() => {
+    const u = cleanUsername(value);
+    if (!u) { setState("idle"); return; }
+    if (!USERNAME_RE.test(u)) { setState("invalid"); return; }
+    setState("checking");
+    const t = setTimeout(() => {
+      get<{ available: boolean }>("/api/auth/username?u=" + encodeURIComponent(u))
+        .then(d => setState(d.available ? "free" : "taken")).catch(() => setState("idle"));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [value]);
+  return state;
+}
+export function UsernameHint({ state }: { state: ReturnType<typeof useUsernameCheck> }) {
+  if (state === "idle") return <span>Letters, numbers, _ or . (3–30), starting with a letter. People find you by it.</span>;
+  if (state === "checking") return <span>Checking…</span>;
+  if (state === "invalid") return <span className="text-negative">3–30 characters: letters, numbers, _ or ., starting with a letter.</span>;
+  return state === "free"
+    ? <span className="inline-flex items-center gap-1 text-positive"><Check className="size-3.5" strokeWidth={2.6} />Available</span>
+    : <span className="inline-flex items-center gap-1 text-negative"><X className="size-3.5" strokeWidth={2.6} />Taken. Try another.</span>;
+}
+
+// After the first try, the server may ask for a new PIN: "create" for
+// accounts from before PINs, "choose" for the old administrator (who proved
+// who they are with the old admin PIN).
+type PinStep = null | "create" | "choose";
 
 export function AuthScreen() {
   const qc = useQueryClient();
-  const [tab, setTab] = React.useState<"signin" | "request">("signin");
-  const [mode, setMode] = React.useState<"member" | "admin">("member");
+  const [tab, setTab] = React.useState<"signin" | "signup">("signin");
+  // legacy: "used Split It before accounts" — group name + your name.
+  const [legacy, setLegacy] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const install = useInstallApp();
-  const [requestId, setRequestId] = React.useState(storage.get);
-  const groups = useQuery({ queryKey: ["public-groups"], queryFn: () => get<{ groups: PublicGroup[] }>("/api/groups/public").then(d => d.groups) });
-  const [form, setForm] = React.useState({ groupId: "", name: "", memberPin: "", confirmPin: "", adminName: "", pin: "", requestName: "", requestGroup: "", requestPin: "", requestPin2: "" });
-  // Existing members from before PINs pick one on their next sign-in.
-  const [creatingPin, setCreatingPin] = React.useState(false);
+  const [pinStep, setPinStep] = React.useState<PinStep>(null);
+  const [form, setForm] = React.useState({ login: "", pin: "", group: "", name: "", oldPin: "", newPin: "", newPin2: "", suName: "", suUsername: "", suEmail: "", suPin: "", suPin2: "" });
+  const [usernameTouched, setUsernameTouched] = React.useState(false);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement> | string) => setForm(f => ({ ...f, [k]: typeof e === "string" ? e : e.target.value }));
+  const usernameState = useUsernameCheck(form.suUsername);
+  const resetPinStep = () => { setPinStep(null); setForm(f => ({ ...f, newPin: "", newPin2: "" })); };
 
   const run = async (fn: () => Promise<void>) => {
     if (busy) return;
@@ -73,6 +97,24 @@ export function AuthScreen() {
     toast.success(message);
   };
 
+  const signIn = () => run(async () => {
+    if (pinStep && form.newPin !== form.newPin2) throw new Error("The two PINs don't match.");
+    const extra = pinStep === "create" ? { pin: form.newPin, createPin: true } : pinStep === "choose" ? { newPin: form.newPin } : {};
+    try {
+      if (legacy) await post("/api/auth/legacy-signin", { group: form.group.trim(), name: form.name.trim(), pin: form.oldPin, ...extra });
+      else await post("/api/auth/signin", { login: form.login.trim(), pin: form.pin, ...extra });
+    } catch (err) {
+      if (err instanceof ApiError && (err.code === "pin_not_set" || err.code === "choose_pin")) { setPinStep(err.code === "pin_not_set" ? "create" : "choose"); setForm(f => ({ ...f, newPin: "", newPin2: "" })); return; }
+      throw err;
+    }
+    setForm(f => ({ ...f, pin: "", oldPin: "", newPin: "", newPin2: "" }));
+    await signedIn(pinStep ? "PIN saved. Welcome back." : "Welcome back.");
+    setPinStep(null);
+  });
+
+  const pinReady = legacy ? form.oldPin.length > 0 || pinStep === "create" : form.pin.length === 4 || pinStep === "create";
+  const newPinReady = !pinStep || (form.newPin.length === 4 && form.newPin2.length === 4);
+
   return (
     <div className="min-h-dvh overflow-x-clip">
       <div className="mx-auto flex min-h-dvh max-w-md flex-col px-4 pt-[max(3rem,env(safe-area-inset-top))] pb-10">
@@ -83,85 +125,76 @@ export function AuthScreen() {
         </m.div>
 
         <m.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: EASE, delay: 0.08 }} className="mt-9">
-          <Segmented id="auth-tab" value={tab} onChange={setTab} options={[{ value: "signin", label: "Sign in" }, { value: "request", label: "Request access" }]} />
+          <Segmented id="auth-tab" value={tab} onChange={v => { setTab(v); resetPinStep(); }} options={[{ value: "signin", label: "Sign in" }, { value: "signup", label: "Create account" }]} />
 
           <div className="panel mt-4 p-5">
             <AnimatePresence mode="wait" initial={false}>
               {tab === "signin" ? (
-                <m.div key="signin" {...fade} className="space-y-5">
-                  <Segmented id="auth-mode" value={mode} onChange={setMode} options={[{ value: "member", label: "Member" }, { value: "admin", label: "Admin" }]} />
-                  {mode === "member" ? (
-                    <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
-                      if (creatingPin && form.memberPin !== form.confirmPin) throw new Error("The two PINs don't match.");
-                      try {
-                        await post("/api/access/signin", { name: form.name.trim(), groupId: form.groupId, pin: form.memberPin, createPin: creatingPin });
-                      } catch (err) {
-                        if (err instanceof ApiError && err.code === "pin_not_set") { setCreatingPin(true); setForm(f => ({ ...f, confirmPin: "" })); return; }
-                        throw err;
-                      }
-                      setForm(f => ({ ...f, name: "", memberPin: "", confirmPin: "" }));
-                      setCreatingPin(false);
-                      await signedIn(creatingPin ? "PIN created. Welcome back." : "Welcome back.");
-                    }); }}>
-                      <Field label="Group" htmlFor="signin-group"><GroupSelect id="signin-group" value={form.groupId} onChange={v => { set("groupId")(v); setCreatingPin(false); }} groups={groups.data} /></Field>
-                      <Field label="Your approved name" htmlFor="signin-name">
-                        <Input id="signin-name" required minLength={2} maxLength={60} autoComplete="username" placeholder="Name used in your request" value={form.name} onChange={e => { set("name")(e); setCreatingPin(false); }} className={fieldClass} />
+                <m.form key={legacy ? "legacy" : "signin"} {...fade} className="space-y-5" onSubmit={e => { e.preventDefault(); signIn(); }}>
+                  {legacy ? (
+                    <>
+                      <p className="rounded-[14px] bg-tint-soft px-3.5 py-3 text-[13.5px] leading-5 text-tint">Split It now has accounts. Sign in once with your group and name, then pick a username in your profile.</p>
+                      <Field label="Group name" htmlFor="legacy-group">
+                        <Input id="legacy-group" required autoComplete="off" placeholder="e.g. Goa Trip" value={form.group} onChange={e => { set("group")(e); resetPinStep(); }} className={fieldClass} />
                       </Field>
-                      <Field label={creatingPin ? "New PIN" : "PIN"} htmlFor="signin-pin" hint={creatingPin ? "First time signing in with a PIN. Choose 4 digits only you know, then type them again below. You'll use this PIN from now on." : undefined}>
-                        <PinInput id="signin-pin" value={form.memberPin} onChange={set("memberPin")} autoComplete={creatingPin ? "new-password" : "current-password"} />
+                      <Field label="Your name in it" htmlFor="legacy-name">
+                        <Input id="legacy-name" required autoComplete="name" placeholder="As the group knows you" value={form.name} onChange={e => { set("name")(e); resetPinStep(); }} className={fieldClass} />
                       </Field>
-                      <AnimatePresence initial={false}>
-                        {creatingPin && (
-                          <m.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.25, ease: EASE }} className="overflow-hidden">
-                            <Field label="Confirm PIN" htmlFor="signin-pin2"><PinInput id="signin-pin2" value={form.confirmPin} onChange={set("confirmPin")} autoComplete="new-password" autoFocus /></Field>
-                          </m.div>
-                        )}
-                      </AnimatePresence>
-                      <LoadingButton type="submit" size="xl" className="w-full" disabled={form.memberPin.length !== 4 || (creatingPin && form.confirmPin.length !== 4)} loading={busy} loadingText="Signing in…">{creatingPin ? "Create PIN and sign in" : "Sign in"}</LoadingButton>
-                    </form>
+                      {pinStep !== "create" && (
+                        <Field label="PIN" htmlFor="legacy-pin" hint="Your 4-digit PIN. If you were the administrator, your admin PIN.">
+                          <Input id="legacy-pin" type="password" required autoComplete="current-password" placeholder="Required" value={form.oldPin} onChange={set("oldPin")} className={fieldClass} />
+                        </Field>
+                      )}
+                    </>
                   ) : (
-                    <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
-                      await post("/api/admin/login", { name: form.adminName.trim(), pin: form.pin });
-                      setForm(f => ({ ...f, pin: "" }));
-                      await signedIn("Signed in as admin.");
-                    }); }}>
-                      <Field label="Admin name" htmlFor="admin-name">
-                        <Input id="admin-name" required minLength={2} maxLength={60} autoComplete="name" placeholder="Required" value={form.adminName} onChange={set("adminName")} className={fieldClass} />
+                    <>
+                      <Field label="Username or email" htmlFor="signin-login">
+                        <Input id="signin-login" required autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="vicky or vicky@mail.com" value={form.login} onChange={e => { set("login")(e); resetPinStep(); }} className={fieldClass} />
                       </Field>
-                      <Field label="PIN" htmlFor="admin-pin" hint="As admin you get both views: your own groups and the admin dashboard.">
-                        <Input id="admin-pin" type="password" required autoComplete="current-password" placeholder="Required" value={form.pin} onChange={set("pin")} className={fieldClass} />
-                      </Field>
-                      <LoadingButton type="submit" size="xl" className="w-full" loading={busy} loadingText="Signing in…">Sign in as admin</LoadingButton>
-                    </form>
+                      {pinStep !== "create" && <Field label="PIN" htmlFor="signin-pin"><PinInput id="signin-pin" value={form.pin} onChange={set("pin")} /></Field>}
+                    </>
                   )}
-                </m.div>
+                  <AnimatePresence initial={false}>
+                    {pinStep && (
+                      <m.div {...reveal} className="overflow-hidden">
+                        <p className="mb-4 px-1 text-[13.5px] text-muted-foreground">{pinStep === "create" ? "Your account has no PIN yet. Choose 4 digits only you know." : "One last step: choose a 4-digit PIN. You'll sign in with it from now on."}</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field label="New PIN" htmlFor="new-pin"><PinInput id="new-pin" value={form.newPin} onChange={set("newPin")} autoComplete="new-password" autoFocus /></Field>
+                          <Field label="Confirm PIN" htmlFor="new-pin2"><PinInput id="new-pin2" value={form.newPin2} onChange={set("newPin2")} autoComplete="new-password" /></Field>
+                        </div>
+                      </m.div>
+                    )}
+                  </AnimatePresence>
+                  <LoadingButton type="submit" size="xl" className="w-full" disabled={!pinReady || !newPinReady} loading={busy} loadingText="Signing in…">{pinStep ? "Save PIN and sign in" : "Sign in"}</LoadingButton>
+                  <button type="button" onClick={() => { setLegacy(l => !l); resetPinStep(); }} className="mx-auto block cursor-pointer text-center text-[14px] font-medium text-tint">
+                    {legacy ? "Sign in with username or email" : "Used Split It before? Sign in with your group"}
+                  </button>
+                </m.form>
               ) : (
-                <m.div key="request" {...fade}>
-                  {requestId ? (
-                    <RequestStatus requestId={requestId} busy={busy} run={run} onReset={() => { storage.set(""); setRequestId(""); }} onEntered={() => signedIn("You're in.")} />
-                  ) : (
-                    <form className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
-                      if (form.requestPin !== form.requestPin2) throw new Error("The two PINs don't match.");
-                      const d = await post<{ requestId: string; message: string }>("/api/access/request", { name: form.requestName.trim(), groupId: form.requestGroup, pin: form.requestPin });
-                      storage.set(d.requestId);
-                      setRequestId(d.requestId);
-                      setForm(f => ({ ...f, requestName: "", requestPin: "", requestPin2: "" }));
-                      haptic();
-                      toast.success(d.message);
-                    }); }}>
-                      <Field label="Group" htmlFor="request-group"><GroupSelect id="request-group" value={form.requestGroup} onChange={set("requestGroup")} groups={groups.data} /></Field>
-                      <Field label="Your name" htmlFor="request-name">
-                        <Input id="request-name" required minLength={2} maxLength={60} autoComplete="username" placeholder="Full name" value={form.requestName} onChange={set("requestName")} className={fieldClass} />
-                      </Field>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field label="Choose a PIN" htmlFor="request-pin"><PinInput id="request-pin" value={form.requestPin} onChange={set("requestPin")} autoComplete="new-password" /></Field>
-                        <Field label="Confirm PIN" htmlFor="request-pin2"><PinInput id="request-pin2" value={form.requestPin2} onChange={set("requestPin2")} autoComplete="new-password" /></Field>
-                      </div>
-                      <p className="footnote -mt-2 px-1 text-muted-foreground">Once the admin approves you, sign in with your name and this 4-digit PIN.</p>
-                      <LoadingButton type="submit" size="xl" className="w-full" disabled={form.requestPin.length !== 4 || form.requestPin2.length !== 4} loading={busy} loadingText="Sending request…">Request access</LoadingButton>
-                    </form>
-                  )}
-                </m.div>
+                <m.form key="signup" {...fade} className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
+                  if (form.suPin !== form.suPin2) throw new Error("The two PINs don't match.");
+                  await post("/api/auth/signup", { name: form.suName.trim(), username: cleanUsername(form.suUsername), email: form.suEmail.trim() || undefined, pin: form.suPin });
+                  setForm(f => ({ ...f, suPin: "", suPin2: "" }));
+                  await signedIn("Account created. Welcome!");
+                }); }}>
+                  <Field label="Your name" htmlFor="su-name">
+                    <Input id="su-name" required minLength={2} maxLength={60} autoComplete="name" placeholder="Full name" value={form.suName}
+                      onChange={e => { const v = e.target.value; setForm(f => ({ ...f, suName: v, suUsername: usernameTouched ? f.suUsername : v.trim() ? suggestUsername(v) : "" })); }} className={fieldClass} />
+                  </Field>
+                  <Field label="Username" htmlFor="su-username">
+                    <Input id="su-username" required autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="vicky_2024" value={form.suUsername}
+                      onChange={e => { setUsernameTouched(true); set("suUsername")(e); }} className={fieldClass} />
+                    <p className="footnote mt-2 px-1 text-muted-foreground"><UsernameHint state={usernameState} /></p>
+                  </Field>
+                  <Field label="Email (optional)" htmlFor="su-email" hint="Friends can invite you by email too.">
+                    <Input id="su-email" type="email" autoComplete="email" autoCapitalize="none" placeholder="you@mail.com" value={form.suEmail} onChange={set("suEmail")} className={fieldClass} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Choose a PIN" htmlFor="su-pin"><PinInput id="su-pin" value={form.suPin} onChange={set("suPin")} autoComplete="new-password" /></Field>
+                    <Field label="Confirm PIN" htmlFor="su-pin2"><PinInput id="su-pin2" value={form.suPin2} onChange={set("suPin2")} autoComplete="new-password" /></Field>
+                  </div>
+                  <LoadingButton type="submit" size="xl" className="w-full" disabled={form.suPin.length !== 4 || form.suPin2.length !== 4 || usernameState === "taken" || usernameState === "invalid"} loading={busy} loadingText="Creating account…">Create account</LoadingButton>
+                </m.form>
               )}
             </AnimatePresence>
           </div>
@@ -174,36 +207,6 @@ export function AuthScreen() {
         {install.dialog}
         <p className="footnote mt-auto pt-10 text-center text-muted-foreground">Amounts are kept to the exact paisa.<span className="mt-1 block text-[11px] opacity-60">Build {__BUILD__}</span></p>
       </div>
-    </div>
-  );
-}
-
-function RequestStatus({ requestId, busy, run, onReset, onEntered }: {
-  requestId: string; busy: boolean; run: (fn: () => Promise<void>) => Promise<void>; onReset: () => void; onEntered: () => Promise<void>;
-}) {
-  const status = useQuery({
-    queryKey: ["request-status", requestId],
-    queryFn: () => get<{ status: string; name?: string }>("/api/access/status?requestId=" + encodeURIComponent(requestId)),
-    refetchInterval: q => (q.state.data?.status === "pending" ? 15_000 : false),
-  });
-  const s = status.data?.status;
-  return (
-    <div className="space-y-5 py-3 text-center">
-      <div className={cn("mx-auto grid size-14 place-items-center rounded-full", s === "approved" ? "bg-positive-soft text-positive" : "bg-tint-soft text-tint")}>
-        {s === "approved" ? <Check className="size-7" strokeWidth={2.5} /> : <Clock3 className="size-7" />}
-      </div>
-      <div>
-        <p className="title-2">{s === "approved" ? "You're approved" : s === "pending" ? "Waiting for approval" : s ? "Access " + s : "Checking…"}</p>
-        <p className="subhead mx-auto mt-1.5 max-w-[30ch] text-muted-foreground">
-          {s === "approved" ? "Continue to start your session." : s === "pending" ? "We check for you automatically. You can also ask the admin to approve you." : s ? "Request access again if you still need it." : ""}
-        </p>
-      </div>
-      {s === "approved" ? (
-        <LoadingButton size="xl" className="w-full" loading={busy} loadingText="Opening…" onClick={() => run(async () => { await post("/api/access/enter", { requestId }); await onEntered(); })}>Continue</LoadingButton>
-      ) : (
-        <LoadingButton size="xl" variant="secondary" className="w-full" loading={status.isFetching} loadingText="Checking…" onClick={() => status.refetch()}>Check approval</LoadingButton>
-      )}
-      <Button variant="link" className="text-[15px] text-tint" onClick={onReset}>Request with a different name or group</Button>
     </div>
   );
 }

@@ -418,7 +418,7 @@ function InsightsTab({ groupId }: { groupId: string }) {
             <button key={mm.id} type="button" onClick={() => setInspecting(mm.id)} className={pressableRow}>
               <PersonAvatar id={mm.id} name={mm.name} size="sm" />
               <span className="flex-1 truncate text-[15px]">{mm.name}{mm.id === group.data.me.id && <span className="text-muted-foreground"> (you)</span>}</span>
-              <span className="text-[13px] text-muted-foreground">{mm.status === "admin" ? "Admin" : mm.status === "pending" ? "Waiting for approval" : ""}</span>
+              <span className="text-[13px] text-muted-foreground">{mm.role === "admin" ? "Admin" : ""}</span>
               <ChevronRight className={CHEVRON} strokeWidth={2.4} />
             </button>
           ))}

@@ -105,7 +105,7 @@ test("equal split rejects empty, non-string, outsider and cross-group members an
 test("every stored expense's splits sum exactly to its total", async t => {
   const f = await fixture(t);
   const { ids } = f;
-  const people = [ids.Nikhil, ids.Vicky, ids.Jagan, "admin"];
+  const people = [ids.Nikhil, ids.Vicky, ids.Jagan, ids.admin];
   for (let i = 1; i <= 40; i++) {
     const members = people.filter((_, j) => (i >> j) & 1);
     if (!members.length) continue;
