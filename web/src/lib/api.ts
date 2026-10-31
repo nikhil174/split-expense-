@@ -43,8 +43,13 @@ export type Role = "admin" | "member";
 // hasPin: the group has a 4-digit PIN; unlocked: opened with it on this device (lasts a day).
 export type GroupSummary = { id: string; name: string; myBalanceCents: number; role: Role; memberCount: number; hasPin: boolean; unlocked: boolean };
 // active: in the group; pending: asked to join; invited: not answered yet.
-export type MemberStatus = "active" | "pending" | "invited" | "removed";
-export type Member = { id: string; name: string; username: string | null; role: Role; status: MemberStatus };
+export type MemberStatus = "active" | "pending" | "invited" | "suggested" | "removed";
+// friend: where I stand with them ("requested": I asked; "asked_you": they asked me).
+export type FriendState = "friend" | "requested" | "asked_you" | null;
+export type Member = { id: string; name: string; username: string | null; role: Role; status: MemberStatus; friend: FriendState; invitedBy: string | null };
+export type Friend = { id: string; name: string; username: string; since: number };
+export type Friends = { friends: Friend[]; incoming: Friend[]; outgoing: Friend[] };
+export type JoinInfo = { groupId: string; groupName: string; memberCount: number; hasPin: boolean; status: MemberStatus | null };
 export type GroupDetail = { group: { id: string; name: string; hasPin: boolean }; members: Member[]; waiting: Member[]; me: Identity & { isAdmin: boolean; role: Role } };
 export type Invitation = { groupId: string; groupName: string; invitedBy: string; memberCount: number; hasPin: boolean };
 export type Split = { memberId: string; name: string; amountCents: number };

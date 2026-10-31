@@ -1,6 +1,7 @@
 import * as React from "react";
 import { m } from "motion/react";
-import { AtSign, ChevronRight, Lock, Plus, Users } from "lucide-react";
+import { AtSign, ChevronRight, Lock, Plus, QrCode, Users } from "lucide-react";
+import { JoinSheet } from "@/features/invites/JoinScreen";
 import { PinInput } from "@/components/app/secrets";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,7 @@ export const cardTap = "block w-full cursor-pointer rounded-[14px] text-left tra
 
 export function GroupsScreen({ user }: { user: User }) {
   const name = user.name;
-  const [creating, setCreating] = React.useState(false);
+  const [creating, setCreating] = React.useState(false), [joining, setJoining] = React.useState(false);
   const groups = useGroups(), people = usePeopleBalances();
   const list = groups.data || [];
   // The filter stays put while the sheet animates closed.
@@ -95,13 +96,16 @@ export function GroupsScreen({ user }: { user: User }) {
       <InstallCard className="mt-5" />
 
       <div className="mt-7">
-        <SectionTitle action={<button type="button" onClick={() => setCreating(true)} className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[#141716] py-1.5 pr-3.5 pl-2.5 text-[13.5px] font-medium text-white transition-transform active:scale-95"><Plus className="size-4" strokeWidth={2.4} />New group</button>}>Your groups</SectionTitle>
+        <SectionTitle action={<span className="flex gap-2">
+          <button type="button" onClick={() => setJoining(true)} className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[#141716]/[0.06] py-1.5 pr-3.5 pl-2.5 text-[13.5px] font-medium transition-transform active:scale-95"><QrCode className="size-4" />Join</button>
+          <button type="button" onClick={() => setCreating(true)} className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[#141716] py-1.5 pr-3.5 pl-2.5 text-[13.5px] font-medium text-white transition-transform active:scale-95"><Plus className="size-4" strokeWidth={2.4} />New group</button>
+        </span>}>Your groups</SectionTitle>
         <List inset={68}>
           {groups.isPending && [0, 1, 2].map(i => (
             <div key={i} className="flex items-center gap-3 px-4 py-3.5"><Skeleton className="size-10 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-20" /></div></div>
           ))}
           {groups.data?.length === 0 && (
-            <EmptyState icon={<Users />} title="No groups yet">Create one for a trip, your flat or friends, then invite people by their username or email.</EmptyState>
+            <EmptyState icon={<Users />} title="No groups yet">Create one for a trip, your flat or friends, or tap Join to scan a group's QR.</EmptyState>
           )}
           {list.map((g, i) => {
             const c = Number(g.myBalanceCents || 0);
@@ -121,6 +125,7 @@ export function GroupsScreen({ user }: { user: User }) {
         </List>
       </div>
       <NewGroupDialog open={creating} onClose={() => setCreating(false)} />
+      <JoinSheet open={joining} onOpenChange={setJoining} />
     </Page>
   );
 }

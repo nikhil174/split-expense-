@@ -7,8 +7,8 @@ System design for turning Split It from "one administrator, members per group" i
 | Phase | What | Status |
 |---|---|---|
 | 1 | Accounts (username / email + PIN), profiles, groups for everyone, per-group admins, invite by username or email, moving existing data | **Built** (this PR) |
-| 2 | Invite links and QR codes with admin approval, friends | Planned |
-| 3 | Sign in with Google | Planned |
+| 2 | Invite links and QR codes with admin approval, friends | **Built** |
+| 3 | Sign in with Google | **Built** (needs `GOOGLE_CLIENT_ID`) |
 
 ## 1. Goals
 
@@ -201,7 +201,9 @@ How existing people get in:
 3. Merge the PR. Everyone is signed out once (new cookie) and signs in with their group, or with the new form.
 4. Rollback: the old tables are untouched. Redeploying the previous version works, but accounts and groups created after the switch would not be visible to it.
 
-## 7. Phase 2: invite links, QR codes and friends
+## 7. Phase 2: invite links, QR codes and friends (built)
+
+As built: the code lives in `appx_groups.invite_code` and is visible to everyone in the group (joining still needs the group PIN and an admin), so there is no separate `appx_invites` use; members suggest friends with status `suggested`.
 
 **Invite links and QR codes**
 

@@ -3,7 +3,7 @@ import { MutationCache, QueryClient, QueryClientProvider, useQueryClient } from 
 import { GroupGate } from "@/features/groups/GroupGate";
 import { GroupPinDialog, openGroupPin } from "@/components/app/secrets";
 import { AnimatePresence, LazyMotion } from "motion/react";
-import { Bell, Download, LogOut, UserRound, Wallet } from "lucide-react";
+import { Bell, Download, LogOut, UserRound, Users, Wallet } from "lucide-react";
 import { NotificationsScreen } from "@/features/notifications/NotificationsScreen";
 import { PaymentMethodSheet } from "@/features/groups/UpiPayments";
 import { useInstallApp } from "@/components/app/InstallApp";
@@ -17,6 +17,8 @@ import { GroupScreen } from "@/features/groups/GroupScreen";
 import { PersonScreen } from "@/features/groups/PersonScreen";
 import { ProfileScreen } from "@/features/profile/ProfileScreen";
 import { SiteAdminScreen } from "@/features/admin/SiteAdminScreen";
+import { JoinScreen } from "@/features/invites/JoinScreen";
+import { FriendsScreen } from "@/features/friends/FriendsScreen";
 import { keys, useMe, useNotifications } from "@/hooks/queries";
 import { ApiError, post, type User } from "@/lib/api";
 import { navigate, useRoute } from "@/lib/route";
@@ -125,6 +127,7 @@ function Shell({ user }: { user: User }) {
                 <p className="mt-1.5 text-[11px] text-muted-foreground/70">Build {__BUILD__}</p>
               </DropdownMenuLabel>
               <DropdownMenuItem onSelect={() => navigate({ name: "profile" })}><UserRound />Your profile</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => navigate({ name: "friends" })}><Users />Friends</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setUpiOpen(true)}><Wallet />Your UPI</DropdownMenuItem>
               {install.available && <DropdownMenuItem onSelect={() => install.start()}><Download />Install app</DropdownMenuItem>}
               <DropdownMenuSeparator />
@@ -141,6 +144,8 @@ function Shell({ user }: { user: User }) {
           {route.name === "home" && <GroupsScreen user={user} />}
           {route.name === "profile" && <ProfileScreen user={user} />}
           {route.name === "admin" && <SiteAdminScreen user={user} />}
+          {route.name === "friends" && <FriendsScreen />}
+          {route.name === "join" && <JoinScreen code={route.code} />}
           {route.name === "group" && <GroupGate groupId={route.groupId}><GroupScreen groupId={route.groupId} tab={route.tab} expenseId={route.expenseId} /></GroupGate>}
           {route.name === "notifications" && <NotificationsScreen />}
           {route.name === "person" && <GroupGate groupId={route.groupId}><PersonScreen groupId={route.groupId} memberId={route.memberId} /></GroupGate>}

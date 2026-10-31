@@ -26,6 +26,11 @@ const ICON: Record<string, { icon: React.ReactNode; tone: string }> = {
   member_joined: { icon: <UserPlus />, tone: "bg-positive-soft text-positive" },
   made_admin: { icon: <Check />, tone: "bg-tint-soft text-tint" },
   removed: { icon: <X />, tone: "bg-[#141716]/[0.05] text-muted-foreground" },
+  join_request: { icon: <UserPlus />, tone: "bg-[#e4c06c]/25 text-[#8a6416]" },
+  member_suggested: { icon: <UserPlus />, tone: "bg-[#e4c06c]/25 text-[#8a6416]" },
+  friend_request: { icon: <UserPlus />, tone: "bg-tint-soft text-tint" },
+  friend_accepted: { icon: <Check />, tone: "bg-positive-soft text-positive" },
+  group_pin: { icon: <Check />, tone: "bg-[#141716]/[0.05] text-foreground" },
 };
 
 function ago(ts: number) {
