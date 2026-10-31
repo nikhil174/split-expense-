@@ -19,6 +19,7 @@ import { ProfileScreen } from "@/features/profile/ProfileScreen";
 import { SiteAdminScreen } from "@/features/admin/SiteAdminScreen";
 import { JoinScreen } from "@/features/invites/JoinScreen";
 import { FriendsScreen } from "@/features/friends/FriendsScreen";
+import { ResetPasswordScreen, VerifyEmailScreen } from "@/features/auth/EmailLinks";
 import { keys, useMe, useNotifications } from "@/hooks/queries";
 import { ApiError, post, type User } from "@/lib/api";
 import { navigate, useRoute } from "@/lib/route";
@@ -72,6 +73,10 @@ function Splash() {
 
 function Root() {
   const me = useMe();
+  const route = useRoute();
+  // Links from emails work signed in or out.
+  if (route.name === "reset") return <ResetPasswordScreen token={route.token} />;
+  if (route.name === "verify-email") return <VerifyEmailScreen token={route.token} signedIn={!!me.data?.user} />;
   if (me.isPending) return <Splash />;
   const user = me.data?.user;
   if (!user) return <AuthScreen />;

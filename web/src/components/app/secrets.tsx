@@ -111,7 +111,9 @@ const loadGis = () => gisLoading ??= new Promise((resolve, reject) => {
 });
 let onCredential: (token: string) => void = () => {};
 let initializedFor = "";
-export const useGoogleClientId = () => useQuery({ queryKey: ["auth-config"], queryFn: () => get<{ googleClientId: string | null }>("/api/auth/config").then(d => d.googleClientId), staleTime: Infinity });
+// What sign-in options the server has: Google (its client id) and email links.
+export const useAuthConfig = () => useQuery({ queryKey: ["auth-config"], queryFn: () => get<{ googleClientId: string | null; emailEnabled: boolean }>("/api/auth/config"), staleTime: Infinity });
+export const useGoogleClientId = () => { const q = useAuthConfig(); return { ...q, data: q.data?.googleClientId ?? null }; };
 
 export function GoogleButton({ onToken, text = "continue_with" }: { onToken: (token: string) => void; text?: "continue_with" | "signin_with" | "signup_with" }) {
   const clientId = useGoogleClientId().data;

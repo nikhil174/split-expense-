@@ -46,11 +46,16 @@ Migration `0013_accounts.sql` changes no money data. Every existing member becom
 - Group screen: hero with your position, **Add expense** / **Settle up**, tabs for Expenses (table, tap a row for the split, search, delete), Balances (you and each person → drill-down, group balances, who owes whom), Payments (table) and Insights.
 - Person drill-down (`GET /api/groups/:id/with/:memberId`): every shared expense and payment between you and that person with a running balance that ends at the current debt.
 
+## Email links: confirm your email, forgot password (migration `0017`, `src/email.js`)
+- Adding or changing an email (sign-up or Profile) sends a **confirm your email** link (24 h). Profile shows "Confirmed" or "Not confirmed yet · Send confirmation link" (`POST /api/me/email/verify`, 3/hour). Google sign-in emails count as confirmed.
+- **Forgot password?** on the sign-in screen (`POST /api/auth/forgot`) emails a **reset link** (30 min, works once, a newer one replaces it) **only to a confirmed email**. The answer is the same whether or not the account exists, so it can't be used to probe accounts; at most 3 reset emails per account per hour. The link (`#/reset/<token>`) sets a new password, signs out every device, and signs in (`GET /api/auth/reset/:token`, `POST /api/auth/reset`). Only token hashes are stored (`appx_email_tokens`).
+- Sent through **Brevo** (no domain needed). **Off until** the Worker secret `BREVO_API_KEY` and variable `EMAIL_FROM` (a sender verified in Brevo; optional `EMAIL_FROM_NAME`) are set; the "Forgot password?" link is hidden until then.
+
 ## Passwords and PINs
 - Account passwords and group PINs are stored only as hashes (`appx_users.pin_hash`, `appx_groups.pin_hash`): PBKDF2-SHA256, 100,000 iterations, a random 16-byte salt each, with `SESSION_SECRET` mixed in as a pepper so a copy of the database alone cannot be brute-forced. **Rotating `SESSION_SECRET` invalidates every password and group PIN.**
 - 5 wrong passwords in a row lock that account for 15 minutes (on top of the per-IP sign-in limit); 5 wrong PINs lock that group for that person for 15 minutes.
 - Members from before PINs have no password yet: their first sign-in asks them to choose one.
-- **Nobody can reset someone else's password** (not group admins, not the site owner). A forgotten password can be recovered only by signing in with Google, if it's connected; otherwise it needs a manual fix in D1.
+- **Nobody can reset someone else's password** (not group admins, not the site owner). A forgotten password is recovered with **Forgot password?** (a link to the confirmed email), or by signing in with Google if it's connected.
 
 ## Security controls
 - `HttpOnly; Secure; SameSite=Lax` cookies; cross-site writes (foreign `Origin`) are refused; JSON bodies are capped at 16 KB; split lists are capped at 100 members.

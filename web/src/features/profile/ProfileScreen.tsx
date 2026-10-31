@@ -3,7 +3,8 @@ import { AtSign, ChevronRight, KeyRound, Link2, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LoadingButton, Page, PersonAvatar, SectionTitle, Segmented, fieldClass, pressableRow } from "@/components/app/bits";
 import { Field, USERNAME_RE, UsernameHint, useUsernameCheck } from "@/features/auth/AuthScreen";
-import { GoogleButton, PasswordInput, PasswordStrength, goodPassword, useGoogleClientId } from "@/components/app/secrets";
+import { GoogleButton, PasswordInput, PasswordStrength, goodPassword, useAuthConfig, useGoogleClientId } from "@/components/app/secrets";
+import { BadgeCheck } from "lucide-react";
 import { BackButton } from "@/features/groups/GroupScreen";
 import { PaymentMethodSheet } from "@/features/groups/UpiPayments";
 import { useAccountAction, useMyPaymentMethod } from "@/hooks/queries";
@@ -79,6 +80,7 @@ function DetailsForm({ user }: { user: User }) {
       </Field>
       <Field label="Email (optional)" htmlFor="profile-email" hint="You can sign in with it, and friends can invite you by it.">
         <Input id="profile-email" type="email" autoCapitalize="none" placeholder="you@mail.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className={fieldClass} />
+        {user.email && !emailChanged && <EmailStatus user={user} />}
       </Field>
       <LoadingButton type="submit" className="w-full rounded-full" size="lg" disabled={!dirty || !ok} loading={save.isPending} loadingText="Saving…">{user.legacy && username === user.username ? "Keep this username" : "Save changes"}</LoadingButton>
     </form>
@@ -160,5 +162,20 @@ function LinkAccount() {
         <LoadingButton type="submit" variant="secondary" className="w-full rounded-full" disabled={!f.pin} loading={link.isPending} loadingText="Linking…">Link account</LoadingButton>
       </form>
     </section>
+  );
+}
+
+// Whether my email is confirmed (needed for "Forgot password?"), with a
+// button to send the confirmation link again.
+function EmailStatus({ user }: { user: User }) {
+  const enabled = useAuthConfig().data?.emailEnabled;
+  const send = useAccountAction(() => post<{ sentTo?: string }>("/api/me/email/verify"), () => `Link sent to ${user.email}. Check spam too.`);
+  if (user.emailVerified) return <p className="mt-2 flex items-center gap-1 px-1 text-[13px] text-positive"><BadgeCheck className="size-4" />Confirmed. You can reset your password with it.</p>;
+  if (!enabled) return null;
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[13px] text-muted-foreground" data-testid="email-unconfirmed">
+      Not confirmed yet, so it can't reset your password.
+      <button type="button" disabled={send.isPending} onClick={() => send.mutate(undefined)} className="cursor-pointer font-medium text-tint disabled:opacity-50">{send.isPending ? "Sending…" : "Send confirmation link"}</button>
+    </p>
   );
 }
