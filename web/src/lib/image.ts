@@ -5,8 +5,17 @@ const MAX_SIDE = 720, MAX_BYTES = 280 * 1024;
 
 const dataUrlBytes = (url: string) => Math.floor((url.length - url.indexOf(",") - 1) * 3 / 4);
 
-export async function shrinkQrImage(file: File): Promise<string> {
-  if (!file.type.startsWith("image/")) throw new Error("Choose an image of your UPI QR code.");
+export function shrinkQrImage(file: File): Promise<string> {
+  return shrinkImage(file, { what: "your UPI QR code", maxSide: MAX_SIDE });
+}
+
+// Payment screenshots are taller (phone screens), so allow more height.
+export function shrinkScreenshot(file: File): Promise<string> {
+  return shrinkImage(file, { what: "the payment screenshot", maxSide: 1280 });
+}
+
+async function shrinkImage(file: File, { what, maxSide }: { what: string; maxSide: number }): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error(`Choose an image of ${what}.`);
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -15,7 +24,7 @@ export async function shrinkQrImage(file: File): Promise<string> {
       el.onerror = () => reject(new Error("That image could not be opened. Try a screenshot of your QR code."));
       el.src = url;
     });
-    const scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
     canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -25,11 +34,11 @@ export async function shrinkQrImage(file: File): Promise<string> {
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const png = canvas.toDataURL("image/png");
     if (dataUrlBytes(png) <= MAX_BYTES) return png;
-    for (const q of [0.92, 0.85, 0.75, 0.6]) {
+    for (const q of [0.92, 0.85, 0.75, 0.6, 0.45]) {
       const jpg = canvas.toDataURL("image/jpeg", q);
       if (dataUrlBytes(jpg) <= MAX_BYTES) return jpg;
     }
-    throw new Error("That image is too large. Try a screenshot of just the QR code.");
+    throw new Error(`That image is too large. Try a smaller screenshot of ${what}.`);
   } finally {
     URL.revokeObjectURL(url);
   }

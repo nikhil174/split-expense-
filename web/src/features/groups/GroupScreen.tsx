@@ -1,7 +1,7 @@
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Pencil, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet } from "lucide-react";
+import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Pencil, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet, Paperclip } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,11 +17,12 @@ import { MembersSheet } from "./MembersSheet";
 import { PendingPayments } from "./PendingPayments";
 import { MemberSheet } from "./MemberSheet";
 import { UpiPeople } from "./UpiPayments";
+import { AwaitingBadge, ProofDialog, proofSrc } from "./Awaiting";
 import { PairSheet } from "./PairDetail";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
 import { useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
-import type { Expense } from "@/lib/api";
+import type { Expense, Settlement } from "@/lib/api";
 import { inr, shortDate } from "@/lib/money";
 import { goBack, navigate, type GroupTab } from "@/lib/route";
 import { cn } from "@/lib/utils";
@@ -245,10 +246,11 @@ function BalancesTab({ groupId }: { groupId: string }) {
   const [pairOpen, setPairOpen] = React.useState<{ creditorId: string; debtorId: string } | null>(null);
   const people = React.useMemo(() => {
     if (!mine.data || !group.data) return null;
-    const net = new Map<string, { name: string; cents: number }>();
-    for (const d of mine.data.owedToYou) net.set(d.fromMemberId, { name: d.fromName, cents: d.amountCents });
-    for (const d of mine.data.youOwe) net.set(d.toMemberId, { name: d.toName, cents: -d.amountCents });
-    for (const mm of group.data.members) if (mm.id !== meId && !net.has(mm.id)) net.set(mm.id, { name: mm.name, cents: 0 });
+    // waiting: payments between us awaiting approval (either way).
+    const net = new Map<string, { name: string; cents: number; waiting: number }>();
+    for (const d of mine.data.owedToYou) net.set(d.fromMemberId, { name: d.fromName, cents: d.amountCents, waiting: d.waitingCents || 0 });
+    for (const d of mine.data.youOwe) net.set(d.toMemberId, { name: d.toName, cents: -d.amountCents, waiting: d.waitingCents || 0 });
+    for (const mm of group.data.members) if (mm.id !== meId && !net.has(mm.id)) net.set(mm.id, { name: mm.name, cents: 0, waiting: 0 });
     return [...net].sort((a, b) => Math.abs(b[1].cents) - Math.abs(a[1].cents) || a[1].name.localeCompare(b[1].name));
   }, [mine.data, group.data, meId]);
   return (
@@ -262,6 +264,7 @@ function BalancesTab({ groupId }: { groupId: string }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[16px] font-medium">{p.name}</span>
                 <span className={cn("block text-[13px]", p.cents > 0 ? "text-positive" : p.cents < 0 ? "text-negative" : "text-muted-foreground")}>{p.cents > 0 ? "owes you" : p.cents < 0 ? "you owe" : "settled up"}</span>
+                {p.waiting > 0 && <AwaitingBadge cents={p.waiting} className="mt-1" />}
               </span>
               {p.cents !== 0 && <span className={cn("tabular text-[16px] font-medium", p.cents > 0 ? "text-positive" : "text-negative")}>{inr(Math.abs(p.cents))}</span>}
               <ChevronRight className={CHEVRON} strokeWidth={2.4} />
@@ -314,6 +317,7 @@ function BalancesTab({ groupId }: { groupId: string }) {
 // ----- Payments -----
 function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
   const payments = useSettlements(groupId);
+  const [proof, setProof] = React.useState<Settlement | null>(null);
   const who = (id: string, name: string) => (id === meId ? "You" : name);
   return (
     <div className="space-y-7">
@@ -335,17 +339,21 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
                   <td className="w-full max-w-0 px-2 py-3">
                     <span className={cn("block truncate text-[15px] font-medium", s.status === "rejected" && "text-muted-foreground line-through")}>{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</span>
                     <span className="block truncate text-[12.5px] text-muted-foreground">
-                      {s.status === "pending" ? <span className="font-medium text-[#9a6b12]">Waiting for {s.toMemberId === meId ? "you" : s.toName} to confirm</span> : s.status === "rejected" ? <span className="font-medium text-negative">Rejected by {s.toMemberId === meId ? "you" : s.toName}</span> : new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}
+                      {s.status === "pending" ? <AwaitingBadge label={`awaiting ${s.toMemberId === meId ? "your" : s.toName + "'s"} approval`} /> : s.status === "rejected" ? <span className="font-medium text-negative">Rejected by {s.toMemberId === meId ? "you" : s.toName}</span> : new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}
                       {s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
                     </span>
                   </td>
-                  <td className={cn("tabular py-3 pr-4 pl-2 text-right text-[15px] font-medium whitespace-nowrap", s.status !== "confirmed" && "text-muted-foreground")}>{inr(s.amountCents)}</td>
+                  <td className={cn("tabular py-3 pr-4 pl-2 text-right text-[15px] font-medium whitespace-nowrap", s.status !== "confirmed" && "text-muted-foreground")}>
+                    {inr(s.amountCents)}
+                    {s.hasProof && <button type="button" aria-label="View payment screenshot" onClick={() => setProof(s)} className="mt-0.5 flex w-full cursor-pointer items-center justify-end gap-1 text-[12px] font-normal text-tint"><Paperclip className="size-3" />Screenshot</button>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+    <ProofDialog src={proof ? proofSrc(groupId, proof.id) : null} title={proof ? `${proof.fromName}'s payment` : ""} onClose={() => setProof(null)} />
     </div>
     </div>
   );

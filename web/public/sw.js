@@ -20,3 +20,30 @@ self.addEventListener("fetch", event => {
       .catch(() => caches.match("/").then(hit => hit || Response.error())),
   );
 });
+
+// Phone notifications. The server sends {title, body, link, tag}, encrypted
+// for this browser; show it like any app notification.
+self.addEventListener("push", event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { title: event.data?.text() }; }
+  event.waitUntil(self.registration.showNotification(data.title || "Split It", {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: data.tag ? data.tag + ":" + (data.link || "") : undefined,
+    data: { link: data.link || "#/" },
+  }));
+});
+
+// Tapping it opens (or focuses) the app on the right screen.
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const target = new URL("/" + String(event.notification.data?.link || "#/").replace(/^\/?/, ""), self.location.origin).href;
+  event.waitUntil((async () => {
+    const tabs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const tab of tabs) {
+      if (new URL(tab.url).origin === self.location.origin) { await tab.focus(); return tab.navigate(target); }
+    }
+    return self.clients.openWindow(target);
+  })());
+});

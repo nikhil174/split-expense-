@@ -52,7 +52,7 @@ export type Settlement = {
   id: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
   amountCents: number; createdAt: number; recordedByName: string;
   // A payment counts only once the receiver confirms it.
-  status: "pending" | "confirmed" | "rejected"; canDecide: boolean; canCancel: boolean;
+  status: "pending" | "confirmed" | "rejected"; canDecide: boolean; canCancel: boolean; hasProof: boolean;
 };
 // One member's whole picture in a group (GET /api/groups/:id/members/:memberId).
 export type MemberSummary = {
@@ -72,7 +72,7 @@ export type AppNotification = {
 };
 export type PendingPayment = {
   id: string; groupId: string; groupName: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
-  amountCents: number; createdAt: number; incoming: boolean;
+  amountCents: number; createdAt: number; incoming: boolean; hasProof: boolean;
 };
 export type Spending = { memberId: string; name: string; paidCents: number; shareCents: number };
 export type Dashboard = { totalSpentCents: number; expenseCount: number; spending: Spending[] };
@@ -80,7 +80,8 @@ export type ActivityItem =
   | { type: "expense"; id: string; description: string; paidBy: string; totalCents: number; shareCents: number; effectCents: number; runningCents: number; createdAt: number }
   | { type: "payment"; id: string; fromMemberId: string; toMemberId: string; amountCents: number; effectCents: number; runningCents: number; createdAt: number };
 // One row per person per group: positive netCents means they owe me.
-export type PersonBalance = { groupId: string; groupName: string; memberId: string; name: string; active: boolean; netCents: number };
+// waitingOutCents: I sent them, awaiting their approval; waitingInCents: they sent me, awaiting mine.
+export type PersonBalance = { groupId: string; groupName: string; memberId: string; name: string; active: boolean; netCents: number; waitingOutCents: number; waitingInCents: number };
 export type PeopleBalances = { people: PersonBalance[]; owedToYouCents: number; youOweCents: number; netCents: number };
 export type PersonView = { me: Identity; other: Identity & { active: boolean }; netCents: number; items: ActivityItem[] };
 

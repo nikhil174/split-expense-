@@ -103,7 +103,8 @@ export function useDeleteExpense(groupId: string) {
 export function useRecordPayment(groupId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { fromMemberId: string; toMemberId: string; amount: string }) => post<{ id: string; status: "pending" | "confirmed" }>(`/api/groups/${groupId}/settlements`, body),
+    // proof: optional screenshot of the payment (data URL).
+    mutationFn: (body: { fromMemberId: string; toMemberId: string; amount: string; proof?: string }) => post<{ id: string; status: "pending" | "confirmed" }>(`/api/groups/${groupId}/settlements`, body),
     onSuccess: () => refreshGroup(qc, groupId),
   });
 }

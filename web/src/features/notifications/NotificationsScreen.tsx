@@ -1,12 +1,14 @@
 import * as React from "react";
 import { m } from "motion/react";
-import { Bell, Check, HandCoins, Pencil, ReceiptText, Trash2, UserPlus, X } from "lucide-react";
+import { Bell, BellOff, BellRing, Check, HandCoins, Pencil, ReceiptText, Smartphone, Trash2, UserPlus, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, List, Page, SectionTitle, listItem, pressableRow } from "@/components/app/bits";
 import { BackButton } from "@/features/groups/GroupScreen";
 import { useMarkNotificationsRead, useNotifications } from "@/hooks/queries";
 import type { AppNotification } from "@/lib/api";
 import { goBack } from "@/lib/route";
+import { disablePush, enablePush, pushState, type PushState } from "@/lib/push";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const ICON: Record<string, { icon: React.ReactNode; tone: string }> = {
@@ -55,6 +57,7 @@ export function NotificationsScreen() {
     <Page>
       <BackButton label="Home" onClick={() => goBack({ name: "home" })} />
       <h1 className="page-title mt-4 px-1">Notifications</h1>
+      <PhoneNotifications />
       <div className="mt-5 space-y-6">
         {q.isPending ? (
           <List inset={68}>{[0, 1, 2].map(i => <div key={i} className="flex items-center gap-3 px-4 py-3.5"><Skeleton className="size-10 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-48" /><Skeleton className="h-3 w-32" /></div></div>)}</List>
@@ -84,5 +87,48 @@ export function NotificationsScreen() {
         ))}
       </div>
     </Page>
+  );
+}
+
+// "Phone notifications" switch: shows what is possible on this device and
+// turns pushes on/off for this browser.
+function PhoneNotifications() {
+  const [state, setState] = React.useState<PushState | "loading">("loading");
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => { pushState().then(setState).catch(() => setState("unsupported")); }, []);
+  const turnOn = async () => {
+    setBusy(true);
+    try {
+      const s = await enablePush();
+      setState(s);
+      if (s === "on") toast.success("Phone notifications are on for this device.");
+      else if (s === "blocked") toast.error("Notifications are blocked for this site. Allow them in your browser settings.");
+    } catch (e) {
+      // e.g. a browser without a push service ("Registration failed").
+      toast.error("This browser couldn't turn on notifications.", { description: "Use Chrome on Android, or the installed app on iPhone. " + ((e as Error).message || "") });
+    }
+    finally { setBusy(false); }
+  };
+  const turnOff = async () => { setBusy(true); try { setState(await disablePush()); toast.success("Phone notifications are off for this device."); } finally { setBusy(false); } };
+  if (state === "loading" || state === "not-set-up" || state === "unsupported") return null;
+  const text: Record<string, [string, string]> = {
+    on: ["Phone notifications are on", "You'll get a notification on this device, like any other app."],
+    off: ["Get phone notifications", "Know right away when someone adds an expense with you or pays you."],
+    blocked: ["Notifications are blocked", "Allow notifications for this site in your browser or phone settings, then come back."],
+    "install-first": ["Get phone notifications on iPhone", "Install the app first (Share → Add to Home Screen), open it from your home screen, then turn them on here."],
+  };
+  const [title, body] = text[state];
+  return (
+    <div className={cn("panel mt-5 flex items-center gap-3 p-4", state === "on" && "bg-positive-soft/40")} data-testid="phone-notifications">
+      <span className={cn("grid size-10 shrink-0 place-items-center rounded-full [&_svg]:size-[18px]", state === "on" ? "bg-positive-soft text-positive" : "bg-[#141716]/[0.05]")}>
+        {state === "on" ? <BellRing /> : state === "blocked" ? <BellOff /> : state === "install-first" ? <Smartphone /> : <Bell />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-medium">{title}</span>
+        <span className="block text-[13px] text-muted-foreground">{body}</span>
+      </span>
+      {state === "off" && <button type="button" disabled={busy} onClick={turnOn} className="shrink-0 cursor-pointer rounded-full bg-[#141716] px-3.5 py-2 text-[13.5px] font-medium text-white disabled:opacity-50">{busy ? "Turning on…" : "Turn on"}</button>}
+      {state === "on" && <button type="button" disabled={busy} onClick={turnOff} className="shrink-0 cursor-pointer rounded-full bg-[#141716]/[0.06] px-3.5 py-2 text-[13.5px] font-medium disabled:opacity-50">Turn off</button>}
+    </div>
   );
 }

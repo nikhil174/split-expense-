@@ -1,11 +1,12 @@
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { ArrowRight, ChevronLeft, ChevronRight, PartyPopper } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Image as ImageIcon, PartyPopper } from "lucide-react";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { List, LoadingButton, PersonAvatar, SectionTitle, haptic, pressableRow } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
 import { PayByUpi } from "./UpiPayments";
+import { shrinkScreenshot } from "@/lib/image";
 import { glitterBurst } from "@/components/app/glitter";
 import { useDebts, useMine, useRecordPayment } from "@/hooks/queries";
 import type { Debt } from "@/lib/api";
@@ -31,9 +32,19 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
   const [chosen, setChosen] = React.useState<string | null>(null);
   const [amount, setAmount] = React.useState("");
   const [error, setError] = React.useState("");
+  // Optional screenshot of the payment (e.g. the UPI success screen) for the receiver.
+  const [proof, setProof] = React.useState<string | null>(null);
+  const [proofBusy, setProofBusy] = React.useState(false);
+  const proofInput = React.useRef<HTMLInputElement>(null);
+  const pickProof = async (f: File | undefined) => {
+    if (!f) return;
+    setProofBusy(true); setError("");
+    try { setProof(await shrinkScreenshot(f)); } catch (e) { setError((e as Error).message); }
+    finally { setProofBusy(false); if (proofInput.current) proofInput.current.value = ""; }
+  };
   const debt = options.find(d => key(d) === chosen) || null;
 
-  const choose = React.useCallback((d: Debt | null) => { setChosen(d ? key(d) : null); setAmount(d ? centsToInput(d.amountCents) : ""); setError(""); }, []);
+  const choose = React.useCallback((d: Debt | null) => { setChosen(d ? key(d) : null); setAmount(d ? centsToInput(d.amountCents) : ""); setError(""); setProof(null); }, []);
   React.useEffect(() => {
     if (!open) return;
     const wanted = initial ? options.find(d => key(d) === key(initial)) : options.length === 1 ? options[0] : null;
@@ -47,7 +58,7 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!debt || !cents || over) return;
-    pay.mutate({ fromMemberId: debt.fromMemberId, toMemberId: debt.toMemberId, amount: amount.trim() }, {
+    pay.mutate({ fromMemberId: debt.fromMemberId, toMemberId: debt.toMemberId, amount: amount.trim(), ...(proof ? { proof } : {}) }, {
       onSuccess: res => {
         haptic([10, 40, 14]);
         const remaining = debt.amountCents - cents;
@@ -131,6 +142,18 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                   <button type="button" onClick={() => { setAmount(""); document.getElementById("settle-amount")?.focus(); }} className="cursor-pointer rounded-full bg-white px-4 py-2 text-[14px] font-medium text-foreground ring-1 ring-[#141716]/[0.08] transition-transform active:scale-95">Other amount</button>
                 </div>
                 {debt.fromMemberId === meId && <PayByUpi groupId={groupId} toMemberId={debt.toMemberId} amount={amount} />}
+                <div className="panel mt-4 flex items-center gap-3 p-3">
+                  {proof ? <img src={proof} alt="Payment screenshot" className="size-14 shrink-0 rounded-[10px] object-cover ring-1 ring-[#141716]/[0.08]" />
+                    : <span className="grid size-14 shrink-0 place-items-center rounded-[10px] bg-[#141716]/[0.04] text-muted-foreground"><ImageIcon className="size-5" /></span>}
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[14.5px] font-medium">{proof ? "Screenshot attached" : "Attach a screenshot"}</span>
+                    <span className="block text-[12.5px] text-muted-foreground">Optional. Helps {debt.toMemberId === meId ? "you" : debt.toName} approve it.</span>
+                  </span>
+                  {proof
+                    ? <button type="button" onClick={() => setProof(null)} className="shrink-0 cursor-pointer rounded-full bg-[#141716]/[0.05] px-3 py-1.5 text-[13px] font-medium">Remove</button>
+                    : <button type="button" disabled={proofBusy} onClick={() => proofInput.current?.click()} className="shrink-0 cursor-pointer rounded-full bg-[#141716] px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-50">{proofBusy ? "Preparing…" : "Choose"}</button>}
+                  <input ref={proofInput} type="file" accept="image/*" className="hidden" aria-label="Choose payment screenshot" onChange={e => pickProof(e.target.files?.[0])} />
+                </div>
                 <p aria-live="polite" className={cn("footnote mt-4 min-h-5 text-center", over || error ? "text-negative" : left === 0 ? "text-positive" : "text-muted-foreground")}>
                   {error || (!amount.trim() ? "Enter how much was paid." : !cents ? "Enter an amount like 250 or 249.50." : over ? `That's more than the ${inr(debt.amountCents)} owed.` : left === 0 ? "This clears the full amount ✓" : `Partial payment · ${inr(left!)} will still be owed after this.`)}
                 </p>

@@ -6,6 +6,7 @@ import { NotificationsScreen } from "@/features/notifications/NotificationsScree
 import { ChangeNameDialog } from "@/components/app/ChangeNameDialog";
 import { PaymentMethodSheet } from "@/features/groups/UpiPayments";
 import { useInstallApp } from "@/components/app/InstallApp";
+import { forgetPushOnSignOut, syncPushOnSignIn } from "@/lib/push";
 import { Toaster } from "@/components/ui/sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PersonAvatar, Segmented, TopProgress, Wordmark } from "@/components/app/bits";
@@ -72,6 +73,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
   const qc = useQueryClient();
   const [signingOut, setSigningOut] = React.useState(false);
   const install = useInstallApp();
+  React.useEffect(() => { syncPushOnSignIn(); }, [user.id]);
   const [upiOpen, setUpiOpen] = React.useState(false);
   const [nameOpen, setNameOpen] = React.useState(false);
   // Members never see the admin view.
@@ -80,6 +82,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
   const signOut = async () => {
     setSigningOut(true);
     try {
+      await forgetPushOnSignOut();
       await Promise.allSettled([post("/api/admin/logout"), post("/api/logout")]);
       // Mark the session signed out right away so Root swaps to the sign-in
       // screen, then drop everything cached for the previous user.

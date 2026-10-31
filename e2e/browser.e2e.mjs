@@ -270,18 +270,25 @@ try {
   await cy.getByText("Partial payment · ₹35.00 will still be owed after this.").waitFor();
   await shot(cy, "cy-settle");
   await slow(cy, "**/settlements");
+  await cy.getByLabel("Choose payment screenshot").setInputFiles({ name: "paid.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64") });
+  await cy.getByText("Screenshot attached").waitFor();
   await cy.getByRole("button", { name: "Record ₹20.00 payment" }).click();
   await cy.getByRole("button", { name: "Recording payment…" }).waitFor();
   // The payment waits for Bea to confirm it; until then nothing changes.
   await toast(cy, "Sent ₹20.00 to Bea E2E to confirm");
   await cy.unroute("**/settlements");
-  await cy.getByText("₹20.00 you sent is waiting for Bea E2E to confirm").waitFor();
+  await cy.getByText("₹20.00 awaiting approval").waitFor();
+  await cy.getByText("You sent this; it counts once Bea E2E approves it.").waitFor();
   await cy.getByText("You owe Bea E2E ₹55.00").waitFor();
   assert.equal(await cy.locator("tbody tr").count(), 2, "a pending payment is not in the history yet");
   // Bea sees it on Home and confirms.
   await bea.goto(BASE + "/#/");
   await bea.reload();
   await bea.getByText("Cy E2E says they paid you ₹20.00").waitFor();
+  await bea.getByText("awaiting your approval").first().waitFor();
+  await bea.getByRole("button", { name: "View Cy E2E's payment screenshot" }).click();
+  await bea.getByRole("alertdialog").getByRole("img", { name: "Payment screenshot" }).waitFor();
+  await bea.getByRole("button", { name: "Close" }).click();
   // The bell shows it too, and the Notifications screen lists it.
   const bell = bea.getByRole("button", { name: /^Notifications, \d+ unread$/ });
   await bell.waitFor();
@@ -298,7 +305,7 @@ try {
   await cy.reload();
   await cy.getByText("You owe Bea E2E ₹35.00").waitFor();
   assert.equal(await cy.locator("tbody tr").count(), 3);
-  step("partial repayment ₹20 waits for Bea (bell + Notifications screen); Bea confirms it on Home; then it counts");
+  step("partial repayment ₹20 with a screenshot waits for Bea (⏳ badge, bell, Notifications); Bea views the screenshot and approves; then it counts");
 
   await cy.goBack();
   await cy.getByRole("heading", { name: GROUP }).waitFor();
