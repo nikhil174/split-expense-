@@ -494,6 +494,9 @@ async function api(req, env, url, outbox = []) {
     if (raw) await db.prepare("DELETE FROM appx_user_sessions WHERE token_hash=?").bind(await hash(raw)).run();
     return json({ ok: true }, 200, { "set-cookie": setCookie("split_user", "", 0) });
   }
+  // The app open on someone's phone may still be the version from before
+  // accounts: tell it to reload instead of a confusing "sign in" error.
+  if (/^\/api\/(access\/|admin\/|groups\/public$)/.test(p)) return json({ error: "Split It was updated. Close and reopen the app (or refresh the page) to sign in.", code: "app_updated" }, 410);
   const u = await requireUser(req, env);
   if (!u) return fail("Sign in to continue.", 401);
   if (p.startsWith("/api/site-admin/")) return siteAdmin(req, env, url, u);

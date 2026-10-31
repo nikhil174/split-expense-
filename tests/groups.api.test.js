@@ -29,9 +29,12 @@ test("anyone can create a group and is its only admin; groups are invisible to o
     assert.equal((await call(w.env, w.G + tail, { cookie: dee.cookie })).status, 404, tail);
     assert.equal((await call(w.env, `/api/groups/${mine.data.group.id}${tail}`, { cookie: w.g.cookies.Bea })).status, 404, tail);
   }
-  // The old public group list and admin area are gone.
-  assert.equal((await call(w.env, "/api/groups/public")).status, 401);
-  assert.equal((await call(w.env, "/api/admin/requests", { cookie: w.g.adminCookie })).status, 404);
+  // The old public group list and admin area are gone; an old app is told to reload.
+  for (const [path, cookie] of [["/api/groups/public"], ["/api/admin/requests", w.g.adminCookie]]) {
+    const r = await call(w.env, path, { cookie });
+    assert.deepEqual([r.status, r.data.code], [410, "app_updated"], path);
+    assert.match(r.data.error, /Close and reopen the app/);
+  }
 });
 
 test("admins invite by username or email; the person joins only after accepting", async t => {

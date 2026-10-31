@@ -35,10 +35,11 @@ test("every group-admin route needs an admin of that group", async t => {
   }
   assert.equal(raw.prepare("SELECT name FROM appx_groups WHERE id=?").get(a.groupId).name, "Group A");
   assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM appx_group_members WHERE group_id=? AND status='active'").get(a.groupId).n, 3);
-  // The old global admin routes are gone for everyone.
+  // The old global admin and access routes are gone for everyone (an old app is told to reload).
   for (const path of ["/api/admin/login", "/api/admin/requests", "/api/admin/groups", "/api/access/request", "/api/access/signin"]) {
-    assert.equal((await call(env, path, { method: "POST", body: { name: "Alex Admin", pin: OLD_ADMIN_PIN } })).status, 401, path);
+    assert.equal((await call(env, path, { method: "POST", cookie: a.adminCookie, body: { name: "Alex Admin", pin: OLD_ADMIN_PIN } })).status, 410, path);
   }
+  assert.equal(raw.prepare("SELECT COUNT(*) AS n FROM appx_groups").get().n, 2, "nothing was created");
 });
 
 test("session cookies are HttpOnly, Secure and SameSite=Lax", async t => {
