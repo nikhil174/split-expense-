@@ -103,7 +103,7 @@ stateDiagram-v2
 | Existing members, once | `POST /api/auth/legacy-signin` | group name + their name + PIN; only for `legacy` accounts |
 | Google (phase 3) | `POST /api/auth/google` | see §8 |
 
-- **Sessions:** a random token in an `HttpOnly; Secure; SameSite=Lax` cookie (`split_user`). Only its SHA-256 hash is stored, in `appx_user_sessions`. Sessions last 30 days, and sign-out deletes them.
+- **Sessions:** a random token in an `HttpOnly; Secure; SameSite=Lax` cookie (`split_user`). Only its SHA-256 hash is stored, in `appx_user_sessions`. Sessions last 7 days (then the password is asked again), and sign-out deletes them.
 - **PINs:** stored as PBKDF2-SHA256 (100,000 iterations) with a per-account salt and `SESSION_SECRET` as a pepper. Five wrong PINs lock the account for 15 minutes, and there are per-IP rate limits on every sign-in path.
 - **Old administrator:** their first sign-in uses the old `ADMIN_PIN` once, then they must choose a 4-digit PIN. After that, `ADMIN_PIN` is unused.
 

@@ -47,7 +47,7 @@ test("session cookies are HttpOnly, Secure and SameSite=Lax", async t => {
   t.after(() => raw.close());
   const up = await call(env, "/api/auth/signup", { method: "POST", body: { name: "Bea", username: "bea", password: "beapass12" } });
   const signin = await call(env, "/api/auth/signin", { method: "POST", body: { login: "bea", password: "beapass12" } });
-  for (const c of [up.setCookie, signin.setCookie]) assert.match(c, /^split_user=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000$/);
+  for (const c of [up.setCookie, signin.setCookie]) assert.match(c, /^split_user=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800$/);
   const out = await call(env, "/api/logout", { method: "POST", cookie: signin.cookie, body: {} });
   assert.match(out.setCookie, /^split_user=; .*Max-Age=0$/);
 });

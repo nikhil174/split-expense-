@@ -4,8 +4,9 @@ import { emailEnabled, linkEmail, sendEmail } from "./email.js";
 import { parseAmountToCents } from "./money.js";
 import { computeBalances, computePairwiseDebts, debtsForMember, outstandingDebt, pairwiseActivity, validateSettlement, SettlementError } from "./settlement-logic.js";
 
-// Signed-in sessions last 30 days (the PIN is asked again after that).
-const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+// Signed-in sessions last 7 days; then the password is asked again. (Each
+// group's PIN is asked again after 1 day: GROUP_UNLOCK_MS.)
+const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_SPLIT_MEMBERS = 100;
 const MINUTE = 60 * 1000;
