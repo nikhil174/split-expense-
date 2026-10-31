@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
-import { D1Mock, applyMigrations, call } from "./helpers/d1.js";
+import { D1Mock, applyMigrations, call, migrationFiles } from "./helpers/d1.js";
 import legacyWorker from "./fixtures/legacy/worker.js";
 
 const OLD_ADMIN_PIN = "old-admin-pin-24680";
@@ -74,7 +74,7 @@ async function legacyWorld(t) {
   const notesBefore = raw.prepare("SELECT recipient_id,COUNT(*) AS n FROM appx_notifications GROUP BY recipient_id ORDER BY recipient_id").all();
 
   // ----- The migration, exactly as production runs it. -----
-  for (const f of ["0013_accounts.sql", "0014_site_admin.sql"]) raw.exec(await readFile(new URL("../migrations/" + f, import.meta.url), "utf8"));
+  for (const f of (await migrationFiles()).filter(f => f >= "0013")) raw.exec(await readFile(new URL("../migrations/" + f, import.meta.url), "utf8"));
   const now = (path, opts = {}) => call(env, path, opts);
   return { raw, env, now, snapshot, before, notesBefore, goa, office, ids: { vicky: vicky.id, jagan: jagan.id, mosquito: mosquito.id, rahul: rahul.id, oldTimer: oldTimer.id, pete: pete.id, vickyOffice: vickyOffice.id, zed: zed.id }, waiting, rejected };
 }
@@ -83,8 +83,9 @@ test("after the migration every balance, debt, expense and payment is exactly wh
   const w = await legacyWorld(t);
   // The old administrator signs in once with the old admin PIN and picks a 4-digit PIN.
   const first = await w.now("/api/auth/legacy-signin", { method: "POST", body: { group: "goa trip", name: "nikhil", pin: OLD_ADMIN_PIN } });
-  assert.deepEqual([first.status, first.data.code], [409, "choose_pin"]);
-  const admin = await w.now("/api/auth/legacy-signin", { method: "POST", body: { group: "Goa Trip", name: "Nikhil", pin: OLD_ADMIN_PIN, newPin: "9090" } });
+  assert.deepEqual([first.status, first.data.code], [409, "choose_password"]);
+  assert.equal((await w.now("/api/auth/legacy-signin", { method: "POST", body: { group: "Goa Trip", name: "Nikhil", password: OLD_ADMIN_PIN, newPassword: "9090" } })).status, 409, "a weak new password is refused");
+  const admin = await w.now("/api/auth/legacy-signin", { method: "POST", body: { group: "Goa Trip", name: "Nikhil", password: OLD_ADMIN_PIN, newPassword: "nikhil2026" } });
   assert.equal(admin.status, 200, JSON.stringify(admin.data));
   const me = (await w.now("/api/me", { cookie: admin.cookie })).data.user;
   assert.equal(me.id, "admin");
@@ -106,9 +107,9 @@ test("after the migration every balance, debt, expense and payment is exactly wh
   assert.deepEqual(goa.waiting.map(x => [x.name, x.status]), [["Pending Pete", "pending"]]);
   assert.equal((await w.now("/api/groups", { cookie: admin.cookie })).data.groups.length, 2);
 
-  // From now on the admin signs in like everyone else, with username + new PIN.
-  assert.equal((await w.now("/api/auth/signin", { method: "POST", body: { login: me.username, pin: "9090" } })).status, 200);
-  assert.equal((await w.now("/api/auth/signin", { method: "POST", body: { login: me.username, pin: OLD_ADMIN_PIN } })).status, 400, "the old admin PIN is done");
+  // From now on the admin signs in like everyone else, with username + password.
+  assert.equal((await w.now("/api/auth/signin", { method: "POST", body: { login: me.username, password: "nikhil2026" } })).status, 200);
+  assert.equal((await w.now("/api/auth/signin", { method: "POST", body: { login: me.username, password: OLD_ADMIN_PIN } })).status, 401, "the old admin PIN is done");
 });
 
 test("existing members sign in with their group, name and PIN, keep their UPI, payments and notifications", async t => {
@@ -131,17 +132,19 @@ test("existing members sign in with their group, name and PIN, keep their UPI, p
   // She chooses a username; the one-time group sign-in ends and the username works.
   assert.equal((await w.now("/api/me/profile", { method: "POST", cookie: vicky.cookie, body: { username: "vicky" } })).status, 200);
   assert.equal((await legacy("Goa Trip", "Vicky", "1111")).status, 404);
-  assert.equal((await w.now("/api/auth/signin", { method: "POST", body: { login: "@Vicky", pin: "1111" } })).status, 200);
+  // Her old 4-digit PIN is now her password.
+  assert.equal((await w.now("/api/auth/signin", { method: "POST", body: { login: "@Vicky", password: "1111" } })).status, 200);
 
   // A name that can't be a username gets "user_…".
   const mosquito = await legacy("Goa Trip", "cute mosquito 🦟", "3333");
   assert.equal(mosquito.status, 200);
   assert.match((await w.now("/api/me", { cookie: mosquito.cookie })).data.user.username, /^user_[0-9a-f]{6}$/);
-  // Members from before PINs create one, as before.
-  const oldTimer = await legacy("Goa Trip", "Old Timer", "1212");
-  assert.deepEqual([oldTimer.status, oldTimer.data.code], [409, "pin_not_set"]);
-  assert.equal((await legacy("Goa Trip", "Old Timer", "1212", { createPin: true })).status, 200);
-  assert.equal((await legacy("Goa Trip", "Old Timer", "1212")).status, 200);
+  // Members from before PINs choose a password (a decent one) on first sign-in.
+  const oldTimer = await legacy("Goa Trip", "Old Timer", "x");
+  assert.deepEqual([oldTimer.status, oldTimer.data.code], [409, "password_not_set"]);
+  assert.equal((await w.now("/api/auth/legacy-signin", { method: "POST", body: { group: "Goa Trip", name: "Old Timer", password: "1212", createPassword: true } })).status, 400, "too weak");
+  assert.equal((await w.now("/api/auth/legacy-signin", { method: "POST", body: { group: "Goa Trip", name: "Old Timer", password: "oldtimer12", createPassword: true } })).status, 200);
+  assert.equal((await legacy("Goa Trip", "Old Timer", "oldtimer12")).status, 200);
   // Removed members are out; people still waiting can't get in until approved.
   assert.equal((await legacy("Goa Trip", "Rahul", "4444")).status, 404);
   const pete = await legacy("Goa Trip", "Pending Pete", "6666");
@@ -155,7 +158,7 @@ test("existing members sign in with their group, name and PIN, keep their UPI, p
 test("the same person's two old memberships become one account by linking, with balances unchanged", async t => {
   const w = await legacyWorld(t);
   const vicky = await w.now("/api/auth/legacy-signin", { method: "POST", body: { group: "Goa Trip", name: "Vicky", pin: "1111" } });
-  const admin = await w.now("/api/auth/legacy-signin", { method: "POST", body: { group: "Office", name: "Nikhil", pin: OLD_ADMIN_PIN, newPin: "9090" } });
+  const admin = await w.now("/api/auth/legacy-signin", { method: "POST", body: { group: "Office", name: "Nikhil", password: OLD_ADMIN_PIN, newPassword: "nikhil2026" } });
   const officeBalances = async () => Object.fromEntries((await w.now(`/api/groups/${w.office}/balances`, { cookie: admin.cookie })).data.balances.map(b => [b.name, b.balanceCents]));
   const before = await officeBalances();
   assert.equal((await w.now("/api/me/link", { method: "POST", cookie: vicky.cookie, body: { group: "Office", name: "Vicky", pin: "0000" } })).status, 401, "needs that account's PIN");

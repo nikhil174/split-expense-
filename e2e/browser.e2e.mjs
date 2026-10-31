@@ -24,9 +24,11 @@ const step = name => console.log("✓", name);
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
 const slow = (page, pattern) => page.route(pattern, async route => { if (route.request().method() === "POST") await new Promise(r => setTimeout(r, 1200)); await route.continue(); });
 
+const pages = [];
 async function newPage() {
   const context = await browser.newContext(devices["Pixel 7"]);
   const page = await context.newPage();
+  pages.push(page);
   page.on("pageerror", e => { throw new Error("Page error: " + e.message); });
   await page.goto(BASE + "/");
   return page;
@@ -38,25 +40,30 @@ async function noHorizontalOverflow(page, label) {
 const toast = (page, text) => page.locator("[data-sonner-toast]", { hasText: text }).first().waitFor();
 const heroStatus = page => page.getByTestId("balance-card").innerText();
 
-const MEMBER_PIN = "2468";
+const MEMBER_PIN = "e2epass2468"; // every account's password
+const GROUP_PIN = "2580";
 async function signUp(page, name, username) {
   await page.getByRole("tab", { name: "Create account", exact: true }).click();
   await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Username").fill(username);
   await page.getByText("Available").waitFor();
-  await page.getByLabel("Choose a PIN").fill(MEMBER_PIN);
-  await page.getByLabel("Confirm PIN").fill(MEMBER_PIN);
+  await page.getByLabel("Password", { exact: true }).fill(MEMBER_PIN);
+  await page.getByLabel("Confirm password").fill(MEMBER_PIN);
   await page.getByRole("button", { name: "Create account" }).last().click();
   await page.getByRole("heading", { name: "Your groups" }).waitFor();
 }
 async function signIn(page, login, pin = MEMBER_PIN) {
   await page.getByLabel("Username or email").fill(login);
-  await page.getByLabel("PIN", { exact: true }).fill(pin);
+  await page.getByLabel("Password", { exact: true }).fill(pin);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("heading", { name: "Your groups" }).waitFor();
 }
+// Opens the group; on a device where it's locked, enters the group PIN.
 async function openGroup(page) {
   await page.getByRole("button", { name: new RegExp(GROUP) }).click();
+  const locked = page.getByTestId("group-locked");
+  await locked.or(page.locator("button:enabled", { hasText: "Add expense" }).first()).waitFor();
+  if (await locked.isVisible()) await locked.locator("input").fill(GROUP_PIN);
   await page.getByRole("heading", { name: GROUP }).waitFor();
   await page.locator("button:enabled", { hasText: "Add expense" }).first().waitFor();
 }
@@ -66,9 +73,11 @@ try {
   await signUp(admin, ADMIN, USER.admin);
   await admin.getByRole("button", { name: "New group" }).click();
   await admin.getByLabel("Group name").fill(GROUP);
+  await admin.getByLabel("Group PIN").fill(GROUP_PIN);
+  await admin.getByLabel("Confirm").fill(GROUP_PIN);
   await admin.getByRole("button", { name: "Create group" }).click();
   await admin.getByRole("heading", { name: GROUP }).waitFor();
-  step("anyone creates an account (live username check) and a group, and is its admin");
+  step("anyone creates an account (password, live username check) and a group with a 4-digit PIN, and is its admin");
 
   const bea = await newPage(), cy = await newPage();
   await signUp(bea, "Bea E2E", USER.bea);
@@ -91,22 +100,41 @@ try {
   for (const page of [bea, cy]) {
     await page.reload();
     await page.getByRole("button", { name: "Join " + GROUP }).click();
+    // Joining asks for the group's PIN; a wrong one is refused.
+    const dialog = page.getByRole("alertdialog");
+    await dialog.locator("#join-pin").fill(page === bea ? "1111" : GROUP_PIN);
+    await dialog.getByRole("button", { name: "Join group" }).click();
+    if (page === bea) {
+      await toast(bea, "That's not the group's PIN");
+      await dialog.locator("#join-pin").fill(GROUP_PIN);
+      await dialog.getByRole("button", { name: "Join group" }).click();
+    }
     await page.getByRole("heading", { name: GROUP }).waitFor();
-    await page.goto(BASE + "/#/");
+    await page.getByRole("button", { name: "Groups" }).click();
+    await page.getByRole("heading", { name: "Your groups" }).waitFor();
   }
-  step("admin invites by username (unknown one: not found); both accept the invitation and are in");
+  step("admin invites by username (unknown one: not found); both join with the group PIN (a wrong one is refused)");
 
-  // Cy signs out; a wrong PIN is refused (with the tries left); the right one gets in.
+  // Cy signs out; a wrong password is refused (with the tries left); the right one gets in.
   await cy.getByRole("button", { name: "Account", exact: true }).click();
   await cy.getByRole("menuitem", { name: "Sign out" }).click();
   await cy.getByLabel("Username or email").fill(USER.cy);
-  await cy.getByLabel("PIN", { exact: true }).fill("1111");
+  await cy.getByLabel("Password", { exact: true }).fill("wrongpass1");
   await cy.getByRole("button", { name: "Sign in", exact: true }).click();
-  await toast(cy, "Incorrect PIN. 4 tries left.");
+  await toast(cy, "Incorrect password. 4 tries left.");
   await signIn(cy, USER.cy);
+  // A new sign-in is a new device: the group is locked until its PIN is entered.
+  await cy.getByLabel("Locked: needs the group PIN").waitFor();
+  await cy.getByRole("button", { name: new RegExp(GROUP) }).click();
+  await cy.getByTestId("group-locked").locator("input").fill("0000");
+  await cy.getByTestId("group-locked").getByText("That's not the group's PIN").waitFor();
+  await cy.getByTestId("group-locked").locator("input").fill(GROUP_PIN);
+  await cy.getByRole("heading", { name: GROUP }).waitFor();
+  await shot(cy, "group-unlocked");
+  await cy.goto(BASE + "/#/");
   await bea.reload();
   await bea.getByRole("heading", { name: "Your groups" }).waitFor();
-  step("sign in with username + PIN; wrong PIN refused; session survives a reload");
+  step("sign in with username + password; wrong password refused; a new sign-in opens the group with its PIN (wrong PIN refused); session survives a reload");
 
   await openGroup(bea);
   await noHorizontalOverflow(bea, "group page");
@@ -433,6 +461,10 @@ try {
   await fresh.context().close();
   step("installable as an app: manifest, icons and service worker; install steps on the sign-in screen");
   console.log("E2E PASSED");
+} catch (e) {
+  // On failure, save what every open page looked like.
+  if (SHOTS) for (const [i, p] of pages.entries()) await p.screenshot({ path: `${SHOTS}/failed-${i}.png` }).catch(() => {});
+  throw e;
 } finally {
   await browser.close();
 }

@@ -40,11 +40,14 @@ export async function applyMigrations(raw, only = () => true) {
   for (const file of (await migrationFiles()).filter(only)) raw.exec(await readFile(new URL(file, MIGRATIONS_DIR), "utf8"));
 }
 
-export const ADMIN = { name: "Alex Admin", pin: "4821" };
+export const ADMIN = { name: "Alex Admin", pin: "admin4821pass" };
 // The old administrator PIN (an env secret), used once by the migrated admin account.
 export const OLD_ADMIN_PIN = "test-pin-4821";
-// Every test member uses this PIN unless a test says otherwise.
-export const MEMBER_PIN = "2468";
+// Every test account uses this password unless a test says otherwise
+// (the name is from when accounts had 4-digit PINs).
+export const MEMBER_PIN = "secret2468";
+// The 4-digit PIN of every group setupGroup creates.
+export const GROUP_PIN = "1357";
 
 export async function makeEnv() {
   const raw = new DatabaseSync(":memory:", { enableForeignKeyConstraints: true });
@@ -88,18 +91,24 @@ export async function signUp(env, name, { pin = MEMBER_PIN, email, username } = 
   if (base.length < 3) base = base.padEnd(3, "x");
   for (let n = 0; n < 50; n++) {
     const u = n ? base + n : base;
-    const r = await call(env, "/api/auth/signup", { method: "POST", body: { name, username: u, pin, email } });
+    const r = await call(env, "/api/auth/signup", { method: "POST", body: { name, username: u, password: pin, email } });
     if (r.status === 201) return { id: r.data.id, username: u, cookie: r.cookie };
     if (r.status !== 409 || username) throw new Error("signup failed: " + JSON.stringify(r.data));
   }
   throw new Error("no free username for " + name);
 }
 
+// Opens a group with its PIN for this session (cookie), as the app does.
+export async function unlockGroup(env, groupId, cookie, pin = GROUP_PIN) {
+  const r = await call(env, `/api/groups/${groupId}/unlock`, { method: "POST", cookie, body: { pin } });
+  if (r.status !== 200) throw new Error("unlock failed: " + JSON.stringify(r.data));
+}
+
 // Adds an existing account to a group: the admin invites, the person accepts.
 export async function joinGroup(env, groupId, adminCookie, who) {
   const inv = await call(env, `/api/groups/${groupId}/members/invite`, { method: "POST", cookie: adminCookie, body: { login: who.username } });
   if (inv.status !== 200) throw new Error("invite failed: " + JSON.stringify(inv.data));
-  const ok = await call(env, `/api/groups/${groupId}/invitation/accept`, { method: "POST", cookie: who.cookie, body: {} });
+  const ok = await call(env, `/api/groups/${groupId}/invitation/accept`, { method: "POST", cookie: who.cookie, body: { pin: GROUP_PIN } });
   if (ok.status !== 200) throw new Error("accept failed: " + JSON.stringify(ok.data));
 }
 
@@ -110,7 +119,7 @@ export async function setupGroup(env, groupName, memberNames, { adminCookie } = 
   let admin;
   if (adminCookie) admin = { cookie: adminCookie, id: (await call(env, "/api/me", { cookie: adminCookie })).data.user.id };
   else admin = await signUp(env, ADMIN.name, { pin: ADMIN.pin });
-  const created = await call(env, "/api/groups", { method: "POST", cookie: admin.cookie, body: { name: groupName } });
+  const created = await call(env, "/api/groups", { method: "POST", cookie: admin.cookie, body: { name: groupName, pin: GROUP_PIN } });
   if (created.status !== 201) throw new Error("group create failed: " + JSON.stringify(created.data));
   const groupId = created.data.group.id;
   const ids = { admin: admin.id }, cookies = { admin: admin.cookie }, usernames = {};

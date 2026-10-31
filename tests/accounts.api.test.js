@@ -1,4 +1,4 @@
-// Accounts: sign-up, sign-in (username or email + PIN), profile, PIN changes
+// Accounts: sign-up, sign-in (username or email + password), profile, password changes
 // and linking a second account of the same person.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -7,8 +7,10 @@ import { makeEnv, call, setupGroup, signUp, joinGroup, MEMBER_PIN } from "./help
 async function world(t) {
   const { raw, env } = await makeEnv();
   t.after(() => raw.close());
-  const signup = body => call(env, "/api/auth/signup", { method: "POST", body: { pin: "2468", ...body } });
-  const signin = (login, pin, extra = {}) => call(env, "/api/auth/signin", { method: "POST", body: { login, pin, ...extra } });
+  // Each sign-up from its own address, so the per-IP sign-up limit doesn't interfere.
+  let ip = 0;
+  const signup = body => call(env, "/api/auth/signup", { method: "POST", headers: { "CF-Connecting-IP": "198.51.100." + ++ip }, body: { password: "goodpass1", ...body } });
+  const signin = (login, password, extra = {}) => call(env, "/api/auth/signin", { method: "POST", body: { login, password, ...extra } });
   const row = id => raw.prepare("SELECT * FROM appx_users WHERE id=?").get(id);
   return { raw, env, signup, signin, row };
 }
@@ -21,8 +23,10 @@ test("sign-up checks every field; usernames and emails are unique, ignoring case
     [{ name: "Bea", username: "9bea" }, /Usernames/],
     [{ name: "Bea", username: "bea!" }, /Usernames/],
     [{ name: "Bea", username: "bea", email: "not-an-email" }, /email/],
-    [{ name: "Bea", username: "bea", pin: "123" }, /4-digit PIN/],
-    [{ name: "Bea", username: "bea", pin: "12a4" }, /4-digit PIN/],
+    [{ name: "Bea", username: "bea", password: "short1" }, /at least 8 characters/],
+    [{ name: "Bea", username: "bea", password: "onlyletters" }, /letters and numbers/],
+    [{ name: "Bea", username: "bea", password: "12345678" }, /letters and numbers/],
+    [{ name: "Bea", username: "bea", password: "x1".repeat(65) }, /at least 8 characters/],
   ]) {
     const r = await w.signup(body);
     assert.equal(r.status, 400, JSON.stringify(body));
@@ -32,7 +36,7 @@ test("sign-up checks every field; usernames and emails are unique, ignoring case
   assert.equal(bea.status, 201);
   assert.match(bea.setCookie, /^split_user=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000$/);
   const me = (await call(w.env, "/api/me", { cookie: bea.cookie })).data.user;
-  assert.deepEqual(me, { id: bea.data.id, name: "Bea Rao", username: "bea.rao", email: "bea@example.com", legacy: false, hasPin: true });
+  assert.deepEqual(me, { id: bea.data.id, name: "Bea Rao", username: "bea.rao", email: "bea@example.com", legacy: false, hasPin: true, google: false });
   assert.equal((await w.signup({ name: "Other", username: "BEA.RAO" })).status, 409);
   const dupEmail = await w.signup({ name: "Other", username: "other", email: "BEA@example.com" });
   assert.deepEqual([dupEmail.status, /email/.test(dupEmail.data.error)], [409, true]);
@@ -46,34 +50,35 @@ test("sign-up checks every field; usernames and emails are unique, ignoring case
   assert.equal((await call(w.env, "/api/groups")).status, 401);
 });
 
-test("PINs are stored only as salted PBKDF2 hashes (100,000 iterations by default)", async t => {
+test("passwords are stored only as salted PBKDF2 hashes (100,000 iterations by default)", async t => {
   const w = await world(t);
   const a = await w.signup({ name: "Bea", username: "bea" }), b = await w.signup({ name: "Cy", username: "cy1" });
   const [ha, hb] = [w.row(a.data.id).pin_hash, w.row(b.data.id).pin_hash];
   for (const h of [ha, hb]) assert.match(h, /^pbkdf2-sha256\$1000\$[0-9a-f]{32}\$[0-9a-f]{64}$/);
-  assert.notEqual(ha, hb, "same PIN, different salt");
+  assert.notEqual(ha, hb, "same password, different salt");
+  assert.ok(!w.raw.prepare("SELECT group_concat(pin_hash) AS h FROM appx_users").get().h.includes("goodpass1"));
   delete w.env.PIN_HASH_ITERATIONS;
   const c = await w.signup({ name: "Dee", username: "dee" });
   assert.match(w.row(c.data.id).pin_hash, /^pbkdf2-sha256\$100000\$/);
 });
 
-test("sign in with username, @username or email; wrong PINs count down, then lock", async t => {
+test("sign in with username, @username or email + password; wrong passwords count down, then lock", async t => {
   const w = await world(t);
   const bea = await w.signup({ name: "Bea", username: "bea", email: "bea@example.com" });
-  for (const login of ["bea", "@BEA", " Bea@Example.com "]) assert.equal((await w.signin(login, "2468")).status, 200, login);
-  assert.equal((await w.signin("nobody", "2468")).status, 404);
+  for (const login of ["bea", "@BEA", " Bea@Example.com "]) assert.equal((await w.signin(login, "goodpass1")).status, 200, login);
+  assert.equal((await w.signin("nobody", "goodpass1")).status, 404);
   assert.equal((await w.signin("bea", "")).status, 400);
   const wrong = await w.signin("bea", "0000");
-  assert.deepEqual([wrong.status, wrong.data.error, wrong.cookie], [401, "Incorrect PIN. 4 tries left.", undefined]);
-  assert.equal((await w.signin("bea", "2468")).status, 200, "a right PIN resets the count");
-  for (let i = 0; i < 4; i++) assert.equal((await w.signin("bea", "1111")).status, 401);
-  const locked = await w.signin("bea", "1111");
+  assert.deepEqual([wrong.status, wrong.data.error, wrong.cookie], [401, "Incorrect password. 4 tries left.", undefined]);
+  assert.equal((await w.signin("bea", "goodpass1")).status, 200, "a right PIN resets the count");
+  for (let i = 0; i < 4; i++) assert.equal((await w.signin("bea", "wrongpass9")).status, 401);
+  const locked = await w.signin("bea", "wrongpass9");
   assert.equal(locked.status, 429);
-  assert.equal((await w.signin("bea", "2468")).status, 429, "even the right PIN while locked");
+  assert.equal((await w.signin("bea", "goodpass1")).status, 429, "even the right PIN while locked");
   w.raw.prepare("UPDATE appx_users SET pin_locked_until=? WHERE id=?").run(Date.now() - 1, bea.data.id);
-  assert.equal((await w.signin("bea", "2468")).status, 200);
+  assert.equal((await w.signin("bea", "goodpass1")).status, 200);
   // Signing out ends that session only.
-  const s1 = await w.signin("bea", "2468"), s2 = await w.signin("bea", "2468");
+  const s1 = await w.signin("bea", "goodpass1"), s2 = await w.signin("bea", "goodpass1");
   assert.equal((await call(w.env, "/api/logout", { method: "POST", cookie: s1.cookie, body: {} })).status, 200);
   assert.equal((await call(w.env, "/api/me", { cookie: s1.cookie })).data.user, null);
   assert.equal((await call(w.env, "/api/me", { cookie: s2.cookie })).data.user.username, "bea");
@@ -82,7 +87,7 @@ test("sign in with username, @username or email; wrong PINs count down, then loc
   assert.equal((await call(w.env, "/api/me", { cookie: s2.cookie })).data.user, null);
 });
 
-test("profile: change name (everywhere), username and email; PIN changes need the current PIN", async t => {
+test("profile: change name (everywhere), username and email; password changes need the current one", async t => {
   const { raw, env } = await makeEnv();
   t.after(() => raw.close());
   const g = await setupGroup(env, "Goa", ["Bea", "Cy"]);
@@ -100,13 +105,13 @@ test("profile: change name (everywhere), username and email; PIN changes need th
   for (const gid of [g.groupId, other.groupId]) assert.ok((await call(env, `/api/groups/${gid}`, { cookie: g.cookies.Bea })).data.members.some(m => m.name === "Bea Rao"));
   assert.equal((await call(env, `/api/groups/${g.groupId}/expenses`, { cookie: g.cookies.Cy })).data.expenses[0].paidByName, "Bea Rao");
   assert.equal((await profile({ email: "" })).data.user.email, null, "email can be removed");
-  // PIN change.
-  const pin = body => call(env, "/api/me/pin", { method: "POST", cookie: g.cookies.Bea, body });
-  assert.equal((await pin({ currentPin: "0000", newPin: "1357" })).status, 401);
-  assert.equal((await pin({ currentPin: MEMBER_PIN, newPin: "13" })).status, 400);
-  assert.equal((await pin({ currentPin: MEMBER_PIN, newPin: "1357" })).status, 200);
-  assert.equal((await call(env, "/api/auth/signin", { method: "POST", body: { login: "bearao", pin: "1357" } })).status, 200);
-  assert.equal((await call(env, "/api/auth/signin", { method: "POST", body: { login: "bearao", pin: MEMBER_PIN } })).status, 401);
+  // Password change.
+  const pw = body => call(env, "/api/me/password", { method: "POST", cookie: g.cookies.Bea, body });
+  assert.equal((await pw({ currentPassword: "wrongpass1", newPassword: "newpass99" })).status, 401);
+  assert.equal((await pw({ currentPassword: MEMBER_PIN, newPassword: "1357" })).status, 400, "too weak");
+  assert.equal((await pw({ currentPassword: MEMBER_PIN, newPassword: "newpass99" })).status, 200);
+  assert.equal((await call(env, "/api/auth/signin", { method: "POST", body: { login: "bearao", password: "newpass99" } })).status, 200);
+  assert.equal((await call(env, "/api/auth/signin", { method: "POST", body: { login: "bearao", password: MEMBER_PIN } })).status, 401);
 });
 
 // Two accounts of one person in the same group (e.g. from before accounts).
@@ -115,7 +120,7 @@ async function twoAccounts(t) {
   const { raw, env } = await makeEnv();
   t.after(() => raw.close());
   const g = await setupGroup(env, "Chennai trip", ["Vicky", "Jagan"]);
-  const dup = await signUp(env, "Vicky Phone", { pin: "9876" });
+  const dup = await signUp(env, "Vicky Phone", { pin: "phone9876" });
   await joinGroup(env, g.groupId, g.adminCookie, dup);
   return { raw, env, g, dup };
 }
@@ -133,10 +138,10 @@ test("linking a second account moves everything into this one and keeps every ba
   const before = await balancesOf(env, g.groupId, g.adminCookie);
 
   const link = body => call(env, "/api/me/link", { method: "POST", cookie: g.cookies.Vicky, body });
-  assert.equal((await link({ login: dup.username, pin: "0000" })).status, 401);
-  assert.equal((await link({ login: g.usernames.Vicky, pin: MEMBER_PIN })).status, 409, "not yourself");
-  assert.equal((await link({ login: "nobody", pin: "9876" })).status, 404);
-  assert.equal((await link({ login: dup.username, pin: "9876" })).status, 200);
+  assert.equal((await link({ login: dup.username, password: "wrong0000" })).status, 401);
+  assert.equal((await link({ login: g.usernames.Vicky, password: MEMBER_PIN })).status, 409, "not yourself");
+  assert.equal((await link({ login: "nobody", password: "phone9876" })).status, 404);
+  assert.equal((await link({ login: dup.username, password: "phone9876" })).status, 200);
 
   const after = await balancesOf(env, g.groupId, g.adminCookie);
   assert.equal(after[V], before[V] + before[dup.id]);
@@ -168,7 +173,7 @@ for (let seed = 1; seed <= 15; seed++) {
       await call(env, `/api/groups/${g.groupId}/settlements`, { method: "POST", cookie: g.adminCookie, body: { fromMemberId: d.fromMemberId, toMemberId: d.toMemberId, amount: (Math.max(1, Math.floor(d.amountCents / 2)) / 100).toFixed(2) } });
     }
     const before = await balancesOf(env, g.groupId, g.adminCookie);
-    assert.equal((await call(env, "/api/me/link", { method: "POST", cookie: g.cookies.Vicky, body: { login: dup.username, pin: "9876" } })).status, 200);
+    assert.equal((await call(env, "/api/me/link", { method: "POST", cookie: g.cookies.Vicky, body: { login: dup.username, password: "phone9876" } })).status, 200);
     const after = await balancesOf(env, g.groupId, g.adminCookie);
     assert.equal(after[V] || 0, (before[V] || 0) + (before[dup.id] || 0));
     for (const p of [g.ids.admin, g.ids.Jagan]) assert.equal(after[p] || 0, before[p] || 0);

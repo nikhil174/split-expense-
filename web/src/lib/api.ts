@@ -3,10 +3,13 @@
 export class ApiError extends Error {
   status: number;
   code?: string;
-  constructor(message: string, status: number, code?: string) {
+  // The whole error body (e.g. groupId/groupName for "group_locked").
+  data: Record<string, unknown>;
+  constructor(message: string, status: number, code?: string, data: Record<string, unknown> = {}) {
     super(message);
     this.status = status;
     this.code = code;
+    this.data = data;
   }
 }
 
@@ -19,7 +22,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   let data: unknown = {};
   try { data = await res.json(); } catch { /* empty body */ }
-  if (!res.ok) throw new ApiError((data as { error?: string }).error || "Something went wrong. Please try again.", res.status, (data as { code?: string }).code);
+  if (!res.ok) throw new ApiError((data as { error?: string }).error || "Something went wrong. Please try again.", res.status, (data as { code?: string }).code, data as Record<string, unknown>);
   return data as T;
 }
 export const get = <T,>(path: string) => request<T>(path);
@@ -28,20 +31,22 @@ export const post = <T = { ok: true },>(path: string, body: unknown = {}) => req
 export type Identity = { id: string; name: string };
 // The signed-in account. legacy: from before accounts (auto username, may
 // still sign in with group + name) until they choose a username.
-export type User = Identity & { username: string; email: string | null; legacy: boolean; hasPin: boolean;
+// hasPin: has a password (accounts once had 4-digit PINs); google: Google sign-in connected.
+export type User = Identity & { username: string; email: string | null; legacy: boolean; hasPin: boolean; google: boolean;
   // Only for the site owner: the Admin tab, and whether this session entered the admin key.
   siteAdmin?: boolean; adminUnlocked?: boolean };
 export type AdminOverview = { users: number; groups: number; expenses: number; totalSpentCents: number; newUsersThisWeek: number };
 export type AdminUser = { id: string; name: string; username: string; email: string | null; createdAt: number; legacy: boolean; siteAdmin: boolean; hasPin: boolean; locked: boolean; groupCount: number };
-export type AdminGroup = { id: string; name: string; createdAt: number; memberCount: number; admins: string | null; expenseCount: number; totalCents: number; lastActivity: number | null };
+export type AdminGroup = { id: string; name: string; createdAt: number; memberCount: number; admins: string | null; expenseCount: number; totalCents: number; lastActivity: number | null; hasPin: boolean };
 export type Me = { user: User | null };
 export type Role = "admin" | "member";
-export type GroupSummary = { id: string; name: string; myBalanceCents: number; role: Role; memberCount: number };
+// hasPin: the group has a 4-digit PIN; unlocked: opened with it on this device (lasts a day).
+export type GroupSummary = { id: string; name: string; myBalanceCents: number; role: Role; memberCount: number; hasPin: boolean; unlocked: boolean };
 // active: in the group; pending: asked to join; invited: not answered yet.
 export type MemberStatus = "active" | "pending" | "invited" | "removed";
 export type Member = { id: string; name: string; username: string | null; role: Role; status: MemberStatus };
-export type GroupDetail = { group: { id: string; name: string }; members: Member[]; waiting: Member[]; me: Identity & { isAdmin: boolean; role: Role } };
-export type Invitation = { groupId: string; groupName: string; invitedBy: string; memberCount: number };
+export type GroupDetail = { group: { id: string; name: string; hasPin: boolean }; members: Member[]; waiting: Member[]; me: Identity & { isAdmin: boolean; role: Role } };
+export type Invitation = { groupId: string; groupName: string; invitedBy: string; memberCount: number; hasPin: boolean };
 export type Split = { memberId: string; name: string; amountCents: number };
 export type Expense = {
   id: string; description: string; amountCents: number; createdAt: number; paidBy: string; paidByName: string;

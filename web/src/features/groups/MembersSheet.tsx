@@ -1,6 +1,7 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { Check, Clock3, LogOut, MoreHorizontal, Pencil, ShieldCheck, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { Check, Clock3, KeyRound, LogOut, MoreHorizontal, Pencil, ShieldCheck, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { PinInput } from "@/components/app/secrets";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -25,6 +26,9 @@ export function MembersSheet({ groupId, open, onOpenChange }: { groupId: string;
   const act = useAccountAction((v: { path: string; body?: unknown; done?: string }) => post(G + v.path, v.body ?? {}), v => v.done || "Done.");
   const [confirm, setConfirm] = React.useState<Confirm | null>(null);
   const [renaming, setRenaming] = React.useState(false);
+  // Setting or changing the group's PIN (admins).
+  const [pinOpen, setPinOpen] = React.useState(false);
+  const [pins, setPins] = React.useState({ a: "", b: "" });
   const [groupName, setGroupName] = React.useState("");
   const adminCount = members.filter(m => m.role === "admin").length;
   // Admins first, then by name; you are marked "(you)".
@@ -84,6 +88,13 @@ export function MembersSheet({ groupId, open, onOpenChange }: { groupId: string;
               ) : (
                 <button type="button" onClick={() => { setGroupName(group.data?.group.name || ""); setRenaming(true); }} className={cn(rowClass, "cursor-pointer gap-3 text-[15px]")}><Pencil className="size-[18px] text-muted-foreground" />Rename group</button>
               ))}
+              {isAdmin && (
+                <button type="button" onClick={() => { setPins({ a: "", b: "" }); setPinOpen(true); }} className={cn(rowClass, "cursor-pointer gap-3 text-[15px]")}>
+                  <KeyRound className="size-[18px] text-muted-foreground" />
+                  <span className="flex-1 text-left">{group.data?.group.hasPin ? "Change group PIN" : "Set a group PIN"}</span>
+                  {!group.data?.group.hasPin && <span className="rounded-full bg-[#e4c06c]/25 px-2 py-0.5 text-[12px] font-medium text-[#8a6416]">Not set</span>}
+                </button>
+              )}
               <button type="button" onClick={() => setConfirm({ title: "Leave this group?", body: "You won't see it any more. Your past expenses and payments stay in it.", action: "Leave", run: () => act.mutateAsync({ path: "/leave", done: "You left the group." }), after: () => { onOpenChange(false); navigate({ name: "home" }, { replace: true }); } })}
                 className={cn(rowClass, "cursor-pointer gap-3 text-[15px]")}><LogOut className="size-[18px] text-muted-foreground" />Leave group</button>
               {isAdmin && (
@@ -93,6 +104,24 @@ export function MembersSheet({ groupId, open, onOpenChange }: { groupId: string;
             </List>
           </section>
         </div>
+        <AlertDialog open={pinOpen} onOpenChange={o => { if (!o && !act.isPending) setPinOpen(false); }}>
+          <AlertDialogContent className="max-w-[360px] rounded-[26px] border-0 p-6">
+            <form className="space-y-4" onSubmit={e => { e.preventDefault(); if (pins.a !== pins.b) { toast.error("The two PINs don't match."); return; } act.mutate({ path: "/pin", body: { pin: pins.a }, done: "Group PIN saved. Share it with the members." }, { onSuccess: () => setPinOpen(false) }); }}>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="title-2">{group.data?.group.hasPin ? "Change group PIN" : "Set a group PIN"}</AlertDialogTitle>
+                <AlertDialogDescription>Members need it to join and to open the group (remembered for a day on each phone). Everyone else enters the new PIN next time; they'll get a notification.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1.5"><span className="eyebrow block px-1">New PIN</span><PinInput id="group-pin-new" value={pins.a} onChange={v => setPins(x => ({ ...x, a: v }))} autoComplete="off" autoFocus /></label>
+                <label className="space-y-1.5"><span className="eyebrow block px-1">Confirm</span><PinInput id="group-pin-new2" value={pins.b} onChange={v => setPins(x => ({ ...x, b: v }))} autoComplete="off" /></label>
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel type="button" disabled={act.isPending} className="rounded-full border-0 bg-[#141716]/[0.06] shadow-none">Cancel</AlertDialogCancel>
+                <LoadingButton type="submit" disabled={pins.a.length !== 4 || pins.b.length !== 4} loading={act.isPending} loadingText="Saving…">Save PIN</LoadingButton>
+              </AlertDialogFooter>
+            </form>
+          </AlertDialogContent>
+        </AlertDialog>
         <AlertDialog open={!!confirm} onOpenChange={o => { if (!o && !act.isPending) setConfirm(null); }}>
           <AlertDialogContent className="max-w-[360px] rounded-[26px] border-0 p-6">
             <AlertDialogHeader>

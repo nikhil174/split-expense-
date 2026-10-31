@@ -72,7 +72,7 @@ test("joining: the admin hears when an invitation is accepted; invitees and appr
   await f.post("admin", "/members/invite", { login: dee.username });
   const invite = (await call(f.env, "/api/notifications", { cookie: dee.cookie })).data;
   assert.deepEqual([invite.unread, invite.items[0].kind, invite.items[0].title, invite.items[0].link], [1, "group_invite", "Alex Admin invited you to “Goa Trip”", "#/"]);
-  await call(f.env, `/api/groups/${f.g.groupId}/invitation/accept`, { method: "POST", cookie: dee.cookie, body: {} });
+  await call(f.env, `/api/groups/${f.g.groupId}/invitation/accept`, { method: "POST", cookie: dee.cookie, body: { pin: "1357" } });
   const admin = (await f.inbox("admin")).items[0];
   assert.deepEqual([admin.kind, admin.title, admin.link], ["member_joined", "Dee joined “Goa Trip”", `#/g/${f.g.groupId}`]);
 });

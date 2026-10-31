@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Lock, Search, ShieldCheck, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { AnimatedMoney, EmptyState, List, LoadingButton, Page, PersonAvatar, SectionTitle, Segmented, fieldClass, rowClass, searchFieldClass } from "@/components/app/bits";
 import { AquaCard } from "@/features/groups/GroupsScreen";
 import { keys } from "@/hooks/queries";
@@ -107,16 +106,6 @@ function SearchBox({ value, onChange, placeholder }: { value: string; onChange: 
 function People() {
   const s = useSearch();
   const q = useQuery(adminGet<{ users: AdminUser[] }>("users-" + s.q, "/api/site-admin/users?q=" + encodeURIComponent(s.q)));
-  const [resetting, setResetting] = React.useState<AdminUser | null>(null);
-  const [temp, setTemp] = React.useState<{ name: string; pin: string } | null>(null);
-  const [busy, setBusy] = React.useState(false);
-  const reset = async () => {
-    if (!resetting) return;
-    setBusy(true);
-    try { const d = await post<{ name: string; temporaryPin: string }>(`/api/site-admin/users/${resetting.id}/reset-pin`); setResetting(null); setTemp({ name: d.name, pin: d.temporaryPin }); }
-    catch (e) { toast.error((e as Error).message); }
-    finally { setBusy(false); }
-  };
   return (
     <section>
       <SearchBox value={s.text} onChange={s.setText} placeholder="Search name, username or email" />
@@ -127,27 +116,11 @@ function People() {
             <PersonAvatar id={x.id} name={x.name} size="sm" />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[15px] font-medium">{x.name}{x.siteAdmin && <span className="font-normal text-muted-foreground"> · site admin</span>}</span>
-              <span className="block truncate text-[12.5px] text-muted-foreground">@{x.username}{x.email ? " · " + x.email : ""} · {x.groupCount} {x.groupCount === 1 ? "group" : "groups"} · joined {shortDate(x.createdAt).full}{x.locked ? " · locked" : ""}{!x.hasPin ? " · no PIN yet" : ""}</span>
+              <span className="block truncate text-[12.5px] text-muted-foreground">@{x.username}{x.email ? " · " + x.email : ""} · {x.groupCount} {x.groupCount === 1 ? "group" : "groups"} · joined {shortDate(x.createdAt).full}{x.locked ? " · locked" : ""}{!x.hasPin ? " · no password yet" : ""}</span>
             </span>
-            <button type="button" onClick={() => setResetting(x)} aria-label={"Reset PIN for " + x.name} className="shrink-0 cursor-pointer rounded-full bg-[#141716]/[0.05] px-3 py-1.5 text-[13px] font-medium transition-transform active:scale-95">Reset PIN</button>
           </div>
         ))}
       </List>
-      <AlertDialog open={!!resetting || !!temp} onOpenChange={o => { if (!o && !busy) { setResetting(null); setTemp(null); } }}>
-        <AlertDialogContent className="max-w-[360px] rounded-[26px] border-0 p-6">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="title-2">{temp ? `New PIN for ${temp.name}` : `Reset ${resetting?.name}'s PIN?`}</AlertDialogTitle>
-            <AlertDialogDescription>{temp ? "Shown only now. Pass it on privately; they should change it in Profile." : "They're signed out everywhere and get a temporary 4-digit PIN that you pass on to them."}</AlertDialogDescription>
-          </AlertDialogHeader>
-          {temp && <p className="tabular text-center text-[40px] font-medium tracking-[0.3em]" data-testid="temporary-pin">{temp.pin}</p>}
-          <AlertDialogFooter>
-            {temp ? <AlertDialogCancel className="rounded-full">Done</AlertDialogCancel> : <>
-              <AlertDialogCancel disabled={busy} className="rounded-full border-0 bg-[#141716]/[0.06] shadow-none">Cancel</AlertDialogCancel>
-              <LoadingButton loading={busy} loadingText="Resetting…" onClick={reset}>Reset PIN</LoadingButton>
-            </>}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </section>
   );
 }
@@ -155,6 +128,12 @@ function People() {
 function Groups() {
   const s = useSearch();
   const q = useQuery(adminGet<{ groups: AdminGroup[] }>("groups-" + s.q, "/api/site-admin/groups?q=" + encodeURIComponent(s.q)));
+  // For a group whose admins forgot its PIN: clears it so they can set a new one.
+  const resetGroupPin = async (g: AdminGroup) => {
+    if (!window.confirm(`Clear the PIN of “${g.name}”? It opens without a PIN until one of its admins sets a new one.`)) return;
+    try { await post(`/api/site-admin/groups/${g.id}/reset-pin`); toast.success(`PIN of “${g.name}” cleared. Ask its admin to set a new one.`); await q.refetch(); }
+    catch (e) { toast.error((e as Error).message); }
+  };
   return (
     <section>
       <SearchBox value={s.text} onChange={s.setText} placeholder="Search groups" />
@@ -167,7 +146,10 @@ function Groups() {
               <span className="block truncate text-[15px] font-medium">{x.name}</span>
               <span className="block truncate text-[12.5px] text-muted-foreground">{x.memberCount} {x.memberCount === 1 ? "member" : "members"} · admin {x.admins || "none"} · {x.expenseCount} {x.expenseCount === 1 ? "expense" : "expenses"}{x.lastActivity ? " · last " + shortDate(x.lastActivity).full : ""}</span>
             </span>
-            <span className="tabular shrink-0 text-[14px] font-medium">{inr(x.totalCents)}</span>
+            <span className="flex shrink-0 flex-col items-end gap-1">
+              <span className="tabular text-[14px] font-medium">{inr(x.totalCents)}</span>
+              {x.hasPin && <button type="button" aria-label={"Reset group PIN of " + x.name} onClick={() => resetGroupPin(x)} className="cursor-pointer rounded-full bg-[#141716]/[0.05] px-2.5 py-1 text-[12px] font-medium transition-transform active:scale-95">Reset PIN</button>}
+            </span>
           </div>
         ))}
       </List>
