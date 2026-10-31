@@ -3,26 +3,25 @@ import { pushEnabled, sendPushes, validSubscription } from "./push.js";
 import { parseAmountToCents } from "./money.js";
 import { computeBalances, computePairwiseDebts, debtsForMember, outstandingDebt, pairwiseActivity, validateSettlement, SettlementError } from "./settlement-logic.js";
 
-const SESSION_MS = 3 * 60 * 60 * 1000;
-const INVITE_MS = 7 * 24 * 60 * 60 * 1000;
+// Signed-in sessions last 30 days (the PIN is asked again after that).
+const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_SPLIT_MEMBERS = 100;
 const MINUTE = 60 * 1000;
 const RATE_LIMITS = {
-  adminLogin: { limit: 10, windowMs: 15 * MINUTE },
-  adminLoginGlobal: { limit: 50, windowMs: 60 * MINUTE },
   signin: { limit: 20, windowMs: 15 * MINUTE },
-  accessRequest: { limit: 10, windowMs: 60 * MINUTE },
+  signup: { limit: 10, windowMs: 60 * MINUTE },
+  link: { limit: 10, windowMs: 60 * MINUTE },
+  invite: { limit: 40, windowMs: 10 * MINUTE },
+  groupWrite: { limit: 20, windowMs: 10 * MINUTE },
   expenseWrite: { limit: 60, windowMs: 10 * MINUTE },
   settlementWrite: { limit: 30, windowMs: 10 * MINUTE },
   paymentMethodWrite: { limit: 20, windowMs: 10 * MINUTE },
 };
-// A member who may be chosen for new expenses and payments: the admin, or a
-// member whose access request in this group is approved (even if their 3-hour
-// window lapsed) or pending re-approval. Revoked/rejected/deleted members keep
-// their appx_group_members row so history still shows their name, but they are
-// not active. Expects the appx_group_members row to be aliased as `m`.
-const ACTIVE_MEMBER_SQL = "(m.member_id='admin' OR EXISTS (SELECT 1 FROM appx_access_requests a WHERE a.id=m.member_id AND a.group_id=m.group_id AND a.status IN ('approved','pending')))";
+// A member who is in the group now (may be chosen for expenses and payments).
+// People who left or were removed keep their appx_group_members row (status
+// 'removed') so history still shows their name. Expects the row aliased `m`.
+const ACTIVE_MEMBER_SQL = "(m.status='active')";
 const FORMER_MEMBER = "Former member";
 
 class HttpError extends Error {
@@ -73,30 +72,30 @@ async function pinMatches(pin, stored, env) {
   for (let i = 0; i < Math.min(actual.length, expected.length); i++) diff |= actual.charCodeAt(i) ^ expected.charCodeAt(i);
   return diff === 0;
 }
-// Checks a member's PIN against their access request row, counting failures
-// and locking the member for a while after too many. Returns an error
-// Response, or null when the PIN is correct (or was just created).
+// Checks a person's PIN against their account, counting failures and locking
+// the account for a while after too many. Returns an error Response, or null
+// when the PIN is correct (or was just created, for accounts from before PINs).
 async function checkMemberPin(db, env, r, pin, { create = false } = {}) {
   const now = Date.now();
   if (r.pin_locked_until && r.pin_locked_until > now) {
     const mins = Math.ceil((r.pin_locked_until - now) / MINUTE);
-    return fail(`Too many wrong PINs. Try again in ${mins} minute${mins === 1 ? "" : "s"}, or ask the admin to reset your PIN.`, 429);
+    return fail(`Too many wrong PINs. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`, 429);
   }
   if (!r.pin_hash) {
     // Existing member from before PINs: they choose one now.
     if (!create) return json({ error: "Create a 4-digit PIN for your account.", code: "pin_not_set" }, 409);
-    await db.prepare("UPDATE appx_access_requests SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=? AND pin_hash IS NULL").bind(await hashPin(pin, env), r.id).run();
-    const saved = await db.prepare("SELECT pin_hash FROM appx_access_requests WHERE id=?").bind(r.id).first();
+    await db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=? AND pin_hash IS NULL").bind(await hashPin(pin, env), r.id).run();
+    const saved = await db.prepare("SELECT pin_hash FROM appx_users WHERE id=?").bind(r.id).first();
     // Someone else set it a moment earlier: their PIN wins, so check against it.
     return await pinMatches(pin, saved?.pin_hash, env) ? null : fail("Incorrect PIN.", 401);
   }
   if (await pinMatches(pin, r.pin_hash, env)) {
-    if (r.pin_failures) await db.prepare("UPDATE appx_access_requests SET pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(r.id).run();
+    if (r.pin_failures) await db.prepare("UPDATE appx_users SET pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(r.id).run();
     return null;
   }
   const failures = Number(r.pin_failures || 0) + 1, locked = failures >= PIN_MAX_FAILURES;
-  await db.prepare("UPDATE appx_access_requests SET pin_failures=?,pin_locked_until=? WHERE id=?").bind(locked ? 0 : failures, locked ? now + PIN_LOCK_MS : null, r.id).run();
-  if (locked) return fail("Too many wrong PINs. Try again in 15 minutes, or ask the admin to reset your PIN.", 429);
+  await db.prepare("UPDATE appx_users SET pin_failures=?,pin_locked_until=? WHERE id=?").bind(locked ? 0 : failures, locked ? now + PIN_LOCK_MS : null, r.id).run();
+  if (locked) return fail("Too many wrong PINs. Try again in 15 minutes.", 429);
   const left = PIN_MAX_FAILURES - failures;
   return fail(`Incorrect PIN. ${left} ${left === 1 ? "try" : "tries"} left.`, 401);
 }
@@ -125,48 +124,67 @@ async function rateLimited(db, scope, key, { limit, windowMs }) {
 async function clientKey(req) { return (await hash("ip:" + (req.headers.get("CF-Connecting-IP") || "unknown"))).slice(0, 32); }
 const tooMany = () => fail("Too many attempts. Please wait a few minutes and try again.", 429);
 
-async function session(req, env) {
-  const db = env['split-expense'];
-  const raw = cookie(req, "split_session");
+// The signed-in person, from their session cookie, or null.
+async function requireUser(req, env) {
+  const raw = cookie(req, "split_user");
   if (!raw) return null;
-  const tokenHash = await hash(raw);
-  // Approval does not expire (members prove who they are with their PIN);
-  // the session itself does, and revoking/removing a member ends it at once.
-  const s = await db.prepare("SELECT s.request_id,s.expires_at,r.display_name,r.status FROM appx_sessions s JOIN appx_access_requests r ON r.id=s.request_id WHERE s.token_hash=?").bind(tokenHash).first();
-  if (!s || s.expires_at < Date.now() || s.status !== "approved") {
-    await db.prepare("DELETE FROM appx_sessions WHERE token_hash=?").bind(tokenHash).run();
+  const db = env['split-expense'], tokenHash = await hash(raw);
+  const s = await db.prepare("SELECT s.expires_at,u.id,u.display_name,u.username,u.email,u.legacy,u.pin_hash IS NOT NULL AS hasPin FROM appx_user_sessions s JOIN appx_users u ON u.id=s.user_id WHERE s.token_hash=?").bind(tokenHash).first();
+  if (!s || s.expires_at < Date.now()) {
+    if (s) await db.prepare("DELETE FROM appx_user_sessions WHERE token_hash=?").bind(tokenHash).run();
     return null;
   }
-  return { id: s.request_id, name: s.display_name, role: "member" };
+  return { id: s.id, name: s.display_name, username: s.username, email: s.email || null, legacy: !!s.legacy, hasPin: !!s.hasPin };
 }
-async function admin(req, env) {
-  const raw = cookie(req, "split_admin");
-  if (!raw || !env.SESSION_SECRET) return false;
-  const h = await hash(raw + env.SESSION_SECRET);
-  const row = await env['split-expense'].prepare("SELECT expires_at FROM appx_admin_sessions WHERE token_hash=?").bind(h).first();
-  return !!row && row.expires_at > Date.now();
+// Starts a session for an account and returns the response that sets its cookie.
+async function startSession(db, userId, data = { ok: true }, status = 200) {
+  const token = id() + id(), expires = Date.now() + SESSION_MS;
+  await db.prepare("INSERT INTO appx_user_sessions(token_hash,user_id,expires_at) VALUES(?,?,?)").bind(await hash(token), userId, expires).run();
+  try { await db.prepare("DELETE FROM appx_user_sessions WHERE expires_at<?").bind(Date.now()).run(); } catch {}
+  return json(data, status, { "set-cookie": setCookie("split_user", token, SESSION_MS / 1000) });
 }
-async function adminName(db) {
-  const r = await db.prepare("SELECT setting_value AS name FROM appx_settings WHERE setting_key='admin_name'").first();
-  return r?.name || null;
+const userOut = u => ({ id: u.id, name: u.name, username: u.username, email: u.email, legacy: u.legacy, hasPin: u.hasPin });
+
+// Usernames: 3–30 characters, lowercase letters, digits, "_" and ".",
+// starting with a letter. Stored lowercase; "@vicky" and "Vicky" mean "vicky".
+const USERNAME_RE = /^[a-z][a-z0-9_.]{2,29}$/;
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,189}\.[^\s@]{2,}$/;
+const normUsername = v => String(v ?? "").trim().replace(/^@/, "").toLowerCase();
+const normEmail = v => String(v ?? "").trim().toLowerCase();
+// A username or email typed to find someone (sign-in, invites, linking).
+async function findUser(db, login) {
+  const v = String(login ?? "").trim();
+  if (!v) return null;
+  const cols = "id,username,display_name,email,pin_hash,pin_failures,pin_locked_until,legacy";
+  if (v.includes("@") && !v.startsWith("@")) return db.prepare(`SELECT ${cols} FROM appx_users WHERE email=?`).bind(normEmail(v)).first();
+  return db.prepare(`SELECT ${cols} FROM appx_users WHERE username=?`).bind(normUsername(v)).first();
 }
-const sameName = (a, b) => !!a && !!b && cleanName(a).toLowerCase() === cleanName(b).toLowerCase();
-// The administrator is one person: with an admin session they always act as
-// the "admin" member in every group (their normal-user view), even if an
-// older member cookie is also present on the device.
-async function requireUser(req, env) {
-  if (await admin(req, env)) {
-    const name = await adminName(env['split-expense']);
-    if (name) return { id: "admin", name, role: "admin" };
+// Accounts from before usernames: found by a group's name and their name in it.
+async function findLegacyUser(db, groupName, name) {
+  const r = await db.prepare("SELECT DISTINCT u.id,u.username,u.display_name,u.email,u.pin_hash,u.pin_failures,u.pin_locked_until,u.legacy FROM appx_group_members m JOIN appx_groups g ON g.id=m.group_id JOIN appx_users u ON u.id=m.member_id WHERE lower(trim(g.name))=lower(?) AND lower(m.name)=lower(?) AND m.status IN ('active','pending') AND u.legacy=1 LIMIT 2").bind(cleanName(groupName), cleanName(name)).all();
+  return r.results.length === 1 ? r.results[0] : r.results.length ? "ambiguous" : null;
+}
+// Checks a sign-in PIN, including the two one-time cases for accounts from
+// before this version: the old administrator proves who they are with the old
+// admin PIN and then chooses a 4-digit PIN; members without a PIN create one.
+async function signInChecks(db, env, user, b) {
+  const pin = textField(b?.pin);
+  if (!user.pin_hash && user.id === "admin") {
+    if (!env.ADMIN_PIN || !await secretEquals(pin, String(env.ADMIN_PIN))) return fail("Incorrect PIN.", 401);
+    const newPin = textField(b?.newPin);
+    if (!PIN_RE.test(newPin)) return json({ error: "Choose a 4-digit PIN for your account. You'll use it from now on instead of the admin PIN.", code: "choose_pin" }, 409);
+    await db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id='admin' AND pin_hash IS NULL").bind(await hashPin(newPin, env)).run();
+    return null;
   }
-  return await session(req, env);
+  if (!PIN_RE.test(pin)) return fail("Enter your 4-digit PIN.");
+  return checkMemberPin(db, env, user, pin, { create: b?.createPin === true });
 }
 
-// Every member row ever added to the group (including revoked/removed members,
-// whose names are kept for history), with whether they are currently active.
+// Every member row ever added to the group (including people who left or
+// were removed, so history keeps their names), with role and status.
 async function groupMembers(db, gid) {
-  const r = await db.prepare("SELECT m.member_id AS id,m.name,CASE WHEN m.member_id='admin' THEN 'admin' ELSE COALESCE(r.status,'removed') END AS status," + ACTIVE_MEMBER_SQL + " AS active FROM appx_group_members m LEFT JOIN appx_access_requests r ON r.id=m.member_id AND r.group_id=m.group_id WHERE m.group_id=? ORDER BY lower(m.name)").bind(gid).all();
-  return r.results.map(x => ({ id: x.id, name: x.name, status: x.status, active: !!x.active }));
+  const r = await db.prepare("SELECT m.member_id AS id,m.name,m.role,m.status,u.username FROM appx_group_members m LEFT JOIN appx_users u ON u.id=m.member_id WHERE m.group_id=? ORDER BY lower(m.name)").bind(gid).all();
+  return r.results.map(x => ({ id: x.id, name: x.name, role: x.role, status: x.status, username: x.username || null, active: x.status === "active" }));
 }
 function nameLookup(members) {
   const names = new Map(members.map(m => [m.id, m.name]));
@@ -188,27 +206,61 @@ function describeDebt(debt, nameOf) {
   return { fromMemberId: debt.fromMemberId, fromName: nameOf(debt.fromMemberId), toMemberId: debt.toMemberId, toName: nameOf(debt.toMemberId), amountCents: debt.amountCents, amount: rupees(debt.amountCents) };
 }
 
-// Renames a member everywhere: the name they sign in with and the name on
-// their past expenses and payments (stored by id). Used by the admin for
-// anyone, and by members for themselves. Their current session keeps working.
-async function renameMember_(db, rid, rawName) {
+// A person changes their name: on their account and in every group they are
+// or were in (so past expenses and payments, stored by id, show it too).
+async function renameUser(db, uid, rawName) {
   const name = cleanName(rawName);
   if (name.length < 2 || name.length > 60) return fail("Name must be 2–60 characters.");
-  const r = await db.prepare("SELECT id,group_id FROM appx_access_requests WHERE id=?").bind(rid).first();
-  if (!r) return fail("Member not found.", 404);
-  if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Choose a different name.", 409);
-  const taken = await db.prepare("SELECT 1 FROM appx_access_requests WHERE group_id=?1 AND id<>?2 AND lower(display_name)=lower(?3) UNION SELECT 1 FROM appx_group_members WHERE group_id=?1 AND member_id<>?2 AND lower(name)=lower(?3)").bind(r.group_id, rid, name).first();
-  if (taken) return fail("Someone in this group already has that name.", 409);
-  try {
-    await db.batch([
-      db.prepare("UPDATE appx_access_requests SET display_name=? WHERE id=?").bind(name, rid),
-      db.prepare("UPDATE appx_group_members SET name=? WHERE group_id=? AND member_id=?").bind(name, r.group_id, rid),
-    ]);
-  } catch (e) {
-    if (String(e).toLowerCase().includes("unique")) return fail("Someone in this group already has that name.", 409);
-    throw e;
+  await db.batch([
+    db.prepare("UPDATE appx_users SET display_name=? WHERE id=?").bind(name, uid),
+    db.prepare("UPDATE appx_group_members SET name=? WHERE member_id=?").bind(name, uid),
+  ]);
+  return name;
+}
+
+// Moves everything of account `from` into account `to` (the same person who
+// had two accounts, e.g. one per group from before accounts existed). In a
+// group where both are members, shares on the same expense are added together
+// and payments between the two are dropped (they were to oneself), so group
+// balances stay zero-sum. Returns the statements for one atomic batch.
+async function mergeStatements(db, to, from) {
+  const toName = (await db.prepare("SELECT display_name FROM appx_users WHERE id=?").bind(to).first())?.display_name;
+  const groups = (await db.prepare("SELECT group_id,role,status,joined_at FROM appx_group_members WHERE member_id=?").bind(from).all()).results;
+  const rank = { active: 3, pending: 2, invited: 1, removed: 0 };
+  const out = [];
+  for (const g of groups) {
+    const gid = g.group_id, mine = await db.prepare("SELECT role,status FROM appx_group_members WHERE group_id=? AND member_id=?").bind(gid, to).first();
+    const role = g.role === "admin" || mine?.role === "admin" ? "admin" : "member";
+    const status = !mine || rank[g.status] > rank[mine.status] ? g.status : mine.status;
+    const inGroup = "(SELECT id FROM appx_expenses WHERE group_id=?)";
+    const between = "group_id=?1 AND ((from_member_id=?2 AND to_member_id=?3) OR (from_member_id=?3 AND to_member_id=?2))";
+    out.push(
+      db.prepare("INSERT INTO appx_group_members(group_id,member_id,name,role,status,joined_at) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(group_id,member_id) DO UPDATE SET role=?4,status=?5").bind(gid, to, toName, role, status, g.joined_at ?? null),
+      db.prepare("UPDATE appx_splits SET amount_cents=amount_cents+(SELECT x.amount_cents FROM appx_splits x WHERE x.expense_id=appx_splits.expense_id AND x.member_id=?1) WHERE member_id=?2 AND expense_id IN (SELECT expense_id FROM appx_splits WHERE member_id=?1) AND expense_id IN " + inGroup.replace("?", "?3")).bind(from, to, gid),
+      db.prepare("DELETE FROM appx_splits WHERE member_id=?1 AND expense_id IN (SELECT expense_id FROM appx_splits WHERE member_id=?2) AND expense_id IN " + inGroup.replace("?", "?3")).bind(from, to, gid),
+      db.prepare("UPDATE appx_splits SET member_id=?1 WHERE member_id=?2 AND expense_id IN " + inGroup.replace("?", "?3")).bind(to, from, gid),
+      db.prepare("UPDATE appx_expenses SET paid_by=? WHERE group_id=? AND paid_by=?").bind(to, gid, from),
+      db.prepare("UPDATE appx_expenses SET created_by=? WHERE group_id=? AND created_by=?").bind(to, gid, from),
+      db.prepare("DELETE FROM appx_payment_proofs WHERE settlement_id IN (SELECT id FROM appx_settlements WHERE " + between + ")").bind(gid, to, from),
+      db.prepare("DELETE FROM appx_settlements WHERE " + between).bind(gid, to, from),
+      db.prepare("UPDATE appx_settlements SET from_member_id=? WHERE group_id=? AND from_member_id=?").bind(to, gid, from),
+      db.prepare("UPDATE appx_settlements SET to_member_id=? WHERE group_id=? AND to_member_id=?").bind(to, gid, from),
+      db.prepare("UPDATE appx_settlements SET created_by=? WHERE group_id=? AND created_by=?").bind(to, gid, from),
+      db.prepare("UPDATE appx_settlements SET decided_by=? WHERE group_id=? AND decided_by=?").bind(to, gid, from),
+      db.prepare("UPDATE appx_invites SET created_by=? WHERE group_id=? AND created_by=?").bind(to, gid, from),
+      db.prepare("DELETE FROM appx_group_members WHERE group_id=? AND member_id=?").bind(gid, from),
+    );
   }
-  return json({ ok: true, id: rid, name });
+  out.push(
+    // Keep my UPI details; take theirs only if I have none.
+    db.prepare("UPDATE OR IGNORE appx_payment_methods SET member_id=? WHERE member_id=?").bind(to, from),
+    db.prepare("DELETE FROM appx_payment_methods WHERE member_id=?").bind(from),
+    db.prepare("UPDATE appx_notifications SET recipient_id=? WHERE recipient_id=?").bind(to, from),
+    db.prepare("UPDATE appx_push_subscriptions SET member_id=? WHERE member_id=?").bind(to, from),
+    db.prepare("DELETE FROM appx_user_sessions WHERE user_id=?").bind(from),
+    db.prepare("DELETE FROM appx_users WHERE id=?").bind(from),
+  );
+  return out;
 }
 
 // Validates an add/edit expense request body against the group's active
@@ -306,323 +358,172 @@ async function api(req, env, url, outbox = []) {
   // (see sendPushes) once the response is on its way.
   const note = n => { outbox.push(n); return notifyStmt(db, n); };
   const p = url.pathname, method = req.method;
-  if (method === "GET" && p === "/api/groups/public") {
-    const r = await db.prepare("SELECT id,name FROM appx_groups ORDER BY lower(name) LIMIT 200").all();
-    return json({ groups: r.results });
-  }
-  if (method === "POST" && p === "/api/access/request") {
-    if (await rateLimited(db, "access-request", await clientKey(req), RATE_LIMITS.accessRequest)) return tooMany();
+  // ----- Accounts -----
+  // Create an account: name, username (unique), optional email, 4-digit PIN.
+  if (method === "POST" && p === "/api/auth/signup") {
+    if (await rateLimited(db, "signup", await clientKey(req), RATE_LIMITS.signup)) return tooMany();
     const b = await body(req);
-    const name = cleanName(b?.name);
-    const groupId = textField(b?.groupId);
-    const pin = textField(b?.pin);
-    if (name.length < 2 || name.length > 60) return fail("Enter a name between 2 and 60 characters.");
+    const name = cleanName(b?.name), username = normUsername(b?.username), email = b?.email ? normEmail(b.email) : null, pin = textField(b?.pin);
+    if (name.length < 2 || name.length > 60) return fail("Enter your name (2–60 characters).");
+    if (!USERNAME_RE.test(username)) return fail("Usernames are 3–30 characters: letters, numbers, _ or ., starting with a letter.");
+    if (email && (!EMAIL_RE.test(email) || email.length > 254)) return fail("Enter a valid email, or leave it empty.");
     if (!PIN_RE.test(pin)) return fail("Choose a 4-digit PIN.");
-    if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Sign in with Admin login to use the app as yourself.", 409);
-    const g = await db.prepare("SELECT id FROM appx_groups WHERE id=?").bind(groupId).first();
-    if (!g) return fail("Choose an existing group before requesting access.");
-    const existing = await db.prepare("SELECT id,status,expires_at,pin_hash,pin_failures,pin_locked_until FROM appx_access_requests WHERE group_id=? AND lower(display_name)=lower(?) ORDER BY requested_at DESC LIMIT 1").bind(groupId, name).first();
-    const now = Date.now();
-    if (existing) {
-      if (existing.status === "pending") return fail("An access request is already waiting for admin approval.", 409);
-      if (existing.status === "approved") return fail("This name is already a member of this group. Sign in with your PIN instead.", 409);
-      // Asking again under an existing name needs that name's PIN (or sets it,
-      // for members from before PINs), so nobody can take over someone else's entry.
-      const bad = await checkMemberPin(db, env, existing, pin, { create: true });
-      if (bad) return bad;
-      await db.batch([
-        db.prepare("UPDATE appx_access_requests SET status='pending',requested_at=?,approved_at=NULL,expires_at=NULL WHERE id=?").bind(now, existing.id),
-        db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(existing.id),
-      ]);
-      await db.batch([note({ to: "admin", groupId, kind: "access_request", title: `${name} wants to join again`, body: "Review it in Admin → Requests.", link: "#/admin", actor: name })]);
-      return json({ ok: true, requestId: existing.id, message: "Access request sent again using your existing membership entry." }, 200);
-    }
-    const requestId = id();
+    if (await db.prepare("SELECT 1 FROM appx_users WHERE username=?").bind(username).first()) return fail("That username is taken. Try another.", 409);
+    if (email && await db.prepare("SELECT 1 FROM appx_users WHERE email=?").bind(email).first()) return fail("That email is already used by another account. Sign in instead.", 409);
+    const uid = id();
     try {
-      await db.prepare("INSERT INTO appx_access_requests(id,display_name,status,requested_at,group_id,pin_hash) VALUES(?,?,'pending',?,?,?)").bind(requestId, name, now, groupId, await hashPin(pin, env)).run();
+      await db.prepare("INSERT INTO appx_users(id,username,display_name,email,pin_hash,created_at) VALUES(?,?,?,?,?,?)").bind(uid, username, name, email, await hashPin(pin, env), Date.now()).run();
     } catch (e) {
-      // Another request with this name landed first (names are unique per group).
-      if (String(e).toLowerCase().includes("unique")) return fail("Someone in this group already uses that name. Choose a different name.", 409);
+      // Someone took the username or email a moment earlier.
+      if (String(e).toLowerCase().includes("unique")) return fail("That username or email was just taken. Try again.", 409);
       throw e;
     }
-    await db.batch([note({ to: "admin", groupId, kind: "access_request", title: `${name} wants to join`, body: "Review it in Admin → Requests.", link: "#/admin", actor: name })]);
-    return json({ ok: true, requestId, message: "Group access request submitted." }, 201);
+    return startSession(db, uid, { ok: true, id: uid }, 201);
   }
-  if (method === "POST" && p === "/api/admin/login") {
-    if (!env.ADMIN_PIN || !env.SESSION_SECRET) return fail("Admin secrets are not configured.", 503);
-    if (await rateLimited(db, "admin-login", await clientKey(req), RATE_LIMITS.adminLogin)
-      || await rateLimited(db, "admin-login", "global", RATE_LIMITS.adminLoginGlobal)) return tooMany();
+  // Is this username free? (For the sign-up and profile forms.)
+  if (method === "GET" && p === "/api/auth/username") {
+    const username = normUsername(url.searchParams.get("u"));
+    if (!USERNAME_RE.test(username)) return json({ username, valid: false, available: false });
+    const taken = await db.prepare("SELECT id FROM appx_users WHERE username=?").bind(username).first();
+    const me = await requireUser(req, env);
+    return json({ username, valid: true, available: !taken || taken.id === me?.id });
+  }
+  // Sign in with username or email + PIN.
+  if (method === "POST" && p === "/api/auth/signin") {
+    if (await rateLimited(db, "signin", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
     const b = await body(req);
-    const name = cleanName(b?.name);
-    if (name.length < 2 || name.length > 60) return fail("Enter your admin name.", 400);
-    if (!await secretEquals(textField(b?.pin), String(env.ADMIN_PIN))) return fail("Incorrect admin PIN.", 401);
-    let profile = await db.prepare("SELECT setting_value AS name FROM appx_settings WHERE setting_key='admin_name'").first();
-    if (!profile) {
-      await db.prepare("INSERT INTO appx_settings(setting_key,setting_value) VALUES('admin_name',?)").bind(name).run();
-      profile = { name };
-    } else if (String(profile.name).trim().toLowerCase() !== name.toLowerCase()) {
-      return fail("Admin name does not match the saved administrator name.", 401);
-    }
-    const token = id() + id(), h = await hash(token + env.SESSION_SECRET), expires = Date.now() + SESSION_MS;
-    await db.batch([
-      db.prepare("DELETE FROM appx_admin_sessions"),
-      db.prepare("INSERT INTO appx_admin_sessions(token_hash,expires_at) VALUES(?,?)").bind(h, expires),
-      db.prepare("INSERT OR IGNORE INTO appx_group_members(group_id,member_id,name) SELECT id,'admin',? FROM appx_groups").bind(profile.name),
-    ]);
-    try { await db.prepare("DELETE FROM appx_rate_limits WHERE window_start<?").bind(Date.now() - 24 * 60 * MINUTE).run(); } catch {}
-    return json({ ok: true, name: profile.name }, 200, { "set-cookie": setCookie("split_admin", token, SESSION_MS / 1000) });
+    const user = await findUser(db, b?.login);
+    if (!user) return fail("No account with that username or email. Check it, or create an account.", 404);
+    const bad = await signInChecks(db, env, user, b);
+    if (bad) return bad;
+    return startSession(db, user.id, { ok: true, id: user.id, legacy: !!user.legacy });
   }
-  if (p.startsWith("/api/admin/")) {
-    if (!await admin(req, env)) return fail("Admin login required.", 401);
-    if (method === "GET" && p === "/api/admin/requests") {
-      const r = await db.prepare("SELECT a.id,a.display_name AS name,a.status,a.requested_at AS requestedAt,a.expires_at AS expiresAt,a.group_id AS groupId,g.name AS groupName,a.pin_hash IS NOT NULL AS hasPin FROM appx_access_requests a LEFT JOIN appx_groups g ON g.id=a.group_id ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END,a.requested_at DESC LIMIT 200").all();
-      return json({ requests: r.results.map(x => ({ ...x, hasPin: !!x.hasPin })) });
-    }
-    if (method === "GET" && p === "/api/admin/dashboard") {
-      const [groups, members, pending, expenses, spent] = await Promise.all([
-        db.prepare("SELECT COUNT(*) AS n FROM appx_groups").first(),
-        db.prepare("SELECT COUNT(*) AS n FROM appx_group_members m WHERE " + ACTIVE_MEMBER_SQL).first(),
-        db.prepare("SELECT COUNT(*) AS n FROM appx_access_requests WHERE status='pending'").first(),
-        db.prepare("SELECT COUNT(*) AS n FROM appx_expenses").first(),
-        db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS cents FROM appx_expenses").first(),
-      ]);
-      const recent = await db.prepare("SELECT e.description,e.amount_cents AS amountCents,e.created_at AS createdAt,g.name AS groupName,COALESCE(m.name,'" + FORMER_MEMBER + "') AS paidBy FROM appx_expenses e JOIN appx_groups g ON g.id=e.group_id LEFT JOIN appx_group_members m ON m.group_id=e.group_id AND m.member_id=e.paid_by ORDER BY e.created_at DESC LIMIT 5").all();
-      return json({ stats: { groups: groups.n, members: members.n, pending: pending.n, expenses: expenses.n, totalSpentCents: spent.cents, totalSpent: rupees(spent.cents) }, recent: recent.results.map(x => ({ ...x, amount: rupees(x.amountCents) })) });
-    }
-    if (method === "GET" && p === "/api/admin/expenses") {
-      const r = await db.prepare("SELECT e.id,e.description,e.amount_cents AS amountCents,e.created_at AS createdAt,g.id AS groupId,g.name AS groupName,COALESCE(m.name,'" + FORMER_MEMBER + "') AS paidBy FROM appx_expenses e JOIN appx_groups g ON g.id=e.group_id LEFT JOIN appx_group_members m ON m.group_id=e.group_id AND m.member_id=e.paid_by ORDER BY e.created_at DESC LIMIT 500").all();
-      return json({ expenses: r.results.map(x => ({ ...x, amount: rupees(x.amountCents) })) });
-    }
-    if (method === "GET" && p === "/api/admin/groups") {
-      const r = await db.prepare("SELECT g.id,g.name,g.created_at AS createdAt,(SELECT COUNT(*) FROM appx_group_members m WHERE m.group_id=g.id AND " + ACTIVE_MEMBER_SQL + ") AS memberCount FROM appx_groups g ORDER BY lower(g.name)").all();
-      return json({ groups: r.results });
-    }
-    const deleteGroup = p.match(/^\/api\/admin\/groups\/([\w-]+)\/delete$/);
-    if (method === "POST" && deleteGroup) {
-      const gid = deleteGroup[1];
-      const g = await db.prepare("SELECT id,name FROM appx_groups WHERE id=?").bind(gid).first();
-      if (!g) return fail("Group not found.", 404);
-      // Children first: D1 enforces foreign keys, so settlements and access
-      // requests (and their sessions) must go before the group row.
-      await db.batch([
-        db.prepare("DELETE FROM appx_payment_proofs WHERE settlement_id IN (SELECT id FROM appx_settlements WHERE group_id=?)").bind(gid),
-        db.prepare("DELETE FROM appx_settlements WHERE group_id=?").bind(gid),
-        db.prepare("DELETE FROM appx_splits WHERE expense_id IN (SELECT id FROM appx_expenses WHERE group_id=?)").bind(gid),
-        db.prepare("DELETE FROM appx_expenses WHERE group_id=?").bind(gid),
-        db.prepare("DELETE FROM appx_invites WHERE group_id=?").bind(gid),
-        db.prepare("DELETE FROM appx_group_members WHERE group_id=?").bind(gid),
-        db.prepare("DELETE FROM appx_sessions WHERE request_id IN (SELECT id FROM appx_access_requests WHERE group_id=?)").bind(gid),
-        db.prepare("DELETE FROM appx_access_requests WHERE group_id=?").bind(gid),
-        db.prepare("DELETE FROM appx_notifications WHERE group_id=?").bind(gid),
-        db.prepare("DELETE FROM appx_groups WHERE id=?").bind(gid),
-      ]);
-      return json({ ok: true, deletedGroup: g.name });
-    }
-    const renameGroup = p.match(/^\/api\/admin\/groups\/([\w-]+)\/rename$/);
-    if (method === "POST" && renameGroup) {
-      const gid = renameGroup[1], name = cleanName((await body(req))?.name);
-      if (name.length < 2 || name.length > 80) return fail("Group name must be 2–80 characters.");
-      const g = await db.prepare("SELECT id FROM appx_groups WHERE id=?").bind(gid).first();
-      if (!g) return fail("Group not found.", 404);
-      try {
-        await db.prepare("UPDATE appx_groups SET name=? WHERE id=?").bind(name, gid).run();
-      } catch (e) {
-        if (String(e).toLowerCase().includes("unique")) return fail("That group name already exists. Choose a unique name.", 409);
-        throw e;
-      }
-      return json({ ok: true, group: { id: gid, name } });
-    }
-    // Renaming a member changes their name everywhere: past expenses and
-    // payments (stored by id) and the name they sign in with. Their current
-    // session keeps working.
-    // Forgotten PIN: clear it and sign the member out everywhere; they choose
-    // a new PIN on their next sign-in.
-    const resetPin = p.match(/^\/api\/admin\/requests\/([\w-]+)\/reset-pin$/);
-    if (method === "POST" && resetPin) {
-      const rid = resetPin[1];
-      const r = await db.prepare("SELECT id FROM appx_access_requests WHERE id=?").bind(rid).first();
-      if (!r) return fail("Member not found.", 404);
-      await db.batch([
-        db.prepare("UPDATE appx_access_requests SET pin_hash=NULL,pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(rid),
-        db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(rid),
-      ]);
-      return json({ ok: true });
-    }
-    const renameMember = p.match(/^\/api\/admin\/requests\/([\w-]+)\/rename$/);
-    if (method === "POST" && renameMember) return renameMember_(db, renameMember[1], (await body(req))?.name);
-    if (method === "POST" && p === "/api/admin/groups") {
-      const b = await body(req), name = cleanName(b?.name);
-      if (name.length < 2 || name.length > 80) return fail("Group name must be 2–80 characters.");
-      const profile = await db.prepare("SELECT setting_value AS name FROM appx_settings WHERE setting_key='admin_name'").first();
-      if (!profile?.name) return fail("Set the administrator name by signing in first.", 409);
-      const gid = id();
-      try {
-        await db.batch([
-          db.prepare("INSERT INTO appx_groups(id,name,created_at) VALUES(?,?,?)").bind(gid, name, Date.now()),
-          db.prepare("INSERT INTO appx_group_members(group_id,member_id,name) VALUES(?,?,?)").bind(gid, "admin", profile.name),
-        ]);
-      } catch (e) {
-        if (String(e).toLowerCase().includes("unique")) return fail("That group name already exists. Choose a unique name.", 409);
-        throw e;
-      }
-      return json({ group: { id: gid, name } }, 201);
-    }
-    const m = p.match(/^\/api\/admin\/requests\/([\w-]+)\/(approve|reject|revoke)$/);
-    if (method === "POST" && m) {
-      const [, rid, action] = m;
-      const reqRow = await db.prepare("SELECT id,display_name,group_id FROM appx_access_requests WHERE id=?").bind(rid).first();
-      if (!reqRow) return fail("Request not found.", 404);
-      if (action === "approve") {
-        if (!reqRow.group_id) return fail("This request is not linked to a group.", 409);
-        const groupName = (await db.prepare("SELECT name FROM appx_groups WHERE id=?").bind(reqRow.group_id).first())?.name || "the group";
-        await db.batch([
-          db.prepare("UPDATE appx_access_requests SET status='approved',approved_at=?,expires_at=NULL WHERE id=?").bind(Date.now(), rid),
-          db.prepare("INSERT OR IGNORE INTO appx_group_members(group_id,member_id,name) VALUES(?,?,?)").bind(reqRow.group_id, rid, reqRow.display_name),
-          note({ to: rid, groupId: reqRow.group_id, kind: "approved", title: `You're in “${groupName}”`, body: "The admin approved you. Add expenses and settle up here.", link: `#/g/${reqRow.group_id}`, actor: await adminName(db) }),
-        ]);
-      } else {
-        await db.batch([
-          db.prepare("UPDATE appx_access_requests SET status=?,expires_at=NULL WHERE id=?").bind(action === "reject" ? "rejected" : "revoked", rid),
-          db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(rid),
-        ]);
-      }
-      return json({ ok: true });
-    }
-    // Deleting a revoked member removes their access record and sessions only.
-    // Their appx_group_members row is kept so historical expenses, splits and
-    // settlements still resolve to a name and group balances stay zero-sum.
-    const deleteRequest = p.match(/^\/api\/admin\/requests\/([\w-]+)\/delete$/);
-    if (method === "POST" && deleteRequest) {
-      const rid = deleteRequest[1];
-      const r = await db.prepare("SELECT id,group_id,status FROM appx_access_requests WHERE id=?").bind(rid).first();
-      if (!r) return fail("Member request not found.", 404);
-      if (r.status !== "revoked") return fail("Only revoked members can be deleted.", 409);
-      await db.batch([
-        db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(rid),
-        db.prepare("DELETE FROM appx_access_requests WHERE id=?").bind(rid),
-      ]);
-      return json({ ok: true, deleted: true });
-    }
-    // "This member is me": fold a separate member entry of the administrator
-    // (same person, created before the admin identity existed) into the admin
-    // member of that group. Shares on the same expense are added together,
-    // payments between the two entries are dropped (they were to oneself), and
-    // balances stay zero-sum. The preview lists what will move.
-    const merge = p.match(/^\/api\/admin\/requests\/([\w-]+)\/(merge-preview|merge-into-admin)$/);
-    if (merge) {
-      const [, rid, action] = merge;
-      const r = await db.prepare("SELECT id,display_name AS name,group_id AS groupId FROM appx_access_requests WHERE id=?").bind(rid).first();
-      if (!r || !r.groupId) return fail("Member request not found.", 404);
-      const gid = r.groupId;
-      const name = await adminName(db);
-      if (!name) return fail("Set the administrator name by signing in first.", 409);
-      if (method === "GET" && action === "merge-preview") {
-        const [counts, ledger] = await Promise.all([
-          db.prepare("SELECT (SELECT COUNT(*) FROM appx_expenses WHERE group_id=?1 AND paid_by=?2) AS expensesPaid,(SELECT COUNT(*) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?1 AND s.member_id=?2) AS shares,(SELECT COUNT(*) FROM appx_settlements WHERE group_id=?1 AND (from_member_id=?2 OR to_member_id=?2)) AS payments,(SELECT COUNT(*) FROM appx_settlements WHERE group_id=?1 AND ((from_member_id=?2 AND to_member_id='admin') OR (from_member_id='admin' AND to_member_id=?2))) AS paymentsWithAdmin,(SELECT name FROM appx_groups WHERE id=?1) AS groupName").bind(gid, rid).first(),
-          loadLedger(db, gid),
-        ]);
-        const balances = computeBalances(ledger);
-        return json({ memberName: r.name, adminName: name, ...counts, memberBalanceCents: balances.get(rid) || 0, adminBalanceCents: balances.get("admin") || 0 });
-      }
-      if (method === "POST" && action === "merge-into-admin") {
-        const inGroup = "(SELECT id FROM appx_expenses WHERE group_id=?)";
-        await db.batch([
-          db.prepare("INSERT OR IGNORE INTO appx_group_members(group_id,member_id,name) VALUES(?,'admin',?)").bind(gid, name),
-          db.prepare("UPDATE appx_splits SET amount_cents=amount_cents+(SELECT x.amount_cents FROM appx_splits x WHERE x.expense_id=appx_splits.expense_id AND x.member_id=?) WHERE member_id='admin' AND expense_id IN (SELECT expense_id FROM appx_splits WHERE member_id=?) AND expense_id IN " + inGroup).bind(rid, rid, gid),
-          db.prepare("DELETE FROM appx_splits WHERE member_id=? AND expense_id IN (SELECT expense_id FROM appx_splits WHERE member_id='admin') AND expense_id IN " + inGroup).bind(rid, gid),
-          db.prepare("UPDATE appx_splits SET member_id='admin' WHERE member_id=? AND expense_id IN " + inGroup).bind(rid, gid),
-          db.prepare("UPDATE appx_expenses SET paid_by='admin' WHERE group_id=? AND paid_by=?").bind(gid, rid),
-          db.prepare("UPDATE appx_expenses SET created_by='admin' WHERE group_id=? AND created_by=?").bind(gid, rid),
-          db.prepare("DELETE FROM appx_settlements WHERE group_id=?1 AND ((from_member_id=?2 AND to_member_id='admin') OR (from_member_id='admin' AND to_member_id=?2))").bind(gid, rid),
-          db.prepare("UPDATE appx_settlements SET from_member_id='admin' WHERE group_id=? AND from_member_id=?").bind(gid, rid),
-          db.prepare("UPDATE appx_settlements SET to_member_id='admin' WHERE group_id=? AND to_member_id=?").bind(gid, rid),
-          db.prepare("UPDATE appx_settlements SET created_by='admin' WHERE group_id=? AND created_by=?").bind(gid, rid),
-          db.prepare("UPDATE appx_invites SET created_by='admin' WHERE group_id=? AND created_by=?").bind(gid, rid),
-          db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(rid),
-          db.prepare("DELETE FROM appx_group_members WHERE group_id=? AND member_id=?").bind(gid, rid),
-          db.prepare("DELETE FROM appx_access_requests WHERE id=?").bind(rid),
-        ]);
-        return json({ ok: true, merged: true });
-      }
-      return fail("Not found.", 404);
-    }
-    const removeMember = p.match(/^\/api\/admin\/requests\/([\w-]+)\/remove$/);
-    if (method === "POST" && removeMember) {
-      const rid = removeMember[1];
-      const r = await db.prepare("SELECT id,group_id,status FROM appx_access_requests WHERE id=?").bind(rid).first();
-      if (!r) return fail("Member request not found.", 404);
-      if (r.status !== "approved" && r.status !== "revoked") return fail("Only approved or revoked members can be removed from a group.", 409);
-      await db.batch([
-        db.prepare("UPDATE appx_access_requests SET status='revoked',expires_at=NULL WHERE id=?").bind(rid),
-        db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(rid),
-      ]);
-      return json({ ok: true, removed: true });
-    }
-    if (method === "POST" && p === "/api/admin/logout") {
-      await db.prepare("DELETE FROM appx_admin_sessions").run();
-      return json({ ok: true }, 200, { "set-cookie": setCookie("split_admin", "", 0) });
-    }
-    return fail("Not found.", 404);
+  // Accounts from before usernames: sign in with the group's name and your
+  // name in it (then choose a username in your profile).
+  if (method === "POST" && p === "/api/auth/legacy-signin") {
+    if (await rateLimited(db, "signin", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
+    const b = await body(req);
+    if (!cleanName(b?.group) || !cleanName(b?.name)) return fail("Enter the group's name and your name in it.");
+    const user = await findLegacyUser(db, b?.group, b?.name);
+    if (user === "ambiguous") return fail("More than one account matches. Sign in with your username instead, or ask a group admin for it.", 409);
+    if (!user) return fail("No one with that name in a group with that name. Check both, or sign in with your username.", 404);
+    const bad = await signInChecks(db, env, user, b);
+    if (bad) return bad;
+    return startSession(db, user.id, { ok: true, id: user.id, legacy: true });
   }
   if (method === "GET" && p === "/api/me") {
-    const isAdmin = await admin(req, env);
-    const member = await session(req, env);
-    const name = isAdmin ? await adminName(db) : null;
-    return json({
-      admin: isAdmin && name ? { id: "admin", name } : null,
-      member: member ? { id: member.id, name: member.name } : null,
-    });
+    const me = await requireUser(req, env);
+    return json({ user: me ? userOut(me) : null });
   }
-  if (method === "GET" && p === "/api/access/status") {
-    const u = await session(req, env);
-    if (u) return json({ status: "approved", name: u.name });
-    const rid = url.searchParams.get("requestId") || cookie(req, "split_request");
-    if (rid) {
-      const r = await db.prepare("SELECT status,display_name AS name FROM appx_access_requests WHERE id=?").bind(rid).first();
-      if (r) return json(r);
-    }
-    return json({ status: "none" });
-  }
-  if (method === "POST" && p === "/api/access/enter") {
-    if (await rateLimited(db, "signin", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
-    const b = await body(req), rid = textField(b?.requestId);
-    const r = await db.prepare("SELECT id,status FROM appx_access_requests WHERE id=?").bind(rid).first();
-    if (!r || r.status !== "approved") return fail("This request is not approved. Ask the admin to approve it, or request access again.", 403);
-    const token = id() + id(), tokenHash = await hash(token), expires = Date.now() + SESSION_MS;
-    await db.prepare("INSERT INTO appx_sessions(token_hash,request_id,expires_at) VALUES(?,?,?)").bind(tokenHash, rid, expires).run();
-    return json({ ok: true }, 200, { "set-cookie": setCookie("split_session", token, Math.floor((expires - Date.now()) / 1000)) });
-  }
-  if (method === "POST" && p === "/api/access/signin") {
-    if (await rateLimited(db, "signin", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
-    const b = await body(req), name = cleanName(b?.name), gid = textField(b?.groupId), pin = textField(b?.pin);
-    if (name.length < 2 || name.length > 60 || !gid) return fail("Enter your name and choose a group.");
-    if (!PIN_RE.test(pin)) return fail("Enter your 4-digit PIN.");
-    if (sameName(name, await adminName(db))) return fail("That is the administrator's name. Use Admin login (name + PIN) to sign in as yourself.", 403);
-    const r = await db.prepare("SELECT id,status,expires_at,pin_hash,pin_failures,pin_locked_until FROM appx_access_requests WHERE group_id=? AND lower(display_name)=lower(?) ORDER BY requested_at DESC LIMIT 1").bind(gid, name).first();
-    if (!r) return fail("No access request found for that name in this group. Request access first.", 403);
-    if (r.status === "pending") return fail("Your access request is waiting for admin approval.", 403);
-    if (r.status !== "approved") return fail("Your access is not currently approved. Request access again to reactivate your existing entry.", 403);
-    const bad = await checkMemberPin(db, env, r, pin, { create: b?.createPin === true });
-    if (bad) return bad;
-    const token = id() + id(), tokenHash = await hash(token), expires = Date.now() + SESSION_MS;
-    await db.prepare("INSERT INTO appx_sessions(token_hash,request_id,expires_at) VALUES(?,?,?)").bind(tokenHash, r.id, expires).run();
-    return json({ ok: true }, 200, { "set-cookie": setCookie("split_session", token, Math.floor((expires - Date.now()) / 1000)) });
+  if (method === "POST" && p === "/api/logout") {
+    const raw = cookie(req, "split_user");
+    if (raw) await db.prepare("DELETE FROM appx_user_sessions WHERE token_hash=?").bind(await hash(raw)).run();
+    return json({ ok: true }, 200, { "set-cookie": setCookie("split_user", "", 0) });
   }
   const u = await requireUser(req, env);
-  if (!u) return fail("Approval and active session required.", 401);
-  const isAdmin = u.role === "admin";
-  if (method === "POST" && p === "/api/logout") {
-    const raw = cookie(req, "split_session");
-    if (raw) await db.prepare("DELETE FROM appx_sessions WHERE token_hash=?").bind(await hash(raw)).run();
-    return json({ ok: true }, 200, { "set-cookie": setCookie("split_session", "", 0) });
+  if (!u) return fail("Sign in to continue.", 401);
+  // Change my name, username and/or email.
+  if (method === "POST" && p === "/api/me/profile") {
+    if (await rateLimited(db, "profile", u.id, RATE_LIMITS.paymentMethodWrite)) return tooMany();
+    const b = await body(req);
+    if (b?.username !== undefined) {
+      const username = normUsername(b.username);
+      if (!USERNAME_RE.test(username)) return fail("Usernames are 3–30 characters: letters, numbers, _ or ., starting with a letter.");
+      const taken = await db.prepare("SELECT id FROM appx_users WHERE username=?").bind(username).first();
+      if (taken && taken.id !== u.id) return fail("That username is taken. Try another.", 409);
+      // Choosing a username ends the one-time "group and name" sign-in.
+      await db.prepare("UPDATE appx_users SET username=?,legacy=0 WHERE id=?").bind(username, u.id).run();
+    }
+    if (b?.email !== undefined) {
+      const email = b.email ? normEmail(b.email) : null;
+      if (email && (!EMAIL_RE.test(email) || email.length > 254)) return fail("Enter a valid email, or leave it empty.");
+      const taken = email && await db.prepare("SELECT id FROM appx_users WHERE email=?").bind(email).first();
+      if (taken && taken.id !== u.id) return fail("That email is already used by another account.", 409);
+      await db.prepare("UPDATE appx_users SET email=? WHERE id=?").bind(email, u.id).run();
+    }
+    if (b?.name !== undefined) {
+      const r = await renameUser(db, u.id, b.name);
+      if (r instanceof Response) return r;
+    }
+    return json({ user: userOut(await requireUser(req, env)) });
+  }
+  // Kept for older app versions: change only my name.
+  if (method === "POST" && p === "/api/me/name") {
+    if (await rateLimited(db, "profile", u.id, RATE_LIMITS.paymentMethodWrite)) return tooMany();
+    const r = await renameUser(db, u.id, (await body(req))?.name);
+    return r instanceof Response ? r : json({ ok: true, id: u.id, name: r });
+  }
+  // Change my PIN (the current one is needed, if there is one).
+  if (method === "POST" && p === "/api/me/pin") {
+    if (await rateLimited(db, "signin", u.id, RATE_LIMITS.signin)) return tooMany();
+    const b = await body(req), newPin = textField(b?.newPin);
+    if (!PIN_RE.test(newPin)) return fail("Choose a 4-digit PIN.");
+    const row = await db.prepare("SELECT id,pin_hash,pin_failures,pin_locked_until FROM appx_users WHERE id=?").bind(u.id).first();
+    if (row.pin_hash) {
+      if (!PIN_RE.test(textField(b?.currentPin))) return fail("Enter your current 4-digit PIN.");
+      const bad = await checkMemberPin(db, env, row, textField(b?.currentPin));
+      if (bad) return bad;
+    }
+    await db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(await hashPin(newPin, env), u.id).run();
+    return json({ ok: true });
+  }
+  // "I had another account": prove it with that account's username (or its
+  // group and name) and PIN, then everything of it moves into this account.
+  if (method === "POST" && p === "/api/me/link") {
+    if (await rateLimited(db, "link", u.id, RATE_LIMITS.link)) return tooMany();
+    const b = await body(req);
+    const other = b?.login ? await findUser(db, b.login) : await findLegacyUser(db, b?.group, b?.name);
+    if (other === "ambiguous") return fail("More than one account matches. Use that account's username instead.", 409);
+    if (!other) return fail("No account found. Check the username, or the group and name.", 404);
+    if (other.id === u.id) return fail("That's the account you're signed in to.", 409);
+    if (!other.pin_hash) return fail("That account has no PIN yet. Sign in to it once to create one, then link it here.", 409);
+    if (!PIN_RE.test(textField(b?.pin))) return fail("Enter that account's 4-digit PIN.");
+    const bad = await checkMemberPin(db, env, other, textField(b?.pin));
+    if (bad) return bad;
+    await db.batch(await mergeStatements(db, u.id, other.id));
+    return json({ ok: true, merged: other.display_name });
+  }
+  // Anyone can create a group; they are its first admin.
+  if (method === "POST" && p === "/api/groups") {
+    if (await rateLimited(db, "group", u.id, RATE_LIMITS.groupWrite)) return tooMany();
+    const name = cleanName((await body(req))?.name);
+    if (name.length < 2 || name.length > 80) return fail("Group name must be 2–80 characters.");
+    const gid = id(), now = Date.now();
+    await db.batch([
+      db.prepare("INSERT INTO appx_groups(id,name,created_at,created_by) VALUES(?,?,?,?)").bind(gid, name, now, u.id),
+      db.prepare("INSERT INTO appx_group_members(group_id,member_id,name,role,status,joined_at) VALUES(?,?,?,'admin','active',?)").bind(gid, u.id, u.name, now),
+    ]);
+    return json({ group: { id: gid, name } }, 201);
+  }
+  // Groups I've been invited to and haven't answered yet.
+  if (method === "GET" && p === "/api/invitations") {
+    const r = await db.prepare("SELECT g.id AS groupId,g.name AS groupName,COALESCE(i.name,'Someone') AS invitedBy,(SELECT COUNT(*) FROM appx_group_members x WHERE x.group_id=g.id AND x.status='active') AS memberCount FROM appx_group_members m JOIN appx_groups g ON g.id=m.group_id LEFT JOIN appx_group_members i ON i.group_id=m.group_id AND i.member_id=m.invited_by WHERE m.member_id=? AND m.status='invited' ORDER BY g.created_at DESC").bind(u.id).all();
+    return json({ invitations: r.results });
+  }
+  const answer = p.match(/^\/api\/groups\/([\w-]+)\/invitation\/(accept|decline)$/);
+  if (method === "POST" && answer) {
+    const [, gid, action] = answer;
+    const row = await db.prepare("SELECT m.status,g.name FROM appx_group_members m JOIN appx_groups g ON g.id=m.group_id WHERE m.group_id=? AND m.member_id=?").bind(gid, u.id).first();
+    if (!row || row.status !== "invited") return fail("This invitation is no longer open.", 404);
+    if (action === "decline") {
+      await db.prepare("UPDATE appx_group_members SET status='removed' WHERE group_id=? AND member_id=? AND status='invited'").bind(gid, u.id).run();
+      return json({ ok: true });
+    }
+    const admins = (await db.prepare("SELECT member_id FROM appx_group_members WHERE group_id=? AND role='admin' AND status='active'").bind(gid).all()).results.map(r => r.member_id);
+    await db.batch([
+      db.prepare("UPDATE appx_group_members SET status='active',name=?,joined_at=? WHERE group_id=? AND member_id=? AND status='invited'").bind(u.name, Date.now(), gid, u.id),
+      ...admins.filter(a => a !== u.id).map(to => note({ to, groupId: gid, kind: "member_joined", title: `${u.name} joined “${row.name}”`, body: "They accepted your invitation.", link: `#/g/${gid}`, actor: u.name })),
+    ]);
+    return json({ ok: true, groupId: gid });
   }
   if (method === "GET" && p === "/api/groups") {
     const r = await db.prepare("SELECT g.id,g.name,"
       + "COALESCE((SELECT SUM(amount_cents) FROM appx_expenses WHERE group_id=g.id AND paid_by=?1),0)"
       + "-COALESCE((SELECT SUM(s.amount_cents) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=g.id AND s.member_id=?1),0)"
       + "+COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND from_member_id=?1 AND status='confirmed'),0)"
-      + "-COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND to_member_id=?1 AND status='confirmed'),0) AS myBalanceCents "
-      + "FROM appx_groups g JOIN appx_group_members m ON m.group_id=g.id WHERE m.member_id=?1 ORDER BY g.created_at DESC").bind(u.id).all();
+      + "-COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND to_member_id=?1 AND status='confirmed'),0) AS myBalanceCents"
+      + ",m.role,(SELECT COUNT(*) FROM appx_group_members x WHERE x.group_id=g.id AND x.status='active') AS memberCount "
+      + "FROM appx_groups g JOIN appx_group_members m ON m.group_id=g.id WHERE m.member_id=?1 AND m.status='active' ORDER BY g.created_at DESC").bind(u.id).all();
     return json({ groups: r.results });
   }
   // Everyone I owe or who owes me, across all my groups, one row per person
@@ -719,25 +620,126 @@ async function api(req, env, url, outbox = []) {
     await db.prepare("UPDATE appx_notifications SET read_at=? WHERE recipient_id=? AND read_at IS NULL").bind(Date.now(), u.id).run();
     return json({ ok: true, unread: 0 });
   }
-  // A member changes their own name. (The admin's name is their login, so it
-  // is not changed here.)
-  if (method === "POST" && p === "/api/me/name") {
-    if (isAdmin) return fail("The admin name is your login and can't be changed here.", 403);
-    if (await rateLimited(db, "rename", u.id, RATE_LIMITS.paymentMethodWrite)) return tooMany();
-    return renameMember_(db, u.id, (await body(req))?.name);
-  }
-  if (method === "POST" && p === "/api/groups") return fail("Only an administrator can create groups.", 403);
-  if (method === "POST" && p === "/api/groups/join") return fail("Invite codes do not bypass group approval. Request access to the group instead.", 403);
   const gm = p.match(/^\/api\/groups\/([\w-]+)(?:\/(.*))?$/);
   if (gm) {
     const gid = gm[1], tail = gm[2] || "";
-    // Every group route requires the caller to be a member of this group.
-    const member = await db.prepare("SELECT 1 FROM appx_group_members m WHERE m.group_id=? AND m.member_id=? AND " + ACTIVE_MEMBER_SQL).bind(gid, u.id).first();
+    // Every group route requires the caller to be in this group now.
+    const member = await db.prepare("SELECT m.role FROM appx_group_members m WHERE m.group_id=? AND m.member_id=? AND " + ACTIVE_MEMBER_SQL).bind(gid, u.id).first();
     if (!member) return fail("Group not found or you do not have access.", 404);
+    // Admins of this group may edit or delete anything in it, decide any
+    // payment, and manage who is in it. Being admin is per group.
+    const isAdmin = member.role === "admin";
     if (method === "GET" && !tail) {
       const g = await db.prepare("SELECT id,name FROM appx_groups WHERE id=?").bind(gid).first();
-      const members = (await groupMembers(db, gid)).filter(x => x.active).map(({ id, name, status }) => ({ id, name, status }));
-      return json({ group: g, members, me: { id: u.id, name: u.name, isAdmin } });
+      const all = await groupMembers(db, gid);
+      const pick = x => ({ id: x.id, name: x.name, username: x.username, role: x.role, status: x.status });
+      return json({
+        group: g,
+        members: all.filter(x => x.active).map(pick),
+        // Only admins see who is waiting: asked to join, or invited and not answered.
+        waiting: isAdmin ? all.filter(x => x.status === "pending" || x.status === "invited").map(pick) : [],
+        me: { id: u.id, name: u.name, isAdmin, role: member.role },
+      });
+    }
+    // ----- Group admin: who is in the group -----
+    const needAdmin = () => fail("Only a group admin can do that.", 403);
+    // Invite someone already on Split It by their username or email. They
+    // join when they accept. Someone who asked to join is let in straight away.
+    if (method === "POST" && tail === "members/invite") {
+      if (!isAdmin) return needAdmin();
+      if (await rateLimited(db, "invite", u.id, RATE_LIMITS.invite)) return tooMany();
+      const login = textField((await body(req))?.login).trim();
+      if (!login) return fail("Enter a username or email.");
+      const who = await findUser(db, login);
+      if (!who) return fail(`No one on Split It has the ${login.includes("@") && !login.startsWith("@") ? "email" : "username"} “${login}”. Check it, or ask them to create an account first.`, 404);
+      const g = await db.prepare("SELECT name FROM appx_groups WHERE id=?").bind(gid).first();
+      const row = await db.prepare("SELECT status FROM appx_group_members WHERE group_id=? AND member_id=?").bind(gid, who.id).first();
+      if (row?.status === "active") return fail(`${who.display_name} is already in this group.`, 409);
+      if (row?.status === "invited") return fail(`${who.display_name} is already invited. They'll see it when they open Split It.`, 409);
+      if (row?.status === "pending") {
+        await db.batch([
+          db.prepare("UPDATE appx_group_members SET status='active',joined_at=? WHERE group_id=? AND member_id=?").bind(Date.now(), gid, who.id),
+          note({ to: who.id, groupId: gid, kind: "approved", title: `You're in “${g.name}”`, body: `${u.name} let you in. Add expenses and settle up here.`, link: `#/g/${gid}`, actor: u.name }),
+        ]);
+        return json({ ok: true, status: "active", name: who.display_name });
+      }
+      await db.batch([
+        db.prepare("INSERT INTO appx_group_members(group_id,member_id,name,role,status,invited_by) VALUES(?1,?2,?3,'member','invited',?4) ON CONFLICT(group_id,member_id) DO UPDATE SET status='invited',role='member',invited_by=?4,name=?3").bind(gid, who.id, who.display_name, u.id),
+        note({ to: who.id, groupId: gid, kind: "group_invite", title: `${u.name} invited you to “${g.name}”`, body: "Open Split It to accept or decline.", link: "#/", actor: u.name }),
+      ]);
+      return json({ ok: true, status: "invited", name: who.display_name });
+    }
+    const manage = tail.match(/^members\/([\w-]+)\/(approve|reject|remove|cancel-invite|make-admin|make-member)$/);
+    if (method === "POST" && manage) {
+      if (!isAdmin) return needAdmin();
+      const [, mid, action] = manage;
+      const row = await db.prepare("SELECT m.member_id,m.name,m.role,m.status,g.name AS groupName FROM appx_group_members m JOIN appx_groups g ON g.id=m.group_id WHERE m.group_id=? AND m.member_id=?").bind(gid, mid).first();
+      if (!row) return fail("That person is not in this group.", 404);
+      const admins = Number((await db.prepare("SELECT COUNT(*) AS n FROM appx_group_members WHERE group_id=? AND role='admin' AND status='active'").bind(gid).first()).n);
+      const lastAdmin = row.role === "admin" && row.status === "active" && admins <= 1;
+      const set = (sql, ...args) => db.prepare("UPDATE appx_group_members SET " + sql + " WHERE group_id=? AND member_id=?").bind(...args, gid, mid);
+      if (action === "approve" || action === "reject") {
+        if (row.status !== "pending") return fail("This person isn't waiting to join.", 409);
+        await db.batch(action === "approve"
+          ? [set("status='active',joined_at=?", Date.now()), note({ to: mid, groupId: gid, kind: "approved", title: `You're in “${row.groupName}”`, body: `${u.name} approved you. Add expenses and settle up here.`, link: `#/g/${gid}`, actor: u.name })]
+          : [set("status='removed'")]);
+        return json({ ok: true });
+      }
+      if (action === "cancel-invite") {
+        if (row.status !== "invited") return fail("This person has no open invitation.", 409);
+        await db.batch([set("status='removed'")]);
+        return json({ ok: true });
+      }
+      if (row.status !== "active") return fail(`${row.name} is not in the group right now.`, 409);
+      if (action === "remove") {
+        if (mid === u.id) return fail("To leave the group yourself, use Leave group.", 409);
+        if (lastAdmin) return fail("Make someone else an admin first.", 409);
+        // Their expenses and payments stay; balances with them can still be settled by an admin.
+        await db.batch([set("status='removed',role='member'"), note({ to: mid, groupId: gid, kind: "removed", title: `You were removed from “${row.groupName}”`, body: `${u.name} removed you from the group.`, link: "#/", actor: u.name })]);
+        return json({ ok: true });
+      }
+      if (action === "make-admin") {
+        if (row.role === "admin") return json({ ok: true });
+        await db.batch([set("role='admin'"), note({ to: mid, groupId: gid, kind: "made_admin", title: `You're now an admin of “${row.groupName}”`, body: `${u.name} made you an admin. You can manage members and edit anything in the group.`, link: `#/g/${gid}`, actor: u.name })]);
+        return json({ ok: true });
+      }
+      // make-member
+      if (lastAdmin) return fail("A group needs at least one admin. Make someone else an admin first.", 409);
+      await db.batch([set("role='member'")]);
+      return json({ ok: true });
+    }
+    if (method === "POST" && tail === "leave") {
+      const admins = Number((await db.prepare("SELECT COUNT(*) AS n FROM appx_group_members WHERE group_id=? AND role='admin' AND status='active'").bind(gid).first()).n);
+      const others = Number((await db.prepare("SELECT COUNT(*) AS n FROM appx_group_members WHERE group_id=? AND status='active' AND member_id<>?").bind(gid, u.id).first()).n);
+      if (isAdmin && admins <= 1 && others > 0) return fail("You're the only admin. Make someone else an admin before you leave.", 409);
+      await db.prepare("UPDATE appx_group_members SET status='removed',role='member' WHERE group_id=? AND member_id=?").bind(gid, u.id).run();
+      return json({ ok: true });
+    }
+    if (method === "POST" && tail === "rename") {
+      if (!isAdmin) return needAdmin();
+      const name = cleanName((await body(req))?.name);
+      if (name.length < 2 || name.length > 80) return fail("Group name must be 2–80 characters.");
+      await db.prepare("UPDATE appx_groups SET name=? WHERE id=?").bind(name, gid).run();
+      return json({ ok: true, group: { id: gid, name } });
+    }
+    // Deletes the group and everything in it. Children first: D1 enforces
+    // foreign keys.
+    if (method === "POST" && tail === "delete") {
+      if (!isAdmin) return needAdmin();
+      const g = await db.prepare("SELECT name FROM appx_groups WHERE id=?").bind(gid).first();
+      await db.batch([
+        db.prepare("DELETE FROM appx_payment_proofs WHERE settlement_id IN (SELECT id FROM appx_settlements WHERE group_id=?)").bind(gid),
+        db.prepare("DELETE FROM appx_settlements WHERE group_id=?").bind(gid),
+        db.prepare("DELETE FROM appx_splits WHERE expense_id IN (SELECT id FROM appx_expenses WHERE group_id=?)").bind(gid),
+        db.prepare("DELETE FROM appx_expenses WHERE group_id=?").bind(gid),
+        db.prepare("DELETE FROM appx_invites WHERE group_id=?").bind(gid),
+        db.prepare("DELETE FROM appx_group_members WHERE group_id=?").bind(gid),
+        db.prepare("DELETE FROM appx_sessions WHERE request_id IN (SELECT id FROM appx_access_requests WHERE group_id=?)").bind(gid),
+        db.prepare("DELETE FROM appx_access_requests WHERE group_id=?").bind(gid),
+        db.prepare("DELETE FROM appx_notifications WHERE group_id=?").bind(gid),
+        db.prepare("DELETE FROM appx_groups WHERE id=?").bind(gid),
+      ]);
+      return json({ ok: true, deletedGroup: g.name });
     }
     if (method === "GET" && tail === "dashboard") {
       const [members, ledger, total] = await Promise.all([
@@ -754,12 +756,6 @@ async function api(req, env, url, outbox = []) {
         .map(x => ({ ...x, paid: rupees(x.paidCents), share: rupees(x.shareCents) }))
         .sort((a, b) => b.paidCents - a.paidCents || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
       return json({ totalSpentCents: total.cents, totalSpent: rupees(total.cents), expenseCount: total.count, spending });
-    }
-    if (method === "POST" && tail === "members") return fail("Members must request access and be approved by an administrator.", 403);
-    if (method === "POST" && tail === "invites") {
-      const code = id() + id(), ch = await hash(code);
-      await db.prepare("INSERT INTO appx_invites(code_hash,group_id,expires_at,created_by) VALUES(?,?,?,?)").bind(ch, gid, Date.now() + INVITE_MS, u.id).run();
-      return json({ inviteCode: code, expiresAt: Date.now() + INVITE_MS });
     }
     if (method === "POST" && tail === "expenses") {
       if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
@@ -782,7 +778,7 @@ async function api(req, env, url, outbox = []) {
       if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
       const e = await db.prepare("SELECT id,paid_by FROM appx_expenses WHERE id=? AND group_id=?").bind(editExpense[1], gid).first();
       if (!e) return fail("Expense not found.", 404);
-      if (!isAdmin && e.paid_by !== u.id) return fail("Only the person who paid for this expense or the admin can edit it.", 403);
+      if (!isAdmin && e.paid_by !== u.id) return fail("Only the person who paid for this expense or a group admin can edit it.", 403);
       const parsed = await parseExpense(db, gid, await body(req));
       if (parsed.error) return fail(parsed.error);
       const { desc, cents, paidBy, splitRows } = parsed;
@@ -822,7 +818,7 @@ async function api(req, env, url, outbox = []) {
       if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
       const e = await db.prepare("SELECT id,paid_by,description,amount_cents FROM appx_expenses WHERE id=? AND group_id=?").bind(deleteExpense[1], gid).first();
       if (!e) return fail("Expense not found.", 404);
-      if (!isAdmin && e.paid_by !== u.id) return fail("Only the person who paid for this expense or the admin can delete it.", 403);
+      if (!isAdmin && e.paid_by !== u.id) return fail("Only the person who paid for this expense or a group admin can delete it.", 403);
       const oldSplits = (await db.prepare("SELECT member_id AS memberId,amount_cents AS amountCents FROM appx_splits WHERE expense_id=?").bind(e.id).all()).results;
       await db.batch([
         ...expenseNotes(note, { kind: "expense_deleted", gid, actor: u, desc: e.description, cents: e.amount_cents, paidBy: e.paid_by, splitRows: oldSplits, nameOf: nameLookup(await groupMembers(db, gid)) }),
@@ -945,7 +941,7 @@ async function api(req, env, url, outbox = []) {
       const members = await groupMembers(db, gid);
       const byId = new Map(members.map(x => [x.id, x]));
       if (!byId.has(from) || !byId.has(to)) return fail("Both members must belong to this group.");
-      if (!isAdmin && !byId.get(to).active) return fail(byId.get(to).name + " is no longer an active member. Ask the admin to record this payment.", 409);
+      if (!isAdmin && !byId.get(to).active) return fail(byId.get(to).name + " is no longer in this group. Ask a group admin to record this payment.", 409);
       try {
         validateSettlement({ debts: computePairwiseDebts(await loadLedger(db, gid)), fromMemberId: from, toMemberId: to, amountCents: cents, actorId: u.id, actorIsAdmin: isAdmin });
       } catch (error) {
@@ -1003,7 +999,7 @@ async function api(req, env, url, outbox = []) {
       // Each side is taken to what's between them and the other person.
       const tell = (to, kind, title, body) => to === u.id ? Promise.resolve() : db.batch([note({ to, groupId: gid, kind, title, body, link: `#/g/${gid}/p/${to === pay.fromId ? pay.toId : pay.fromId}`, actor: u.name })]);
       if (action === "cancel") {
-        if (!isAdmin && pay.fromId !== u.id) return fail("Only the person who paid or the admin can cancel this payment.", 403);
+        if (!isAdmin && pay.fromId !== u.id) return fail("Only the person who paid or a group admin can cancel this payment.", 403);
         await db.batch([
           db.prepare("DELETE FROM appx_payment_proofs WHERE settlement_id=?").bind(sid),
           db.prepare("DELETE FROM appx_settlements WHERE id=? AND status='pending'").bind(sid),

@@ -1,10 +1,10 @@
 import { useSyncExternalStore } from "react";
 
 // Hash routes keep the browser/Android back button working without any
-// server-side routing:  #/  #/notifications  #/admin  #/g/:groupId  #/g/:groupId/p/:memberId
+// server-side routing:  #/  #/notifications  #/profile  #/g/:groupId  #/g/:groupId/p/:memberId
 export type Route =
   | { name: "home" }
-  | { name: "admin" }
+  | { name: "profile" }
   | { name: "notifications" }
   // expenseId: open on that expense, expanded (#/g/:id/e/:expenseId).
   | { name: "group"; groupId: string; tab: GroupTab; expenseId?: string }
@@ -14,7 +14,7 @@ const TABS: GroupTab[] = ["expenses", "balances", "payments", "insights"];
 
 export function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
-  if (parts[0] === "admin") return { name: "admin" };
+  if (parts[0] === "profile") return { name: "profile" };
   if (parts[0] === "notifications") return { name: "notifications" };
   if (parts[0] === "g" && parts[1]) {
     if (parts[2] === "p" && parts[3]) return { name: "person", groupId: parts[1], memberId: parts[3] };
@@ -28,7 +28,7 @@ export function parse(hash: string): Route {
 export function href(route: Route): string {
   switch (route.name) {
     case "home": return "#/";
-    case "admin": return "#/admin";
+    case "profile": return "#/profile";
     case "notifications": return "#/notifications";
     case "group": return "#/g/" + encodeURIComponent(route.groupId) + (route.expenseId ? "/e/" + encodeURIComponent(route.expenseId) : route.tab === "expenses" ? "" : "/" + route.tab);
     case "person": return "#/g/" + encodeURIComponent(route.groupId) + "/p/" + encodeURIComponent(route.memberId);

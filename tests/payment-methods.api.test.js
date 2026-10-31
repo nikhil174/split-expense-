@@ -79,5 +79,5 @@ test("everyone in the group sees how to pay each other; the QR image is served o
   assert.equal((await f.qr("Cy", f.g.ids.Bea, other.groupId)).status, 404);
   assert.equal((await call(f.env, `/api/groups/${f.g.groupId}/members/${f.g.ids.Bea}/qr`, { raw: true })).status, 401);
   // The admin's method follows them into every group.
-  assert.equal((await call(f.env, `/api/groups/${other.groupId}/payment-methods`, { cookie: other.cookies.Zed })).data.people.find(p => p.memberId === "admin").upiId, "nikhil@ybl");
+  assert.equal((await call(f.env, `/api/groups/${other.groupId}/payment-methods`, { cookie: other.cookies.Zed })).data.people.find(p => p.memberId === f.g.ids.admin).upiId, "nikhil@ybl");
 });

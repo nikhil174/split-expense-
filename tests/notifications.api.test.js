@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeEnv, call, setupGroup } from "./helpers/d1.js";
+import { makeEnv, call, setupGroup, signUp } from "./helpers/d1.js";
 
 async function fixture(t) {
   const { raw, env } = await makeEnv();
@@ -66,22 +66,22 @@ test("payments: the receiver is asked to confirm; the payer hears confirmed, rej
   assert.equal((await f.inbox("Cy")).items[0].title, "Alex Admin recorded your payment of ₹5.00 to Bea");
 });
 
-test("joining: the admin hears about requests, the member hears they were approved", async t => {
+test("joining: the admin hears when an invitation is accepted; invitees and approved people are told", async t => {
   const f = await fixture(t);
-  const r = await call(f.env, "/api/access/request", { method: "POST", body: { name: "Dee", groupId: f.g.groupId, pin: "1357" } });
+  const dee = await signUp(f.env, "Dee");
+  await f.post("admin", "/members/invite", { login: dee.username });
+  const invite = (await call(f.env, "/api/notifications", { cookie: dee.cookie })).data;
+  assert.deepEqual([invite.unread, invite.items[0].kind, invite.items[0].title, invite.items[0].link], [1, "group_invite", "Alex Admin invited you to “Goa Trip”", "#/"]);
+  await call(f.env, `/api/groups/${f.g.groupId}/invitation/accept`, { method: "POST", cookie: dee.cookie, body: {} });
   const admin = (await f.inbox("admin")).items[0];
-  assert.deepEqual([admin.kind, admin.title, admin.link], ["access_request", "Dee wants to join", "#/admin"]);
-  await call(f.env, `/api/admin/requests/${r.data.requestId}/approve`, { method: "POST", cookie: f.g.adminCookie, body: {} });
-  const dee = await call(f.env, "/api/access/signin", { method: "POST", body: { name: "Dee", groupId: f.g.groupId, pin: "1357" } });
-  const mine = (await call(f.env, "/api/notifications", { cookie: dee.cookie })).data;
-  assert.deepEqual([mine.unread, mine.items[0].kind, mine.items[0].title], [1, "approved", "You're in “Goa Trip”"]);
+  assert.deepEqual([admin.kind, admin.title, admin.link], ["member_joined", "Dee joined “Goa Trip”", `#/g/${f.g.groupId}`]);
 });
 
 test("each person sees only their own notifications; marking read clears the count", async t => {
   const f = await fixture(t);
   const { ids } = f.g;
   await f.post("Bea", "/expenses", { description: "Snacks", amount: "10", paidBy: ids.Bea, memberIds: [ids.Bea, ids.Cy] });
-  assert.equal((await f.inbox("admin")).items.length, 0, "the admin is not in this expense");
+  assert.equal((await f.inbox("admin")).items.filter(n => n.kind.startsWith("expense")).length, 0, "the admin is not in this expense");
   assert.equal((await f.inbox("Cy")).unread, 1);
   assert.equal((await call(f.env, "/api/notifications/read", { method: "POST", cookie: f.g.cookies.Cy, body: {} })).status, 200);
   const after = await f.inbox("Cy");
@@ -89,6 +89,6 @@ test("each person sees only their own notifications; marking read clears the cou
   assert.ok(after.items[0].readAt > 0, "kept, marked read");
   assert.equal((await call(f.env, "/api/notifications")).status, 401);
   // Deleting the group clears its notifications.
-  await call(f.env, `/api/admin/groups/${f.g.groupId}/delete`, { method: "POST", cookie: f.g.adminCookie, body: {} });
+  assert.equal((await call(f.env, `/api/groups/${f.g.groupId}/delete`, { method: "POST", cookie: f.g.adminCookie, body: {} })).status, 200);
   assert.equal(f.raw.prepare("SELECT COUNT(*) AS n FROM appx_notifications").get().n, 0);
 });

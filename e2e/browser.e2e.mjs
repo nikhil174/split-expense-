@@ -1,9 +1,7 @@
 // Browser end-to-end test against a running Worker (local `wrangler dev`).
 // Not part of `npm test`; run with `npm run test:e2e` after starting
-// `npx wrangler dev --local` with ADMIN_PIN set in .dev.vars.
+// `npx wrangler dev --local`. It creates its own accounts each run.
 //   E2E_BASE_URL    default http://127.0.0.1:8787
-//   E2E_ADMIN_PIN   must match the running Worker's ADMIN_PIN
-//   E2E_ADMIN_NAME  admin name (default "E2E Admin"; the first admin login saves it)
 //   E2E_SHOTS_DIR   optional directory for screenshots
 // Never point this at production: it creates groups, members and payments.
 import assert from "node:assert/strict";
@@ -13,13 +11,14 @@ import { createRequire } from "node:module";
 const { chromium, devices } = createRequire(import.meta.url)("playwright");
 
 const BASE = process.env.E2E_BASE_URL || "http://127.0.0.1:8787";
-const PIN = process.env.E2E_ADMIN_PIN;
-const ADMIN = process.env.E2E_ADMIN_NAME || "E2E Admin";
+const ADMIN = "E2E Admin";
 const SHOTS = process.env.E2E_SHOTS_DIR;
-if (!PIN) throw new Error("Set E2E_ADMIN_PIN");
 if (/workers\.dev|split-expense\./.test(BASE) && !process.env.E2E_ALLOW_REMOTE) throw new Error("Refusing to run write tests against a deployed Worker");
 
-const GROUP = "E2E Trip " + Date.now().toString(36);
+const RUN = Date.now().toString(36);
+const GROUP = "E2E Trip " + RUN;
+// Usernames for this run's accounts.
+const USER = { admin: "e2eadmin_" + RUN, bea: "bea_" + RUN, cy: "cy_" + RUN };
 const browser = await chromium.launch();
 const step = name => console.log("✓", name);
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
@@ -39,17 +38,19 @@ async function noHorizontalOverflow(page, label) {
 const toast = (page, text) => page.locator("[data-sonner-toast]", { hasText: text }).first().waitFor();
 const heroStatus = page => page.getByTestId("balance-card").innerText();
 
-async function adminSignIn(page) {
-  await page.getByRole("tab", { name: "Admin", exact: true }).click();
-  await page.getByLabel("Admin name").fill(ADMIN);
-  await page.getByLabel("PIN").fill(PIN);
-  await page.getByRole("button", { name: "Sign in as admin" }).click();
-  await page.getByRole("tab", { name: "Home", exact: true }).waitFor();
-}
 const MEMBER_PIN = "2468";
-async function memberSignIn(page, name, pin = MEMBER_PIN) {
-  await page.getByLabel("Group").selectOption({ label: GROUP });
-  await page.getByLabel("Your approved name").fill(name);
+async function signUp(page, name, username) {
+  await page.getByRole("tab", { name: "Create account", exact: true }).click();
+  await page.getByLabel("Your name").fill(name);
+  await page.getByLabel("Username").fill(username);
+  await page.getByText("Available").waitFor();
+  await page.getByLabel("Choose a PIN").fill(MEMBER_PIN);
+  await page.getByLabel("Confirm PIN").fill(MEMBER_PIN);
+  await page.getByRole("button", { name: "Create account" }).last().click();
+  await page.getByRole("heading", { name: "Your groups" }).waitFor();
+}
+async function signIn(page, login, pin = MEMBER_PIN) {
+  await page.getByLabel("Username or email").fill(login);
   await page.getByLabel("PIN", { exact: true }).fill(pin);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("heading", { name: "Your groups" }).waitFor();
@@ -62,62 +63,50 @@ async function openGroup(page) {
 
 try {
   const admin = await newPage();
-  await adminSignIn(admin);
-  await admin.getByRole("tab", { name: "Admin", exact: true }).click();
-  await admin.getByRole("tab", { name: "Groups", exact: true }).click();
-  await admin.getByLabel("New group name").fill(GROUP);
-  await admin.getByRole("button", { name: "Create" }).click();
-  await toast(admin, "created");
-  step("admin signed in (one identity, two views) and created a group");
+  await signUp(admin, ADMIN, USER.admin);
+  await admin.getByRole("button", { name: "New group" }).click();
+  await admin.getByLabel("Group name").fill(GROUP);
+  await admin.getByRole("button", { name: "Create group" }).click();
+  await admin.getByRole("heading", { name: GROUP }).waitFor();
+  step("anyone creates an account (live username check) and a group, and is its admin");
 
   const bea = await newPage(), cy = await newPage();
-  for (const [page, name] of [[bea, "Bea E2E"], [cy, "Cy E2E"]]) {
-    await page.getByRole("tab", { name: "Request access", exact: true }).click();
-    await page.getByLabel("Your name").waitFor();
-    await page.getByLabel("Group").selectOption({ label: GROUP });
-    await page.getByLabel("Your name").fill(name);
-    await page.getByLabel("Choose a PIN").fill(MEMBER_PIN);
-    await page.getByLabel("Confirm PIN").fill(MEMBER_PIN);
-    await page.getByRole("button", { name: "Request access" }).click();
-    await page.getByText("Waiting for approval").waitFor();
+  await signUp(bea, "Bea E2E", USER.bea);
+  await signUp(cy, "Cy E2E", USER.cy);
+  // The admin invites both by username; an unknown username is "not found".
+  await admin.getByRole("button", { name: /1 member/ }).click();
+  const invites = admin.getByRole("dialog");
+  await invites.getByLabel("Username or email to invite").fill("nobody_" + RUN);
+  await invites.getByRole("button", { name: "Invite", exact: true }).click();
+  await toast(admin, "No one on Split It has the username");
+  for (const u of [USER.bea, "@" + USER.cy]) {
+    await invites.getByLabel("Username or email to invite").fill(u);
+    await invites.getByRole("button", { name: "Invite", exact: true }).click();
+    await toast(admin, "They join when they accept");
   }
-  // The admin's own name is reserved: no second "person".
-  const dup = await newPage();
-  await dup.getByRole("tab", { name: "Request access", exact: true }).click();
-  await dup.getByLabel("Your name").waitFor();
-  await dup.getByLabel("Group").selectOption({ label: GROUP });
-  await dup.getByLabel("Your name").fill(ADMIN);
-  await dup.getByLabel("Choose a PIN").fill("1357");
-  await dup.getByLabel("Confirm PIN").fill("1357");
-  await dup.getByRole("button", { name: "Request access" }).click();
-  await toast(dup, "administrator's name");
-  await dup.context().close();
-
-  await admin.getByRole("tab", { name: /Requests/ }).click();
-  for (const name of ["Bea E2E", "Cy E2E"]) {
-    await admin.getByRole("button", { name: "Approve " + name }).click();
-    await toast(admin, name + " approved");
+  await invites.getByTestId("waiting").getByText("Invited, hasn't answered").nth(1).waitFor();
+  await shot(admin, "members-invited");
+  await admin.keyboard.press("Escape");
+  await invites.waitFor({ state: "detached" });
+  for (const page of [bea, cy]) {
+    await page.reload();
+    await page.getByRole("button", { name: "Join " + GROUP }).click();
+    await page.getByRole("heading", { name: GROUP }).waitFor();
+    await page.goto(BASE + "/#/");
   }
-  await shot(admin, "admin-requests");
-  step("members requested access; admin's own name refused; admin approved both");
+  step("admin invites by username (unknown one: not found); both accept the invitation and are in");
 
-  // Bea continues from the request screen, Cy signs in by name.
-  await bea.getByRole("button", { name: "Check approval" }).click();
-  await bea.getByRole("button", { name: "Continue" }).click();
-  await bea.getByRole("heading", { name: "Your groups" }).waitFor();
-  await cy.getByRole("button", { name: "Request with a different name or group" }).click();
-  await cy.getByRole("tab", { name: "Sign in", exact: true }).click();
-  await cy.getByLabel("Your approved name").waitFor();
-  // A wrong PIN is refused (with the tries left); the right one gets in.
-  await cy.getByLabel("Group").selectOption({ label: GROUP });
-  await cy.getByLabel("Your approved name").fill("Cy E2E");
+  // Cy signs out; a wrong PIN is refused (with the tries left); the right one gets in.
+  await cy.getByRole("button", { name: "Account", exact: true }).click();
+  await cy.getByRole("menuitem", { name: "Sign out" }).click();
+  await cy.getByLabel("Username or email").fill(USER.cy);
   await cy.getByLabel("PIN", { exact: true }).fill("1111");
   await cy.getByRole("button", { name: "Sign in", exact: true }).click();
   await toast(cy, "Incorrect PIN. 4 tries left.");
-  await memberSignIn(cy, "Cy E2E");
+  await signIn(cy, USER.cy);
   await bea.reload();
   await bea.getByRole("heading", { name: "Your groups" }).waitFor();
-  step("members request with a PIN; wrong PIN refused, right PIN signs in; session survives a reload");
+  step("sign in with username + PIN; wrong PIN refused; session survives a reload");
 
   await openGroup(bea);
   await noHorizontalOverflow(bea, "group page");
@@ -241,7 +230,7 @@ try {
   step("group balance opens the people popup; person drill-down lists both shared expenses with a running balance");
 
   // Bea adds her UPI ID and QR from the account menu; Cy then sees it when paying her.
-  await bea.getByRole("button", { name: "Account" }).click();
+  await bea.getByRole("button", { name: "Account", exact: true }).click();
   await bea.getByRole("menuitem", { name: "Your UPI" }).click();
   const upiSheet = bea.getByRole("dialog");
   await upiSheet.getByLabel("UPI ID").fill("bea.e2e@okaxis");
@@ -362,79 +351,72 @@ try {
   await bea2.waitFor({ state: "detached" });
   step("Settle up sends ₹35 for Bea to confirm; a rejected payment never counts; after confirming everyone is settled");
 
-  await admin.getByRole("tab", { name: "Home", exact: true }).click();
+  await admin.goto(BASE + "/#/");
   await openGroup(admin);
   await admin.getByRole("tab", { name: "Insights", exact: true }).click();
   const people = await admin.locator("section", { hasText: "People" }).last().innerText();
   assert.equal(people.split(ADMIN).length - 1, 1, "admin appears once in the group");
   assert.match(people, new RegExp(ADMIN + " \\(you\\)"));
-  await admin.getByRole("tab", { name: "Admin", exact: true }).click();
-  await admin.getByRole("tab", { name: "Expenses", exact: true }).click();
-  await admin.getByLabel("Filter by group").selectOption({ label: GROUP });
-  assert.match(await admin.getByTestId("admin-expense-summary").innerText(), /2 expenses · ₹110\.00/);
-  await noHorizontalOverflow(admin, "admin dashboard");
-  await shot(admin, "admin-expenses");
-  step("admin is one person in the group and switches between My groups and Admin");
+  step("the group's admin is one person in it, marked Admin and (you)");
 
-  // Rename a member: the new name shows on their past expenses.
-  await admin.getByRole("tab", { name: /^Requests/ }).click();
-  await admin.getByRole("button", { name: "Actions for Cy E2E" }).click();
-  await admin.getByRole("menuitem", { name: "Rename" }).click();
-  await admin.getByLabel("New name").fill("Cyrus E2E");
-  await admin.getByRole("button", { name: "Save name" }).click();
-  await toast(admin, "Renamed to “Cyrus E2E”");
-  await admin.getByRole("button", { name: "Actions for Cyrus E2E" }).waitFor();
-  await admin.getByRole("tab", { name: "Home", exact: true }).click();
-  await openGroup(admin);
-  await admin.getByRole("tab", { name: "Payments", exact: true }).click();
-  await admin.locator("tbody").getByText(/Cyrus E2E/).first().waitFor();
-  assert.equal(await admin.locator("tbody").getByText(/\bCy E2E\b/).count(), 0, "old name gone from history");
-  step("admin renames a member; the new name shows on their past payments");
-
-  // Group screen: "N members" opens a popup; the admin edits a name right there.
+  // Members sheet: admin badge for everyone to see; only admins get the controls.
   await admin.getByRole("button", { name: /3 members/ }).click();
-  const members = admin.getByRole("dialog");
-  await members.getByRole("button", { name: "Rename Bea E2E" }).click();
-  await members.getByLabel("New name for Bea E2E").fill("Beatrice E2E");
-  await members.getByRole("button", { name: "Save name" }).click();
-  await toast(admin, "Renamed to “Beatrice E2E”");
-  await members.getByText("Beatrice E2E").waitFor();
-  assert.equal(await members.getByRole("button", { name: /^Rename E2E Admin/ }).count(), 0, "the admin's own name is not edited here");
+  let members = admin.getByRole("dialog");
+  await members.getByRole("button", { name: "Manage Cy E2E" }).click();
+  await admin.getByRole("menuitem", { name: "Make admin" }).click();
+  await toast(admin, "Cy E2E is now an admin");
   await admin.keyboard.press("Escape");
   await members.waitFor({ state: "detached" });
-  // A normal member sees who is in the group, but no Edit buttons.
   await cy.goto(BASE + "/#/");
   await cy.reload();
   await openGroup(cy);
   await cy.getByRole("button", { name: /3 members/ }).click();
-  await cy.getByRole("dialog").getByText("Beatrice E2E").waitFor();
-  // A member can edit only their own name.
-  assert.deepEqual(await cy.getByRole("dialog").getByRole("button", { name: /^Rename / }).evaluateAll(els => els.map(e => e.getAttribute("aria-label"))), ["Rename Cyrus E2E"], "members rename only themselves");
+  members = cy.getByRole("dialog");
+  await members.getByTestId("invite-form").waitFor();
+  assert.equal(await members.getByText("Admin", { exact: true }).count(), 2, "two admins shown");
   await cy.keyboard.press("Escape");
-  await cy.getByRole("dialog").waitFor({ state: "detached" });
-  // ...also from the account menu.
-  await cy.getByRole("button", { name: "Account" }).click();
-  await cy.getByRole("menuitem", { name: "Change your name" }).click();
-  await cy.getByRole("alertdialog").getByLabel("Your name").fill("Cy Final");
-  await cy.getByRole("button", { name: "Save name" }).click();
-  await toast(cy, "You're now “Cy Final”");
-  await cy.getByRole("button", { name: /3 members/ }).click();
-  await cy.getByRole("dialog").getByText("Cy Final").waitFor();
-  await cy.keyboard.press("Escape");
-  await cy.getByRole("dialog").waitFor({ state: "detached" });
-  step("tap 'N members': admin edits anyone's name; a member edits only their own (popup or account menu)");
+  await members.waitFor({ state: "detached" });
+  await bea.goto(BASE + "/#/");
+  await bea.reload();
+  await openGroup(bea);
+  await bea.getByRole("button", { name: /3 members/ }).click();
+  members = bea.getByRole("dialog");
+  await members.getByText("Bea E2E").first().waitFor();
+  assert.equal(await members.getByTestId("invite-form").count(), 0, "members can't invite");
+  assert.equal(await members.getByRole("button", { name: /^Manage / }).count(), 0, "members can't manage");
+  await bea.keyboard.press("Escape");
+  await members.waitFor({ state: "detached" });
+  step("admins make others admin; everyone sees who is admin; only admins see invite and manage controls");
+
+  // Profile: change your name (shows on past payments) and username.
+  await cy.getByRole("button", { name: "Account", exact: true }).click();
+  await cy.getByRole("menuitem", { name: "Your profile" }).click();
+  await cy.getByLabel("Name", { exact: true }).fill("Cyrus E2E");
+  await cy.getByLabel("Username", { exact: true }).fill(USER.cy + "x");
+  await cy.getByText("Available").waitFor();
+  await cy.getByRole("button", { name: "Save changes" }).click();
+  await toast(cy, "Profile saved");
+  await cy.getByRole("heading", { name: "Cyrus E2E" }).waitFor();
+  USER.cy += "x";
+  await admin.goto(BASE + "/#/");
+  await admin.reload();
+  await openGroup(admin);
+  await admin.getByRole("tab", { name: "Payments", exact: true }).click();
+  await admin.locator("tbody").getByText(/Cyrus E2E/).first().waitFor();
+  assert.equal(await admin.locator("tbody").getByText(/\bCy E2E\b/).count(), 0, "old name gone from history");
+  step("profile: a person changes their name and username; the new name shows on their past payments");
 
   for (const page of [admin, cy]) {
-    await page.getByRole("button", { name: "Account" }).click();
+    await page.getByRole("button", { name: "Account", exact: true }).click();
     await page.getByRole("menuitem", { name: "Sign out" }).click();
     await page.getByRole("heading", { name: "Split It", level: 1 }).waitFor();
     assert.ok(new URL(page.url()).hash === "#/" || new URL(page.url()).hash === "", "sign-out resets the route");
     await page.reload();
     await page.getByRole("heading", { name: "Split It", level: 1 }).waitFor();
   }
-  await adminSignIn(admin);
-  await admin.getByRole("heading", { name: "Your groups" }).waitFor();
-  step("sign out lands on the sign-in screen (admin and member), stays there after reload, and signing back in works");
+  await signIn(admin, USER.admin);
+  await signIn(cy, USER.cy);
+  step("sign out lands on the sign-in screen, stays there after reload, and signing back in works (new username too)");
   // Installable: manifest, icons and service worker are served, Chrome reports no
   // installability errors, and "Install the app" explains how on this phone.
   const fresh = await newPage();

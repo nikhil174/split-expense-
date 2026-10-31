@@ -73,7 +73,7 @@ test("the receiver can reject; the payer can cancel while it is pending", async 
 test("payments waiting for confirmation count against what can still be paid", async t => {
   const f = await fixture(t);
   assert.equal((await f.pay("Bea", "Bea", "admin", "30")).status, 201);
-  const debt = (await f.get("Bea", "/settlements/mine")).data.youOwe.find(d => d.toMemberId === "admin");
+  const debt = (await f.get("Bea", "/settlements/mine")).data.youOwe.find(d => d.toMemberId === f.g.ids.admin);
   assert.deepEqual([debt.amountCents, debt.waitingCents], [5000, 3000]);
   const over = await f.pay("Bea", "Bea", "admin", "30");
   assert.equal(over.status, 409);
@@ -106,7 +106,7 @@ test("payments recorded by the receiver, or to someone who cannot confirm, count
   // Once Cy is removed from the group nobody can confirm, so the admin's record counts.
   await f.post("Cy", `/settlements/${between.data.id}/cancel`).then(r => assert.equal(r.status, 403));
   await f.post("admin", `/settlements/${between.data.id}/cancel`);
-  await call(f.env, `/api/admin/requests/${f.g.ids.Cy}/remove`, { method: "POST", cookie: f.g.adminCookie, body: {} });
+  assert.equal((await call(f.env, `/api/groups/${f.g.groupId}/members/${f.g.ids.Cy}/remove`, { method: "POST", cookie: f.g.adminCookie, body: {} })).status, 200);
   const removed = await f.pay("admin", "Bea", "Cy", "10");
   assert.deepEqual([removed.status, removed.data.status], [201, "confirmed"]);
 });

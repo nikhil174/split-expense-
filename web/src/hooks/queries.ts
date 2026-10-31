@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  get, post, type AccessRequest, type AdminDashboard, type AdminExpense, type AdminGroup, type Balance, type Dashboard,
-  type Debt, type Expense, type GroupDetail, type GroupSummary, type Me, type MergePreview, type MemberSummary, type AppNotification, type GroupPaymentMethod, type Mine, type PaymentMethod, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
+  get, post, type Balance, type Dashboard,
+  type Debt, type Expense, type GroupDetail, type GroupSummary, type Invitation, type Me, type MemberSummary, type AppNotification, type GroupPaymentMethod, type Mine, type PaymentMethod, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
 } from "@/lib/api";
 
 export const keys = {
@@ -13,12 +13,14 @@ export const keys = {
   paymentMethod: ["payment-method"] as const,
   notifications: ["notifications"] as const,
   group: (id: string) => ["group", id] as const,
-  admin: ["admin"] as const,
+  invitations: ["invitations"] as const,
 };
 
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => get<Me>("/api/me"), staleTime: 60_000 });
 export const useGroups = (enabled = true) =>
   useQuery({ queryKey: keys.groups, queryFn: () => get<{ groups: GroupSummary[] }>("/api/groups").then(d => d.groups), enabled });
+// Groups I've been invited to and haven't answered.
+export const useInvitations = () => useQuery({ queryKey: keys.invitations, queryFn: () => get<{ invitations: Invitation[] }>("/api/invitations").then(d => d.invitations), refetchInterval: 60_000 });
 
 // Payments waiting for me to confirm, or that I sent and are waiting on someone else.
 export const usePendingPayments = () => useQuery({ queryKey: keys.pending, queryFn: () => get<{ toConfirm: PendingPayment[]; waiting: PendingPayment[] }>("/api/payments/pending"), refetchInterval: 60_000 });
@@ -62,7 +64,7 @@ export const usePair = (id: string, a: string | null, b: string | null) =>
 export const usePerson = (id: string, memberId: string) => useQuery(groupQuery<PersonView>(id, "person-" + memberId, "/with/" + encodeURIComponent(memberId)));
 
 export function refreshGroup(qc: QueryClient, groupId: string) {
-  return Promise.all([qc.invalidateQueries({ queryKey: keys.group(groupId) }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.pending }), qc.invalidateQueries({ queryKey: keys.admin })]);
+  return Promise.all([qc.invalidateQueries({ queryKey: keys.group(groupId) }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.pending })]);
 }
 
 export type NewExpense =
@@ -109,25 +111,15 @@ export function useRecordPayment(groupId: string) {
   });
 }
 
-// ----- Admin -----
-// Admin data changes from other people's actions (new requests, expenses), so
-// refetch on every tab switch instead of trusting a cached copy.
-const adminQuery = <T,>(part: string, path: string) => ({ queryKey: [...keys.admin, part] as const, queryFn: () => get<T>(path), staleTime: 0 });
-export const useAdminDashboard = () => useQuery(adminQuery<AdminDashboard>("dashboard", "/api/admin/dashboard"));
-export const useAdminRequests = () => useQuery({ ...adminQuery<{ requests: AccessRequest[] }>("requests", "/api/admin/requests"), select: d => d.requests, refetchInterval: 30_000 });
-export const useAdminGroups = () => useQuery({ ...adminQuery<{ groups: AdminGroup[] }>("groups", "/api/admin/groups"), select: d => d.groups });
-export const useAdminExpenses = () => useQuery({ ...adminQuery<{ expenses: AdminExpense[] }>("expenses", "/api/admin/expenses"), select: d => d.expenses });
-export const useMergePreview = (requestId: string | null) =>
-  useQuery({ ...adminQuery<MergePreview>("merge-" + requestId, `/api/admin/requests/${requestId}/merge-preview`), enabled: !!requestId, staleTime: 0 });
-
-// Admin writes touch many screens; refresh everything that could have changed.
-export function useAdminAction<V>(fn: (v: V) => Promise<unknown>, success?: (v: V) => string) {
+// ----- Accounts and group membership -----
+// Any write that changes who is where: refresh everything that could show it.
+export function useAccountAction<V, R = unknown>(fn: (v: V) => Promise<R>, success?: (v: V) => string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSuccess: async (_d, v) => {
       if (success) toast.success(success(v));
-      await Promise.all([qc.invalidateQueries({ queryKey: keys.admin }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: ["group"] }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.me })]);
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.me }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.invitations }), qc.invalidateQueries({ queryKey: ["group"] }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.notifications })]);
     },
     onError: (e: Error) => toast.error(e.message),
   });
