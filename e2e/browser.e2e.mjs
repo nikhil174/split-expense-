@@ -282,6 +282,15 @@ try {
   await bea.goto(BASE + "/#/");
   await bea.reload();
   await bea.getByText("Cy E2E says they paid you ₹20.00").waitFor();
+  // The bell shows it too, and the Notifications screen lists it.
+  const bell = bea.getByRole("button", { name: /^Notifications, \d+ unread$/ });
+  await bell.waitFor();
+  await bell.click();
+  await bea.getByRole("heading", { name: "Notifications" }).waitFor();
+  await bea.getByRole("button").filter({ hasText: "Cy E2E says they paid you ₹20.00" }).waitFor();
+  await bea.getByRole("button", { name: "Notifications", exact: true }).waitFor(); // opening marks them read
+  await bea.goto(BASE + "/#/");
+  await bea.getByText("Cy E2E says they paid you ₹20.00").waitFor();
   await shot(bea, "bea-confirm");
   await bea.getByRole("button", { name: "Confirm ₹20.00 from Cy E2E" }).click();
   await toast(bea, "Confirmed ₹20.00 from Cy E2E");
@@ -289,7 +298,7 @@ try {
   await cy.reload();
   await cy.getByText("You owe Bea E2E ₹35.00").waitFor();
   assert.equal(await cy.locator("tbody tr").count(), 3);
-  step("partial repayment ₹20 waits for Bea; Bea confirms it on Home; then it counts");
+  step("partial repayment ₹20 waits for Bea (bell + Notifications screen); Bea confirms it on Home; then it counts");
 
   await cy.goBack();
   await cy.getByRole("heading", { name: GROUP }).waitFor();

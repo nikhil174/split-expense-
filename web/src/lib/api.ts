@@ -66,6 +66,10 @@ export type MemberSummary = {
 // How a person likes to be paid (UPI only for now).
 export type PaymentMethod = { kind: "upi"; upiId: string | null; hasQr: boolean; updatedAt: number | null };
 export type GroupPaymentMethod = PaymentMethod & { memberId: string; name: string; isMe: boolean };
+export type AppNotification = {
+  id: string; kind: string; title: string; body: string | null; link: string | null; actorName: string | null;
+  createdAt: number; readAt: number | null; groupId: string | null; groupName: string | null;
+};
 export type PendingPayment = {
   id: string; groupId: string; groupName: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
   amountCents: number; createdAt: number; incoming: boolean;

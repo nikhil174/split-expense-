@@ -1,7 +1,8 @@
 import * as React from "react";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LazyMotion } from "motion/react";
-import { Download, LogOut, Pencil, Wallet } from "lucide-react";
+import { Bell, Download, LogOut, Pencil, Wallet } from "lucide-react";
+import { NotificationsScreen } from "@/features/notifications/NotificationsScreen";
 import { ChangeNameDialog } from "@/components/app/ChangeNameDialog";
 import { PaymentMethodSheet } from "@/features/groups/UpiPayments";
 import { useInstallApp } from "@/components/app/InstallApp";
@@ -13,9 +14,10 @@ import { GroupsScreen } from "@/features/groups/GroupsScreen";
 import { GroupScreen } from "@/features/groups/GroupScreen";
 import { PersonScreen } from "@/features/groups/PersonScreen";
 import { AdminScreen } from "@/features/admin/AdminScreen";
-import { keys, useMe } from "@/hooks/queries";
+import { keys, useMe, useNotifications } from "@/hooks/queries";
 import { ApiError, post } from "@/lib/api";
 import { navigate, useRoute } from "@/lib/route";
+import { cn } from "@/lib/utils";
 
 const loadMotionFeatures = () => import("@/lib/motion-features").then(m => m.default);
 
@@ -93,16 +95,17 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
   return (
     <div className="min-h-dvh overflow-x-clip">
       <header className="sticky top-0 z-30 bg-[#f7f7f5]/70 pt-[env(safe-area-inset-top)] backdrop-blur-2xl backdrop-saturate-150">
-        <div className="mx-auto flex h-[58px] max-w-2xl items-center gap-3 px-4">
+        <div className="mx-auto flex h-[58px] max-w-2xl items-center gap-2 px-4 min-[400px]:gap-3">
           <button type="button" onClick={() => navigate({ name: isAdmin && view === "admin" ? "admin" : "home" })} className="flex cursor-pointer items-baseline gap-1.5" aria-label="Home">
             <Wordmark />
           </button>
           <div className="flex flex-1 justify-end">
             {isAdmin && (
-              <Segmented id="view-switch" className="w-[164px]" value={view} onChange={v => navigate({ name: v === "admin" ? "admin" : "home" })}
+              <Segmented id="view-switch" className="w-[148px] min-[400px]:w-[164px]" value={view} onChange={v => navigate({ name: v === "admin" ? "admin" : "home" })}
                 options={[{ value: "groups", label: "Home" }, { value: "admin", label: "Admin" }]} />
             )}
           </div>
+          <NotificationBell active={route.name === "notifications"} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" className="cursor-pointer rounded-full transition-transform active:scale-95" aria-label="Account"><PersonAvatar id={user.id} name={user.name} size="sm" /></button>
@@ -131,9 +134,27 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
           {route.name === "home" && <GroupsScreen name={user.name} />}
           {route.name === "admin" && isAdmin && <AdminScreen adminName={user.name} />}
           {route.name === "group" && <GroupScreen groupId={route.groupId} tab={route.tab} />}
+          {route.name === "notifications" && <NotificationsScreen />}
           {route.name === "person" && <PersonScreen groupId={route.groupId} memberId={route.memberId} />}
         </React.Fragment>
       </AnimatePresence>
     </div>
+  );
+}
+
+// Bell next to the profile circle, with how many notifications are unread.
+function NotificationBell({ active }: { active: boolean }) {
+  const q = useNotifications();
+  const unread = q.data?.unread || 0;
+  return (
+    <button type="button" onClick={() => navigate({ name: "notifications" })} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
+      className={cn("relative grid size-8 shrink-0 cursor-pointer place-items-center rounded-full transition-transform active:scale-90 min-[400px]:size-9", active ? "bg-[#141716] text-white" : "bg-[#141716]/[0.05] text-foreground")}>
+      <Bell className="size-[18px]" strokeWidth={2} />
+      {unread > 0 && (
+        <span className="tabular absolute -top-1 -right-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-negative px-1 text-[10.5px] leading-none font-semibold text-white ring-2 ring-[#f7f7f5]">
+          {unread > 9 ? "9+" : unread}
+        </span>
+      )}
+    </button>
   );
 }

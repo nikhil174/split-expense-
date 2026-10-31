@@ -265,6 +265,28 @@ function parseQr(value) {
 }
 const methodOut = r => ({ kind: "upi", upiId: r?.upi_id || null, hasQr: !!r?.qr_base64, updatedAt: r?.updated_at || null });
 
+// In-app notifications. Each helper returns INSERT statements so they go in
+// the same batch as the change they describe. Nobody is told about their own
+// action.
+const inrText = c => "₹" + (c / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function notifyStmt(db, n) {
+  return db.prepare("INSERT INTO appx_notifications(id,recipient_id,group_id,kind,title,body,link,actor_name,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
+    .bind(id(), n.to, n.groupId ?? null, n.kind, n.title, n.body ?? null, n.link ?? null, n.actor ?? null, Date.now());
+}
+// Everyone in an expense (payer and split), told what it means for them.
+function expenseNotes(db, { kind, gid, actor, desc, cents, paidBy, splitRows, nameOf, alsoTell = [] }) {
+  const verb = { expense_added: "added", expense_edited: "changed", expense_deleted: "deleted" }[kind];
+  const people = new Set([paidBy, ...splitRows.map(r => r.memberId), ...alsoTell]);
+  people.delete(actor.id);
+  return [...people].map(to => {
+    const share = splitRows.find(r => r.memberId === to)?.amountCents || 0;
+    const effect = (paidBy === to ? cents : 0) - share;
+    const body = kind === "expense_deleted" ? "It no longer counts in your balance."
+      : `${paidBy === to ? "You" : nameOf(paidBy)} paid ${inrText(cents)} · ${effect > 0 ? `you get back ${inrText(effect)}` : effect < 0 ? `you owe ${inrText(-effect)}` : "you're not in the split"}`;
+    return notifyStmt(db, { to, groupId: gid, kind, title: `${actor.name} ${verb} “${desc}”`, body, link: `#/g/${gid}`, actor: actor.name });
+  });
+}
+
 // SQL for what member f still owes member t in group g (each a placeholder
 // like "?2"), from expenses and confirmed payments. With reserve, payments
 // from f to t still waiting for confirmation are subtracted too, so pending
@@ -306,6 +328,7 @@ async function api(req, env, url) {
         db.prepare("UPDATE appx_access_requests SET status='pending',requested_at=?,approved_at=NULL,expires_at=NULL WHERE id=?").bind(now, existing.id),
         db.prepare("DELETE FROM appx_sessions WHERE request_id=?").bind(existing.id),
       ]);
+      await db.batch([notifyStmt(db, { to: "admin", groupId, kind: "access_request", title: `${name} wants to join again`, body: "Review it in Admin → Requests.", link: "#/admin", actor: name })]);
       return json({ ok: true, requestId: existing.id, message: "Access request sent again using your existing membership entry." }, 200);
     }
     const requestId = id();
@@ -316,6 +339,7 @@ async function api(req, env, url) {
       if (String(e).toLowerCase().includes("unique")) return fail("Someone in this group already uses that name. Choose a different name.", 409);
       throw e;
     }
+    await db.batch([notifyStmt(db, { to: "admin", groupId, kind: "access_request", title: `${name} wants to join`, body: "Review it in Admin → Requests.", link: "#/admin", actor: name })]);
     return json({ ok: true, requestId, message: "Group access request submitted." }, 201);
   }
   if (method === "POST" && p === "/api/admin/login") {
@@ -382,6 +406,7 @@ async function api(req, env, url) {
         db.prepare("DELETE FROM appx_group_members WHERE group_id=?").bind(gid),
         db.prepare("DELETE FROM appx_sessions WHERE request_id IN (SELECT id FROM appx_access_requests WHERE group_id=?)").bind(gid),
         db.prepare("DELETE FROM appx_access_requests WHERE group_id=?").bind(gid),
+        db.prepare("DELETE FROM appx_notifications WHERE group_id=?").bind(gid),
         db.prepare("DELETE FROM appx_groups WHERE id=?").bind(gid),
       ]);
       return json({ ok: true, deletedGroup: g.name });
@@ -442,9 +467,11 @@ async function api(req, env, url) {
       if (!reqRow) return fail("Request not found.", 404);
       if (action === "approve") {
         if (!reqRow.group_id) return fail("This request is not linked to a group.", 409);
+        const groupName = (await db.prepare("SELECT name FROM appx_groups WHERE id=?").bind(reqRow.group_id).first())?.name || "the group";
         await db.batch([
           db.prepare("UPDATE appx_access_requests SET status='approved',approved_at=?,expires_at=NULL WHERE id=?").bind(Date.now(), rid),
           db.prepare("INSERT OR IGNORE INTO appx_group_members(group_id,member_id,name) VALUES(?,?,?)").bind(reqRow.group_id, rid, reqRow.display_name),
+          notifyStmt(db, { to: rid, groupId: reqRow.group_id, kind: "approved", title: `You're in “${groupName}”`, body: "The admin approved you. Add expenses and settle up here.", link: `#/g/${reqRow.group_id}`, actor: await adminName(db) }),
         ]);
       } else {
         await db.batch([
@@ -648,6 +675,20 @@ async function api(req, env, url) {
     await db.prepare("DELETE FROM appx_payment_methods WHERE member_id=?").bind(u.id).run();
     return json({ method: methodOut(null) });
   }
+  // My notifications, newest first, with how many are unread. Old ones (90
+  // days) are cleared as they are read.
+  if (method === "GET" && p === "/api/notifications") {
+    await db.prepare("DELETE FROM appx_notifications WHERE recipient_id=? AND created_at<?").bind(u.id, Date.now() - 90 * 24 * 60 * MINUTE).run();
+    const [rows, unread] = await Promise.all([
+      db.prepare("SELECT n.id,n.kind,n.title,n.body,n.link,n.actor_name AS actorName,n.created_at AS createdAt,n.read_at AS readAt,n.group_id AS groupId,g.name AS groupName FROM appx_notifications n LEFT JOIN appx_groups g ON g.id=n.group_id WHERE n.recipient_id=? ORDER BY n.created_at DESC LIMIT 100").bind(u.id).all(),
+      db.prepare("SELECT COUNT(*) AS n FROM appx_notifications WHERE recipient_id=? AND read_at IS NULL").bind(u.id).first(),
+    ]);
+    return json({ items: rows.results, unread: Number(unread?.n || 0) });
+  }
+  if (method === "POST" && p === "/api/notifications/read") {
+    await db.prepare("UPDATE appx_notifications SET read_at=? WHERE recipient_id=? AND read_at IS NULL").bind(Date.now(), u.id).run();
+    return json({ ok: true, unread: 0 });
+  }
   // A member changes their own name. (The admin's name is their login, so it
   // is not changed here.)
   if (method === "POST" && p === "/api/me/name") {
@@ -696,9 +737,11 @@ async function api(req, env, url) {
       if (parsed.error) return fail(parsed.error);
       const { desc, cents, paidBy, splitRows } = parsed;
       const eid = id();
+      const nameOf = nameLookup(await groupMembers(db, gid));
       await db.batch([
         db.prepare("INSERT INTO appx_expenses(id,group_id,description,amount_cents,paid_by,created_by,created_at) VALUES(?,?,?,?,?,?,?)").bind(eid, gid, desc, cents, paidBy, u.id, Date.now()),
         ...splitRows.map(row => db.prepare("INSERT INTO appx_splits(expense_id,member_id,amount_cents) VALUES(?,?,?)").bind(eid, row.memberId, row.amountCents)),
+        ...expenseNotes(db, { kind: "expense_added", gid, actor: u, desc, cents, paidBy, splitRows, nameOf }),
       ]);
       return json({ ok: true, id: eid, amountCents: cents, splits: splitRows }, 201);
     }
@@ -713,7 +756,10 @@ async function api(req, env, url) {
       const parsed = await parseExpense(db, gid, await body(req));
       if (parsed.error) return fail(parsed.error);
       const { desc, cents, paidBy, splitRows } = parsed;
+      // People taken out of the split hear about it too.
+      const before = (await db.prepare("SELECT member_id FROM appx_splits WHERE expense_id=?").bind(e.id).all()).results.map(r => r.member_id);
       await db.batch([
+        ...expenseNotes(db, { kind: "expense_edited", gid, actor: u, desc, cents, paidBy, splitRows, nameOf: nameLookup(await groupMembers(db, gid)), alsoTell: [e.paid_by, ...before] }),
         db.prepare("UPDATE appx_expenses SET description=?,amount_cents=?,paid_by=? WHERE id=? AND group_id=?").bind(desc, cents, paidBy, e.id, gid),
         db.prepare("DELETE FROM appx_splits WHERE expense_id=?").bind(e.id),
         ...splitRows.map(row => db.prepare("INSERT INTO appx_splits(expense_id,member_id,amount_cents) VALUES(?,?,?)").bind(e.id, row.memberId, row.amountCents)),
@@ -744,10 +790,12 @@ async function api(req, env, url) {
     const deleteExpense = tail.match(/^expenses\/([\w-]+)\/delete$/);
     if (method === "POST" && deleteExpense) {
       if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
-      const e = await db.prepare("SELECT id,paid_by FROM appx_expenses WHERE id=? AND group_id=?").bind(deleteExpense[1], gid).first();
+      const e = await db.prepare("SELECT id,paid_by,description,amount_cents FROM appx_expenses WHERE id=? AND group_id=?").bind(deleteExpense[1], gid).first();
       if (!e) return fail("Expense not found.", 404);
       if (!isAdmin && e.paid_by !== u.id) return fail("Only the person who paid for this expense or the admin can delete it.", 403);
+      const oldSplits = (await db.prepare("SELECT member_id AS memberId,amount_cents AS amountCents FROM appx_splits WHERE expense_id=?").bind(e.id).all()).results;
       await db.batch([
+        ...expenseNotes(db, { kind: "expense_deleted", gid, actor: u, desc: e.description, cents: e.amount_cents, paidBy: e.paid_by, splitRows: oldSplits, nameOf: nameLookup(await groupMembers(db, gid)) }),
         db.prepare("DELETE FROM appx_splits WHERE expense_id=?").bind(e.id),
         db.prepare("DELETE FROM appx_expenses WHERE id=? AND group_id=?").bind(e.id, gid),
       ]);
@@ -888,6 +936,15 @@ async function api(req, env, url) {
         "INSERT INTO appx_settlements(id,group_id,from_member_id,to_member_id,amount_cents,created_by,created_at,status,decided_by,decided_at) SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10 WHERE ?5 <= " + owedSql("?2", "?3", "?4", true)
       ).bind(settlementId, gid, from, to, cents, u.id, now, status, status === "confirmed" ? u.id : null, status === "confirmed" ? now : null).run();
       if (changesOf(result) !== 1) return fail("The outstanding amount changed. Refresh and try again.", 409);
+      // Tell the receiver (to confirm it) and, if someone else recorded it, the payer.
+      const nm = x => byId.get(x)?.name || FORMER_MEMBER, notes = [];
+      if (to !== u.id) notes.push(notifyStmt(db, { to, groupId: gid, kind: status === "pending" ? "payment_pending" : "payment_recorded", actor: u.name,
+        title: status === "pending" ? `${nm(from)} says they paid you ${inrText(cents)}` : `${u.name} recorded ${inrText(cents)} from ${nm(from)} to you`,
+        body: status === "pending" ? "Confirm it once you've received it." : "It counts in your balance now.", link: "#/" }));
+      if (from !== u.id) notes.push(notifyStmt(db, { to: from, groupId: gid, kind: "payment_recorded", actor: u.name,
+        title: `${u.name} recorded your payment of ${inrText(cents)} to ${to === u.id ? "them" : nm(to)}`,
+        body: status === "pending" ? `It counts once ${nm(to)} confirms it.` : "It counts in your balance now.", link: `#/g/${gid}/payments` }));
+      if (notes.length) await db.batch(notes);
       return json({ ok: true, id: settlementId, amountCents: cents, status }, 201);
     }
     // The receiver (or the admin) confirms or rejects a pending payment; the
@@ -899,19 +956,24 @@ async function api(req, env, url) {
       if (!pay) return fail("Payment not found.", 404);
       if (pay.status !== "pending") return fail(`This payment was already ${pay.status}.`, 409);
       const now = Date.now();
+      const nm = nameLookup(await groupMembers(db, gid));
+      const tell = (to, kind, title, body, link = `#/g/${gid}/payments`) => to === u.id ? Promise.resolve() : db.batch([notifyStmt(db, { to, groupId: gid, kind, title, body, link, actor: u.name })]);
       if (action === "cancel") {
         if (!isAdmin && pay.fromId !== u.id) return fail("Only the person who paid or the admin can cancel this payment.", 403);
         await db.prepare("DELETE FROM appx_settlements WHERE id=? AND status='pending'").bind(sid).run();
+        await tell(pay.toId, "payment_cancelled", `${u.id === pay.fromId ? nm(pay.fromId) : u.name} cancelled a payment of ${inrText(pay.cents)}`, "You don't need to confirm it any more.");
         return json({ ok: true, cancelled: true });
       }
       if (!isAdmin && pay.toId !== u.id) return fail("Only the person who received this payment can confirm or reject it.", 403);
       if (action === "reject") {
         await db.prepare("UPDATE appx_settlements SET status='rejected',decided_by=?,decided_at=? WHERE id=? AND status='pending'").bind(u.id, now, sid).run();
+        await tell(pay.fromId, "payment_rejected", `${u.name} said they didn't receive your ${inrText(pay.cents)}`, "It doesn't count. Check with them and record it again if needed.");
         return json({ ok: true, status: "rejected" });
       }
       // Confirm only while it still fits what is owed (expenses may have changed).
       const result = await db.prepare("UPDATE appx_settlements SET status='confirmed',decided_by=?1,decided_at=?2 WHERE id=?3 AND status='pending' AND amount_cents <= " + owedSql("?4", "?5", "?6")).bind(u.id, now, sid, gid, pay.fromId, pay.toId).run();
       if (changesOf(result) !== 1) return fail("This payment is now more than what is owed, because expenses changed since it was sent. Reject it and ask for a new one.", 409);
+      await tell(pay.fromId, "payment_confirmed", `${u.name} confirmed your payment of ${inrText(pay.cents)}`, "It counts in your balance now.");
       return json({ ok: true, status: "confirmed" });
     }
     if (method === "GET" && tail === "balances") {
