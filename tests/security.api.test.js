@@ -45,8 +45,8 @@ test("every group-admin route needs an admin of that group", async t => {
 test("session cookies are HttpOnly, Secure and SameSite=Lax", async t => {
   const { raw, env } = await makeEnv();
   t.after(() => raw.close());
-  const up = await call(env, "/api/auth/signup", { method: "POST", body: { name: "Bea", username: "bea", pin: "1234" } });
-  const signin = await call(env, "/api/auth/signin", { method: "POST", body: { login: "bea", pin: "1234" } });
+  const up = await call(env, "/api/auth/signup", { method: "POST", body: { name: "Bea", username: "bea", password: "beapass12" } });
+  const signin = await call(env, "/api/auth/signin", { method: "POST", body: { login: "bea", password: "beapass12" } });
   for (const c of [up.setCookie, signin.setCookie]) assert.match(c, /^split_user=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000$/);
   const out = await call(env, "/api/logout", { method: "POST", cookie: signin.cookie, body: {} });
   assert.match(out.setCookie, /^split_user=; .*Max-Age=0$/);
@@ -57,14 +57,14 @@ test("sign-in, the old group sign-in and sign-up are rate limited per client", a
   t.after(() => raw.close());
   const headers = { "CF-Connecting-IP": "203.0.113.7" };
   const signups = [];
-  for (let i = 0; i < 11; i++) signups.push((await call(env, "/api/auth/signup", { method: "POST", headers, body: { name: "Person " + i, username: "person" + i, pin: "1234" } })).status);
+  for (let i = 0; i < 11; i++) signups.push((await call(env, "/api/auth/signup", { method: "POST", headers, body: { name: "Person " + i, username: "person" + i, password: "person123" } })).status);
   assert.deepEqual(signups, [...Array(10).fill(201), 429]);
   const signins = [];
   for (let i = 0; i < 11; i++) signins.push((await call(env, "/api/auth/signin", { method: "POST", headers, body: { login: "nobody", pin: "1234" } })).status);
   for (let i = 0; i < 10; i++) signins.push((await call(env, "/api/auth/legacy-signin", { method: "POST", headers, body: { group: "G", name: "Nobody", pin: "1234" } })).status);
   assert.deepEqual(signins, [...Array(20).fill(404), 429]);
   // A different client is not blocked by that IP's bucket.
-  assert.equal((await call(env, "/api/auth/signin", { method: "POST", headers: { "CF-Connecting-IP": "198.51.100.1" }, body: { login: "person1", pin: "1234" } })).status, 200);
+  assert.equal((await call(env, "/api/auth/signin", { method: "POST", headers: { "CF-Connecting-IP": "198.51.100.1" }, body: { login: "person1", password: "person123" } })).status, 200);
 });
 
 test("cross-site writes and oversized bodies are refused", async t => {

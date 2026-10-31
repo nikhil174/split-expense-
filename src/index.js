@@ -48,12 +48,20 @@ async function secretEquals(given, expected) {
   return diff === 0;
 }
 
-// Member PINs: exactly 4 digits, stored only as a salted PBKDF2-SHA256 hash.
-// SESSION_SECRET is mixed in as a pepper, so a copy of the database alone is
-// not enough to brute-force the 10,000 possible PINs (rotating SESSION_SECRET
-// therefore means members must have their PINs reset). The iteration count is
-// stored with each hash, so it can be raised later without breaking old PINs.
+// Secrets (account passwords and group PINs) are stored only as a salted
+// PBKDF2-SHA256 hash. SESSION_SECRET is mixed in as a pepper, so a copy of the
+// database alone is not enough to brute-force them (rotating SESSION_SECRET
+// therefore invalidates every password and group PIN). The iteration count is
+// stored with each hash, so it can be raised later without breaking old ones.
+// Account passwords live in appx_users.pin_hash: people from before passwords
+// keep their 4-digit PIN as their password.
 const PIN_RE = /^\d{4}$/;
+// New passwords: 8–128 characters with at least one letter and one number.
+const PASSWORD_HINT = "Use at least 8 characters, with letters and numbers.";
+const goodPassword = p => typeof p === "string" && p.length >= 8 && p.length <= 128 && /[A-Za-z]/.test(p) && /\d/.test(p);
+// A password field from a request body ("password", "newPassword",
+// "currentPassword"), also accepting the older PIN names ("pin", "newPin"…).
+const passwordOf = (b, key = "password") => textField(b?.[key] ?? b?.[key.replace("assword", "in")]).slice(0, 200);
 const PIN_ITERATIONS = 100000; // the maximum PBKDF2 iterations Workers allows
 const PIN_MAX_FAILURES = 5, PIN_LOCK_MS = 15 * MINUTE;
 const fromHex = s => new Uint8Array((s.match(/../g) || []).map(x => parseInt(x, 16)));
@@ -73,22 +81,23 @@ async function pinMatches(pin, stored, env) {
   for (let i = 0; i < Math.min(actual.length, expected.length); i++) diff |= actual.charCodeAt(i) ^ expected.charCodeAt(i);
   return diff === 0;
 }
-// Checks a person's PIN against their account, counting failures and locking
-// the account for a while after too many. Returns an error Response, or null
-// when the PIN is correct (or was just created, for accounts from before PINs).
+// Checks a person's password against their account, counting failures and
+// locking the account for a while after too many. Returns an error Response,
+// or null when it is correct (or was just created, for accounts from before
+// PINs, which choose a password now).
 async function checkMemberPin(db, env, r, pin, { create = false } = {}) {
   const now = Date.now();
   if (r.pin_locked_until && r.pin_locked_until > now) {
     const mins = Math.ceil((r.pin_locked_until - now) / MINUTE);
-    return fail(`Too many wrong PINs. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`, 429);
+    return fail(`Too many wrong passwords. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`, 429);
   }
   if (!r.pin_hash) {
-    // Existing member from before PINs: they choose one now.
-    if (!create) return json({ error: "Create a 4-digit PIN for your account.", code: "pin_not_set" }, 409);
+    if (!create) return json({ error: "Choose a password for your account.", code: "password_not_set" }, 409);
+    if (!goodPassword(pin)) return fail(PASSWORD_HINT);
     await db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=? AND pin_hash IS NULL").bind(await hashPin(pin, env), r.id).run();
     const saved = await db.prepare("SELECT pin_hash FROM appx_users WHERE id=?").bind(r.id).first();
-    // Someone else set it a moment earlier: their PIN wins, so check against it.
-    return await pinMatches(pin, saved?.pin_hash, env) ? null : fail("Incorrect PIN.", 401);
+    // Someone else set it a moment earlier: theirs wins, so check against it.
+    return await pinMatches(pin, saved?.pin_hash, env) ? null : fail("Incorrect password.", 401);
   }
   if (await pinMatches(pin, r.pin_hash, env)) {
     if (r.pin_failures) await db.prepare("UPDATE appx_users SET pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(r.id).run();
@@ -96,9 +105,9 @@ async function checkMemberPin(db, env, r, pin, { create = false } = {}) {
   }
   const failures = Number(r.pin_failures || 0) + 1, locked = failures >= PIN_MAX_FAILURES;
   await db.prepare("UPDATE appx_users SET pin_failures=?,pin_locked_until=? WHERE id=?").bind(locked ? 0 : failures, locked ? now + PIN_LOCK_MS : null, r.id).run();
-  if (locked) return fail("Too many wrong PINs. Try again in 15 minutes.", 429);
+  if (locked) return fail("Too many wrong passwords. Try again in 15 minutes.", 429);
   const left = PIN_MAX_FAILURES - failures;
-  return fail(`Incorrect PIN. ${left} ${left === 1 ? "try" : "tries"} left.`, 401);
+  return fail(`Incorrect password. ${left} ${left === 1 ? "try" : "tries"} left.`, 401);
 }
 
 async function body(req, maxBytes = MAX_BODY_BYTES) {
@@ -130,13 +139,13 @@ async function requireUser(req, env) {
   const raw = cookie(req, "split_user");
   if (!raw) return null;
   const db = env['split-expense'], tokenHash = await hash(raw);
-  const s = await db.prepare("SELECT s.expires_at,s.admin_until,u.id,u.display_name,u.username,u.email,u.legacy,u.site_role,u.pin_hash IS NOT NULL AS hasPin FROM appx_user_sessions s JOIN appx_users u ON u.id=s.user_id WHERE s.token_hash=?").bind(tokenHash).first();
+  const s = await db.prepare("SELECT s.expires_at,s.admin_until,u.id,u.display_name,u.username,u.email,u.legacy,u.site_role,u.google_sub IS NOT NULL AS google,u.pin_hash IS NOT NULL AS hasPin FROM appx_user_sessions s JOIN appx_users u ON u.id=s.user_id WHERE s.token_hash=?").bind(tokenHash).first();
   if (!s || s.expires_at < Date.now()) {
     if (s) await db.prepare("DELETE FROM appx_user_sessions WHERE token_hash=?").bind(tokenHash).run();
     return null;
   }
   const siteAdmin = s.site_role === "admin";
-  return { id: s.id, name: s.display_name, username: s.username, email: s.email || null, legacy: !!s.legacy, hasPin: !!s.hasPin,
+  return { id: s.id, name: s.display_name, username: s.username, email: s.email || null, legacy: !!s.legacy, hasPin: !!s.hasPin, google: !!s.google,
     siteAdmin, adminUnlocked: siteAdmin && Number(s.admin_until) > Date.now(), tokenHash };
 }
 // Starts a session for an account and returns the response that sets its cookie.
@@ -148,7 +157,7 @@ async function startSession(db, userId, data = { ok: true }, status = 200) {
 }
 // siteAdmin: may open the Admin tab (the site owner); adminUnlocked: this
 // session entered the admin key. Nobody else learns the Admin tab exists.
-const userOut = u => ({ id: u.id, name: u.name, username: u.username, email: u.email, legacy: u.legacy, hasPin: u.hasPin, ...(u.siteAdmin && { siteAdmin: true, adminUnlocked: u.adminUnlocked }) });
+const userOut = u => ({ id: u.id, name: u.name, username: u.username, email: u.email, legacy: u.legacy, hasPin: u.hasPin, google: u.google, ...(u.siteAdmin && { siteAdmin: true, adminUnlocked: u.adminUnlocked }) });
 const ADMIN_UNLOCK_MS = 12 * 60 * 60 * 1000;
 
 // Usernames: 3–30 characters, lowercase letters, digits, "_" and ".",
@@ -161,7 +170,7 @@ const normEmail = v => String(v ?? "").trim().toLowerCase();
 async function findUser(db, login) {
   const v = String(login ?? "").trim();
   if (!v) return null;
-  const cols = "id,username,display_name,email,pin_hash,pin_failures,pin_locked_until,legacy";
+  const cols = "id,username,display_name,email,pin_hash,pin_failures,pin_locked_until,legacy,google_sub";
   if (v.includes("@") && !v.startsWith("@")) return db.prepare(`SELECT ${cols} FROM appx_users WHERE email=?`).bind(normEmail(v)).first();
   return db.prepare(`SELECT ${cols} FROM appx_users WHERE username=?`).bind(normUsername(v)).first();
 }
@@ -170,20 +179,71 @@ async function findLegacyUser(db, groupName, name) {
   const r = await db.prepare("SELECT DISTINCT u.id,u.username,u.display_name,u.email,u.pin_hash,u.pin_failures,u.pin_locked_until,u.legacy FROM appx_group_members m JOIN appx_groups g ON g.id=m.group_id JOIN appx_users u ON u.id=m.member_id WHERE lower(trim(g.name))=lower(?) AND lower(m.name)=lower(?) AND m.status IN ('active','pending') AND u.legacy=1 LIMIT 2").bind(cleanName(groupName), cleanName(name)).all();
   return r.results.length === 1 ? r.results[0] : r.results.length ? "ambiguous" : null;
 }
-// Checks a sign-in PIN, including the two one-time cases for accounts from
+// Checks a sign-in password, including the one-time cases for accounts from
 // before this version: the old administrator proves who they are with the old
-// admin PIN and then chooses a 4-digit PIN; members without a PIN create one.
+// admin PIN and then chooses a password; members without a PIN choose one.
 async function signInChecks(db, env, user, b) {
-  const pin = textField(b?.pin);
+  const password = passwordOf(b);
   if (!user.pin_hash && user.id === "admin") {
-    if (!env.ADMIN_PIN || !await secretEquals(pin, String(env.ADMIN_PIN))) return fail("Incorrect PIN.", 401);
-    const newPin = textField(b?.newPin);
-    if (!PIN_RE.test(newPin)) return json({ error: "Choose a 4-digit PIN for your account. You'll use it from now on instead of the admin PIN.", code: "choose_pin" }, 409);
-    await db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id='admin' AND pin_hash IS NULL").bind(await hashPin(newPin, env)).run();
+    if (!env.ADMIN_PIN || !await secretEquals(password, String(env.ADMIN_PIN))) return fail("Incorrect password.", 401);
+    const next = passwordOf(b, "newPassword");
+    if (!goodPassword(next)) return json({ error: "Choose a password for your account. You'll use it from now on instead of the admin PIN. " + PASSWORD_HINT, code: "choose_password" }, 409);
+    await db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id='admin' AND pin_hash IS NULL").bind(await hashPin(next, env)).run();
     return null;
   }
-  if (!PIN_RE.test(pin)) return fail("Enter your 4-digit PIN.");
-  return checkMemberPin(db, env, user, pin, { create: b?.createPin === true });
+  // Accounts made with Google have no password until they add one in Profile;
+  // only accounts from before PINs may choose one at sign-in.
+  if (!user.pin_hash && !user.legacy) return json({ error: "This account signs in with Google. Tap Continue with Google; you can add a password in your profile.", code: "use_google" }, 409);
+  if (!password) return fail("Enter your password.");
+  return checkMemberPin(db, env, user, password, { create: b?.createPassword === true || b?.createPin === true });
+}
+
+// ----- Sign in with Google -----
+// The app gets an ID token (a JWT signed by Google) from Google Identity
+// Services. We check its RS256 signature against Google's published keys
+// and its claims: issued by Google, for our client id (GOOGLE_CLIENT_ID),
+// not expired, with a verified email. No client secret is involved.
+const GOOGLE_CERTS = "https://www.googleapis.com/oauth2/v3/certs";
+let googleKeys = { at: 0, maxAge: 0, keys: [] };
+async function googleKey(kid) {
+  const fresh = Date.now() - googleKeys.at < googleKeys.maxAge * 1000;
+  if (!fresh || !googleKeys.keys.some(k => k.kid === kid)) {
+    const res = await fetch(GOOGLE_CERTS);
+    if (!res.ok) throw new HttpError("Couldn't reach Google. Try again.", 502);
+    const maxAge = Number(/max-age=(\d+)/.exec(res.headers.get("cache-control") || "")?.[1] || 3600);
+    googleKeys = { at: Date.now(), maxAge: Math.min(maxAge, 6 * 3600), keys: (await res.json()).keys || [] };
+  }
+  return googleKeys.keys.find(k => k.kid === kid) || null;
+}
+const b64uBytes = part => Uint8Array.from(atob(part.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((part.length + 3) % 4)), c => c.charCodeAt(0));
+async function verifyGoogleToken(token, env) {
+  const bad = () => new HttpError("Google sign-in didn't work. Try again.", 401);
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3 || !env.GOOGLE_CLIENT_ID) throw bad();
+  let header, claims;
+  try { [header, claims] = parts.slice(0, 2).map(x => JSON.parse(new TextDecoder().decode(b64uBytes(x)))); } catch { throw bad(); }
+  if (header?.alg !== "RS256" || !header.kid) throw bad();
+  const jwk = await googleKey(header.kid);
+  if (!jwk) throw bad();
+  const key = await crypto.subtle.importKey("jwk", { kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", ext: true }, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  let valid = false;
+  try { valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, b64uBytes(parts[2]), new TextEncoder().encode(parts[0] + "." + parts[1])); } catch { valid = false; }
+  if (!valid) throw bad();
+  const now = Date.now() / 1000;
+  if (!["accounts.google.com", "https://accounts.google.com"].includes(claims.iss) || claims.aud !== env.GOOGLE_CLIENT_ID || !(claims.exp > now - 60) || !claims.sub) throw bad();
+  if (!claims.email || claims.email_verified !== true) throw new HttpError("Your Google account's email isn't verified.", 401);
+  return { sub: String(claims.sub), email: normEmail(claims.email), name: cleanName(claims.name || claims.given_name || claims.email.split("@")[0]).slice(0, 60) };
+}
+// A free username from a name: "Vicky Rao" -> "vickyrao", or "vickyrao_4821".
+async function freeUsername(db, name) {
+  let base = String(name).toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  if (!/^[a-z]/.test(base)) base = "user" + base;
+  if (base.length < 3) base = base.padEnd(3, "0");
+  for (let i = 0; i < 20; i++) {
+    const u = i ? base + "_" + String(1000 + Math.floor(Math.random() * 9000)) : base;
+    if (!await db.prepare("SELECT 1 FROM appx_users WHERE username=?").bind(u).first()) return u;
+  }
+  return "user_" + id().replace(/-/g, "").slice(0, 10);
 }
 
 // Every member row ever added to the group (including people who left or
@@ -192,6 +252,25 @@ async function groupMembers(db, gid) {
   const r = await db.prepare("SELECT m.member_id AS id,m.name,m.role,m.status,u.username FROM appx_group_members m LEFT JOIN appx_users u ON u.id=m.member_id WHERE m.group_id=? ORDER BY lower(m.name)").bind(gid).all();
   return r.results.map(x => ({ id: x.id, name: x.name, role: x.role, status: x.status, username: x.username || null, active: x.status === "active" }));
 }
+// Group PINs: needed to join a group and to open it; opening is remembered
+// for a day on that signed-in device (session).
+const GROUP_UNLOCK_MS = 24 * 60 * 60 * 1000;
+const GROUP_PIN_TRIES = { limit: 5, windowMs: 15 * MINUTE };
+const unlockStmt = (db, sessionHash, gid) => db.prepare("INSERT INTO appx_group_unlocks(session_hash,group_id,until) VALUES(?1,?2,?3) ON CONFLICT(session_hash,group_id) DO UPDATE SET until=?3").bind(sessionHash, gid, Date.now() + GROUP_UNLOCK_MS);
+// Checks a group's PIN for this person (5 tries per 15 minutes per group).
+// Returns an error Response, or null when it is right.
+// Only wrong PINs count towards the limit.
+async function checkGroupPin(db, env, u, gid, pinHash, pin) {
+  const bucket = "group-pin:" + u.id + ":" + gid, now = Date.now(), windowStart = now - (now % GROUP_PIN_TRIES.windowMs);
+  let failures = 0;
+  try { failures = Number((await db.prepare("SELECT count FROM appx_rate_limits WHERE bucket=? AND window_start=?").bind(bucket, windowStart).first())?.count || 0); } catch {}
+  if (failures >= GROUP_PIN_TRIES.limit) return fail("Too many wrong group PINs. Try again in 15 minutes.", 429);
+  if (!PIN_RE.test(textField(pin))) return json({ error: "Enter the group's 4-digit PIN.", code: "group_pin_required" }, 400);
+  if (await pinMatches(textField(pin), pinHash, env)) return null;
+  await rateLimited(db, "group-pin", u.id + ":" + gid, GROUP_PIN_TRIES);
+  return fail("That's not the group's PIN. Ask a group admin for it.", 401);
+}
+
 function nameLookup(members) {
   const names = new Map(members.map(m => [m.id, m.name]));
   return memberId => names.get(memberId) || FORMER_MEMBER;
@@ -402,26 +481,24 @@ async function siteAdmin(req, env, url, u) {
       + "WHERE ?1='%%' OR lower(u.username) LIKE ?1 ESCAPE '\\' OR lower(u.display_name) LIKE ?1 ESCAPE '\\' OR lower(COALESCE(u.email,'')) LIKE ?1 ESCAPE '\\' ORDER BY u.created_at DESC LIMIT 100").bind(like, Date.now()).all();
     return json({ users: r.results.map(x => ({ ...x, legacy: !!x.legacy, siteAdmin: !!x.siteAdmin, hasPin: !!x.hasPin, locked: !!x.locked })) });
   }
-  // A forgotten PIN: a new temporary PIN, shown once to the admin to pass
-  // on; it signs the person out everywhere and they change it in Profile.
-  const reset = p.match(/^\/api\/site-admin\/users\/([\w-]+)\/reset-pin$/);
-  if (method === "POST" && reset) {
-    const who = await db.prepare("SELECT id,display_name FROM appx_users WHERE id=?").bind(reset[1]).first();
-    if (!who) return fail("Account not found.", 404);
-    const pin = String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, "0");
-    await db.batch([
-      db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(await hashPin(pin, env), who.id),
-      db.prepare("DELETE FROM appx_user_sessions WHERE user_id=? AND token_hash<>?").bind(who.id, u.tokenHash),
-    ]);
-    return json({ ok: true, name: who.display_name, temporaryPin: pin });
-  }
+  // There is deliberately no password reset here: the site owner never
+  // sets anyone's password. (Group PINs can be cleared, below.)
   if (method === "GET" && p === "/api/site-admin/groups") {
     const like = "%" + q.replace(/[%_\\]/g, "\\$&") + "%";
     const r = await db.prepare("SELECT g.id,g.name,g.created_at AS createdAt,(SELECT COUNT(*) FROM appx_group_members m WHERE m.group_id=g.id AND m.status='active') AS memberCount,"
       + "(SELECT group_concat(m.name,', ') FROM appx_group_members m WHERE m.group_id=g.id AND m.status='active' AND m.role='admin') AS admins,"
       + "(SELECT COUNT(*) FROM appx_expenses e WHERE e.group_id=g.id) AS expenseCount,(SELECT COALESCE(SUM(amount_cents),0) FROM appx_expenses e WHERE e.group_id=g.id) AS totalCents,"
-      + "(SELECT MAX(created_at) FROM appx_expenses e WHERE e.group_id=g.id) AS lastActivity FROM appx_groups g WHERE ?1='%%' OR lower(g.name) LIKE ?1 ESCAPE '\\' ORDER BY g.created_at DESC LIMIT 100").bind(like).all();
-    return json({ groups: r.results });
+      + "(SELECT MAX(created_at) FROM appx_expenses e WHERE e.group_id=g.id) AS lastActivity,g.pin_hash IS NOT NULL AS hasPin FROM appx_groups g WHERE ?1='%%' OR lower(g.name) LIKE ?1 ESCAPE '\\' ORDER BY g.created_at DESC LIMIT 100").bind(like).all();
+    return json({ groups: r.results.map(x => ({ ...x, hasPin: !!x.hasPin })) });
+  }
+  // A group whose admins forgot its PIN: clear it, so they can open the group
+  // and set a new one (Members → Group PIN).
+  const resetGroupPin = p.match(/^\/api\/site-admin\/groups\/([\w-]+)\/reset-pin$/);
+  if (method === "POST" && resetGroupPin) {
+    const g = await db.prepare("SELECT id,name FROM appx_groups WHERE id=?").bind(resetGroupPin[1]).first();
+    if (!g) return fail("Group not found.", 404);
+    await db.batch([db.prepare("UPDATE appx_groups SET pin_hash=NULL WHERE id=?").bind(g.id), db.prepare("DELETE FROM appx_group_unlocks WHERE group_id=?").bind(g.id)]);
+    return json({ ok: true, name: g.name });
   }
   return hidden();
 }
@@ -433,15 +510,15 @@ async function api(req, env, url, outbox = []) {
   const note = n => { outbox.push(n); return notifyStmt(db, n); };
   const p = url.pathname, method = req.method;
   // ----- Accounts -----
-  // Create an account: name, username (unique), optional email, 4-digit PIN.
+  // Create an account: name, username (unique), optional email, password.
   if (method === "POST" && p === "/api/auth/signup") {
     if (await rateLimited(db, "signup", await clientKey(req), RATE_LIMITS.signup)) return tooMany();
     const b = await body(req);
-    const name = cleanName(b?.name), username = normUsername(b?.username), email = b?.email ? normEmail(b.email) : null, pin = textField(b?.pin);
+    const name = cleanName(b?.name), username = normUsername(b?.username), email = b?.email ? normEmail(b.email) : null, pin = passwordOf(b);
     if (name.length < 2 || name.length > 60) return fail("Enter your name (2–60 characters).");
     if (!USERNAME_RE.test(username)) return fail("Usernames are 3–30 characters: letters, numbers, _ or ., starting with a letter.");
     if (email && (!EMAIL_RE.test(email) || email.length > 254)) return fail("Enter a valid email, or leave it empty.");
-    if (!PIN_RE.test(pin)) return fail("Choose a 4-digit PIN.");
+    if (!goodPassword(pin)) return fail(PASSWORD_HINT);
     if (await db.prepare("SELECT 1 FROM appx_users WHERE username=?").bind(username).first()) return fail("That username is taken. Try another.", 409);
     if (email && await db.prepare("SELECT 1 FROM appx_users WHERE email=?").bind(email).first()) return fail("That email is already used by another account. Sign in instead.", 409);
     const uid = id();
@@ -485,13 +562,41 @@ async function api(req, env, url, outbox = []) {
     if (bad) return bad;
     return startSession(db, user.id, { ok: true, id: user.id, legacy: true });
   }
+  // What the sign-in screen needs: the Google client id, if Google sign-in is set up.
+  if (method === "GET" && p === "/api/auth/config") return json({ googleClientId: env.GOOGLE_CLIENT_ID || null });
+  // Continue with Google: sign in if this Google account is connected; create
+  // an account if its email is new. If an account already has that email but
+  // isn't connected, don't take it over (emails on password accounts aren't
+  // verified): they sign in with their password and connect Google in Profile.
+  if (method === "POST" && p === "/api/auth/google") {
+    if (!env.GOOGLE_CLIENT_ID) return fail("Google sign-in isn't set up yet.", 503);
+    if (await rateLimited(db, "signin", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
+    const g = await verifyGoogleToken((await body(req))?.credential, env);
+    const known = await db.prepare("SELECT id FROM appx_users WHERE google_sub=?").bind(g.sub).first();
+    if (known) return startSession(db, known.id, { ok: true, id: known.id, created: false });
+    if (await db.prepare("SELECT 1 FROM appx_users WHERE email=?").bind(g.email).first()) {
+      return json({ error: `An account already uses ${g.email}. Sign in with its username and password, then connect Google in your profile.`, code: "email_taken" }, 409);
+    }
+    if (await rateLimited(db, "signup", await clientKey(req), RATE_LIMITS.signup)) return tooMany();
+    const uid = id();
+    try {
+      await db.prepare("INSERT INTO appx_users(id,username,display_name,email,google_sub,created_at) VALUES(?,?,?,?,?,?)").bind(uid, await freeUsername(db, g.name), g.name.length >= 2 ? g.name : "Split It user", g.email, g.sub, Date.now()).run();
+    } catch (e) {
+      if (String(e).toLowerCase().includes("unique")) return fail("Something changed at the same moment. Try again.", 409);
+      throw e;
+    }
+    return startSession(db, uid, { ok: true, id: uid, created: true }, 201);
+  }
   if (method === "GET" && p === "/api/me") {
     const me = await requireUser(req, env);
     return json({ user: me ? userOut(me) : null });
   }
   if (method === "POST" && p === "/api/logout") {
     const raw = cookie(req, "split_user");
-    if (raw) await db.prepare("DELETE FROM appx_user_sessions WHERE token_hash=?").bind(await hash(raw)).run();
+    if (raw) {
+      const h = await hash(raw);
+      await db.batch([db.prepare("DELETE FROM appx_user_sessions WHERE token_hash=?").bind(h), db.prepare("DELETE FROM appx_group_unlocks WHERE session_hash=?").bind(h)]);
+    }
     return json({ ok: true }, 200, { "set-cookie": setCookie("split_user", "", 0) });
   }
   // The app open on someone's phone may still be the version from before
@@ -531,15 +636,33 @@ async function api(req, env, url, outbox = []) {
     const r = await renameUser(db, u.id, (await body(req))?.name);
     return r instanceof Response ? r : json({ ok: true, id: u.id, name: r });
   }
-  // Change my PIN (the current one is needed, if there is one).
-  if (method === "POST" && p === "/api/me/pin") {
+  // Connect my Google account (then I can sign in with it), or disconnect it
+  // (only if I have a password, so I can still get in).
+  if (method === "POST" && p === "/api/me/google") {
+    if (!env.GOOGLE_CLIENT_ID) return fail("Google sign-in isn't set up yet.", 503);
+    if (await rateLimited(db, "link", u.id, RATE_LIMITS.link)) return tooMany();
+    const g = await verifyGoogleToken((await body(req))?.credential, env);
+    const owner = await db.prepare("SELECT id FROM appx_users WHERE google_sub=?").bind(g.sub).first();
+    if (owner && owner.id !== u.id) return fail("That Google account is already connected to another Split It account.", 409);
+    const emailFree = !u.email && !(await db.prepare("SELECT 1 FROM appx_users WHERE email=? AND id<>?").bind(g.email, u.id).first());
+    if (emailFree) await db.prepare("UPDATE appx_users SET google_sub=?,email=? WHERE id=?").bind(g.sub, g.email, u.id).run();
+    else await db.prepare("UPDATE appx_users SET google_sub=? WHERE id=?").bind(g.sub, u.id).run();
+    return json({ user: userOut(await requireUser(req, env)) });
+  }
+  if (method === "POST" && p === "/api/me/google/disconnect") {
+    if (!u.hasPin) return fail("Add a password first, so you can still sign in without Google.", 409);
+    await db.prepare("UPDATE appx_users SET google_sub=NULL WHERE id=?").bind(u.id).run();
+    return json({ user: userOut(await requireUser(req, env)) });
+  }
+  // Change my password (the current one is needed, if there is one).
+  if (method === "POST" && (p === "/api/me/password" || p === "/api/me/pin")) {
     if (await rateLimited(db, "signin", u.id, RATE_LIMITS.signin)) return tooMany();
-    const b = await body(req), newPin = textField(b?.newPin);
-    if (!PIN_RE.test(newPin)) return fail("Choose a 4-digit PIN.");
+    const b = await body(req), newPin = passwordOf(b, "newPassword");
+    if (!goodPassword(newPin)) return fail(PASSWORD_HINT);
     const row = await db.prepare("SELECT id,pin_hash,pin_failures,pin_locked_until FROM appx_users WHERE id=?").bind(u.id).first();
     if (row.pin_hash) {
-      if (!PIN_RE.test(textField(b?.currentPin))) return fail("Enter your current 4-digit PIN.");
-      const bad = await checkMemberPin(db, env, row, textField(b?.currentPin));
+      if (!passwordOf(b, "currentPassword")) return fail("Enter your current password.");
+      const bad = await checkMemberPin(db, env, row, passwordOf(b, "currentPassword"));
       if (bad) return bad;
     }
     await db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(await hashPin(newPin, env), u.id).run();
@@ -554,9 +677,9 @@ async function api(req, env, url, outbox = []) {
     if (other === "ambiguous") return fail("More than one account matches. Use that account's username instead.", 409);
     if (!other) return fail("No account found. Check the username, or the group and name.", 404);
     if (other.id === u.id) return fail("That's the account you're signed in to.", 409);
-    if (!other.pin_hash) return fail("That account has no PIN yet. Sign in to it once to create one, then link it here.", 409);
-    if (!PIN_RE.test(textField(b?.pin))) return fail("Enter that account's 4-digit PIN.");
-    const bad = await checkMemberPin(db, env, other, textField(b?.pin));
+    if (!other.pin_hash) return fail("That account has no password yet. Sign in to it once to set one, then link it here.", 409);
+    if (!passwordOf(b)) return fail("Enter that account's password.");
+    const bad = await checkMemberPin(db, env, other, passwordOf(b));
     if (bad) return bad;
     await db.batch(await mergeStatements(db, u.id, other.id));
     return json({ ok: true, merged: other.display_name });
@@ -564,32 +687,40 @@ async function api(req, env, url, outbox = []) {
   // Anyone can create a group; they are its first admin.
   if (method === "POST" && p === "/api/groups") {
     if (await rateLimited(db, "group", u.id, RATE_LIMITS.groupWrite)) return tooMany();
-    const name = cleanName((await body(req))?.name);
+    const b = await body(req), name = cleanName(b?.name);
     if (name.length < 2 || name.length > 80) return fail("Group name must be 2–80 characters.");
+    if (!PIN_RE.test(textField(b?.pin))) return fail("Choose a 4-digit PIN for the group. Members need it to join and to open the group.");
     const gid = id(), now = Date.now();
     await db.batch([
-      db.prepare("INSERT INTO appx_groups(id,name,created_at,created_by) VALUES(?,?,?,?)").bind(gid, name, now, u.id),
+      db.prepare("INSERT INTO appx_groups(id,name,created_at,created_by,pin_hash) VALUES(?,?,?,?,?)").bind(gid, name, now, u.id, await hashPin(textField(b.pin), env)),
       db.prepare("INSERT INTO appx_group_members(group_id,member_id,name,role,status,joined_at) VALUES(?,?,?,'admin','active',?)").bind(gid, u.id, u.name, now),
+      unlockStmt(db, u.tokenHash, gid),
     ]);
     return json({ group: { id: gid, name } }, 201);
   }
   // Groups I've been invited to and haven't answered yet.
   if (method === "GET" && p === "/api/invitations") {
-    const r = await db.prepare("SELECT g.id AS groupId,g.name AS groupName,COALESCE(i.name,'Someone') AS invitedBy,(SELECT COUNT(*) FROM appx_group_members x WHERE x.group_id=g.id AND x.status='active') AS memberCount FROM appx_group_members m JOIN appx_groups g ON g.id=m.group_id LEFT JOIN appx_group_members i ON i.group_id=m.group_id AND i.member_id=m.invited_by WHERE m.member_id=? AND m.status='invited' ORDER BY g.created_at DESC").bind(u.id).all();
-    return json({ invitations: r.results });
+    const r = await db.prepare("SELECT g.id AS groupId,g.name AS groupName,g.pin_hash IS NOT NULL AS hasPin,COALESCE(i.name,'Someone') AS invitedBy,(SELECT COUNT(*) FROM appx_group_members x WHERE x.group_id=g.id AND x.status='active') AS memberCount FROM appx_group_members m JOIN appx_groups g ON g.id=m.group_id LEFT JOIN appx_group_members i ON i.group_id=m.group_id AND i.member_id=m.invited_by WHERE m.member_id=? AND m.status='invited' ORDER BY g.created_at DESC").bind(u.id).all();
+    return json({ invitations: r.results.map(x => ({ ...x, hasPin: !!x.hasPin })) });
   }
   const answer = p.match(/^\/api\/groups\/([\w-]+)\/invitation\/(accept|decline)$/);
   if (method === "POST" && answer) {
     const [, gid, action] = answer;
-    const row = await db.prepare("SELECT m.status,g.name FROM appx_group_members m JOIN appx_groups g ON g.id=m.group_id WHERE m.group_id=? AND m.member_id=?").bind(gid, u.id).first();
+    const row = await db.prepare("SELECT m.status,g.name,g.pin_hash FROM appx_group_members m JOIN appx_groups g ON g.id=m.group_id WHERE m.group_id=? AND m.member_id=?").bind(gid, u.id).first();
     if (!row || row.status !== "invited") return fail("This invitation is no longer open.", 404);
     if (action === "decline") {
       await db.prepare("UPDATE appx_group_members SET status='removed' WHERE group_id=? AND member_id=? AND status='invited'").bind(gid, u.id).run();
       return json({ ok: true });
     }
+    // Joining needs the group's PIN (the admin shares it with them).
+    if (row.pin_hash) {
+      const bad = await checkGroupPin(db, env, u, gid, row.pin_hash, (await body(req))?.pin);
+      if (bad) return bad;
+    }
     const admins = (await db.prepare("SELECT member_id FROM appx_group_members WHERE group_id=? AND role='admin' AND status='active'").bind(gid).all()).results.map(r => r.member_id);
     await db.batch([
       db.prepare("UPDATE appx_group_members SET status='active',name=?,joined_at=? WHERE group_id=? AND member_id=? AND status='invited'").bind(u.name, Date.now(), gid, u.id),
+      unlockStmt(db, u.tokenHash, gid),
       ...admins.filter(a => a !== u.id).map(to => note({ to, groupId: gid, kind: "member_joined", title: `${u.name} joined “${row.name}”`, body: "They accepted your invitation.", link: `#/g/${gid}`, actor: u.name })),
     ]);
     return json({ ok: true, groupId: gid });
@@ -600,9 +731,10 @@ async function api(req, env, url, outbox = []) {
       + "-COALESCE((SELECT SUM(s.amount_cents) FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=g.id AND s.member_id=?1),0)"
       + "+COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND from_member_id=?1 AND status='confirmed'),0)"
       + "-COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=g.id AND to_member_id=?1 AND status='confirmed'),0) AS myBalanceCents"
-      + ",m.role,(SELECT COUNT(*) FROM appx_group_members x WHERE x.group_id=g.id AND x.status='active') AS memberCount "
-      + "FROM appx_groups g JOIN appx_group_members m ON m.group_id=g.id WHERE m.member_id=?1 AND m.status='active' ORDER BY g.created_at DESC").bind(u.id).all();
-    return json({ groups: r.results });
+      + ",m.role,(SELECT COUNT(*) FROM appx_group_members x WHERE x.group_id=g.id AND x.status='active') AS memberCount"
+      + ",g.pin_hash IS NOT NULL AS hasPin,(g.pin_hash IS NULL OR EXISTS(SELECT 1 FROM appx_group_unlocks k WHERE k.group_id=g.id AND k.session_hash=?2 AND k.until>?3)) AS unlocked "
+      + "FROM appx_groups g JOIN appx_group_members m ON m.group_id=g.id WHERE m.member_id=?1 AND m.status='active' ORDER BY g.created_at DESC").bind(u.id, u.tokenHash, Date.now()).all();
+    return json({ groups: r.results.map(x => ({ ...x, hasPin: !!x.hasPin, unlocked: !!x.unlocked })) });
   }
   // Everyone I owe or who owes me, across all my groups, one row per person
   // per group (member ids are group-scoped). Same pairwise ledger as each
@@ -707,12 +839,40 @@ async function api(req, env, url, outbox = []) {
     // Admins of this group may edit or delete anything in it, decide any
     // payment, and manage who is in it. Being admin is per group.
     const isAdmin = member.role === "admin";
+    // The group's PIN: asked when opening it, then remembered for a day on
+    // this device. Everything in the group waits until then.
+    const gp = await db.prepare("SELECT name,pin_hash FROM appx_groups WHERE id=?").bind(gid).first();
+    if (method === "POST" && tail === "unlock") {
+      if (!gp.pin_hash) return json({ ok: true });
+      const bad = await checkGroupPin(db, env, u, gid, gp.pin_hash, (await body(req))?.pin);
+      if (bad) return bad;
+      await db.batch([unlockStmt(db, u.tokenHash, gid), db.prepare("DELETE FROM appx_group_unlocks WHERE until<?").bind(Date.now())]);
+      return json({ ok: true });
+    }
+    if (gp.pin_hash && !(await db.prepare("SELECT 1 FROM appx_group_unlocks WHERE session_hash=? AND group_id=? AND until>?").bind(u.tokenHash, gid, Date.now()).first())) {
+      return json({ error: `Enter the PIN for “${gp.name}” to open it.`, code: "group_locked", groupId: gid, groupName: gp.name }, 423);
+    }
+    // An admin sets or changes the group's PIN. Everyone else then enters
+    // the new one next time they open the group.
+    if (method === "POST" && tail === "pin") {
+      if (!isAdmin) return fail("Only a group admin can do that.", 403);
+      const pin = textField((await body(req))?.pin);
+      if (!PIN_RE.test(pin)) return fail("Choose a 4-digit PIN.");
+      const others = (await db.prepare("SELECT member_id FROM appx_group_members WHERE group_id=? AND status='active' AND member_id<>?").bind(gid, u.id).all()).results.map(r => r.member_id);
+      await db.batch([
+        db.prepare("UPDATE appx_groups SET pin_hash=? WHERE id=?").bind(await hashPin(pin, env), gid),
+        db.prepare("DELETE FROM appx_group_unlocks WHERE group_id=?").bind(gid),
+        unlockStmt(db, u.tokenHash, gid),
+        ...others.map(to => note({ to, groupId: gid, kind: "group_pin", title: `${u.name} ${gp.pin_hash ? "changed" : "set"} the PIN of “${gp.name}”`, body: "Ask them for it: you'll need it to open the group.", link: `#/g/${gid}`, actor: u.name })),
+      ]);
+      return json({ ok: true });
+    }
     if (method === "GET" && !tail) {
       const g = await db.prepare("SELECT id,name FROM appx_groups WHERE id=?").bind(gid).first();
       const all = await groupMembers(db, gid);
       const pick = x => ({ id: x.id, name: x.name, username: x.username, role: x.role, status: x.status });
       return json({
-        group: g,
+        group: { ...g, hasPin: !!gp.pin_hash },
         members: all.filter(x => x.active).map(pick),
         // Only admins see who is waiting: asked to join, or invited and not answered.
         waiting: isAdmin ? all.filter(x => x.status === "pending" || x.status === "invited").map(pick) : [],
@@ -815,6 +975,7 @@ async function api(req, env, url, outbox = []) {
         db.prepare("DELETE FROM appx_sessions WHERE request_id IN (SELECT id FROM appx_access_requests WHERE group_id=?)").bind(gid),
         db.prepare("DELETE FROM appx_access_requests WHERE group_id=?").bind(gid),
         db.prepare("DELETE FROM appx_notifications WHERE group_id=?").bind(gid),
+        db.prepare("DELETE FROM appx_group_unlocks WHERE group_id=?").bind(gid),
         db.prepare("DELETE FROM appx_groups WHERE id=?").bind(gid),
       ]);
       return json({ ok: true, deletedGroup: g.name });

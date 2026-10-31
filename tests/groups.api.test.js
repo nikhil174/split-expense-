@@ -3,7 +3,7 @@
 // Groups never see each other.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeEnv, call, setupGroup, signUp } from "./helpers/d1.js";
+import { makeEnv, call, setupGroup, signUp, GROUP_PIN, unlockGroup } from "./helpers/d1.js";
 
 async function world(t) {
   const { raw, env } = await makeEnv();
@@ -18,9 +18,10 @@ async function world(t) {
 test("anyone can create a group and is its only admin; groups are invisible to outsiders", async t => {
   const w = await world(t);
   const dee = await signUp(w.env, "Dee");
-  const mine = await call(w.env, "/api/groups", { method: "POST", cookie: dee.cookie, body: { name: "Goa Trip" } });
+  assert.equal((await call(w.env, "/api/groups", { method: "POST", cookie: dee.cookie, body: { name: "Goa Trip" } })).status, 400, "a group needs a PIN");
+  const mine = await call(w.env, "/api/groups", { method: "POST", cookie: dee.cookie, body: { name: "Goa Trip", pin: "4242" } });
   assert.equal(mine.status, 201, "group names need not be unique across people");
-  assert.equal((await call(w.env, "/api/groups", { method: "POST", cookie: dee.cookie, body: { name: "x" } })).status, 400);
+  assert.equal((await call(w.env, "/api/groups", { method: "POST", cookie: dee.cookie, body: { name: "x", pin: "4242" } })).status, 400);
   const d = (await call(w.env, `/api/groups/${mine.data.group.id}`, { cookie: dee.cookie })).data;
   assert.deepEqual([d.me.isAdmin, d.me.role, d.members.map(m => [m.name, m.role])], [true, "admin", [["Dee", "admin"]]]);
   assert.deepEqual((await call(w.env, "/api/groups", { cookie: dee.cookie })).data.groups.map(x => [x.name, x.role, x.memberCount]), [["Goa Trip", "admin", 1]]);
@@ -58,7 +59,9 @@ test("admins invite by username or email; the person joins only after accepting"
   assert.deepEqual(invitations.map(i => [i.groupName, i.invitedBy, i.memberCount]), [["Goa Trip", "Alex Admin", 3]]);
   // Someone else can't accept for Dee.
   assert.equal((await call(w.env, w.G + "/invitation/accept", { method: "POST", cookie: w.g.cookies.Bea, body: {} })).status, 404);
-  assert.equal((await call(w.env, w.G + "/invitation/accept", { method: "POST", cookie: dee.cookie, body: {} })).status, 200);
+  assert.equal((await call(w.env, w.G + "/invitation/accept", { method: "POST", cookie: dee.cookie, body: {} })).status, 400, "needs the group PIN");
+  assert.equal((await call(w.env, w.G + "/invitation/accept", { method: "POST", cookie: dee.cookie, body: { pin: "0000" } })).status, 401, "wrong group PIN");
+  assert.equal((await call(w.env, w.G + "/invitation/accept", { method: "POST", cookie: dee.cookie, body: { pin: GROUP_PIN } })).status, 200);
   assert.deepEqual((await w.detail(dee.cookie)).members.map(m => m.name), ["Alex Admin", "Bea", "Cy", "Dee Dee"]);
   assert.equal((await call(w.env, "/api/notifications", { cookie: w.g.adminCookie })).data.items[0].title, "Dee Dee joined “Goa Trip”");
   // Declining, and the admin cancelling an invitation.
@@ -107,6 +110,9 @@ test("people waiting to join are approved or turned away by a group admin", asyn
   assert.equal((await w.post("Bea", `/members/${dee.id}/approve`)).status, 403);
   assert.equal((await w.post("admin", `/members/${w.g.ids.Bea}/approve`)).status, 409, "not waiting");
   assert.equal((await w.post("admin", `/members/${dee.id}/approve`)).status, 200);
+  // In, but opening it still needs the group's PIN.
+  assert.equal((await call(w.env, w.G, { cookie: dee.cookie })).status, 423);
+  await unlockGroup(w.env, w.g.groupId, dee.cookie);
   assert.equal((await call(w.env, w.G, { cookie: dee.cookie })).status, 200);
   assert.equal((await call(w.env, "/api/notifications", { cookie: dee.cookie })).data.items[0].title, "You're in “Goa Trip”");
   // Inviting someone who asked to join lets them straight in.
@@ -118,4 +124,56 @@ test("people waiting to join are approved or turned away by a group admin", asyn
   w.raw.prepare("INSERT INTO appx_group_members(group_id,member_id,name,role,status) VALUES(?,?,?,'member','pending')").run(w.g.groupId, fay.id, "Fay");
   assert.equal((await w.post("admin", `/members/${fay.id}/reject`)).status, 200);
   assert.equal((await call(w.env, w.G, { cookie: fay.cookie })).status, 404);
+});
+
+test("a group's PIN is asked when opening it, remembered for a day on that device, and can be changed by an admin", async t => {
+  const w = await world(t);
+  const { ids } = w.g;
+  // A new sign-in (another device) finds the group locked; nothing inside is readable or writable.
+  const phone = (await call(w.env, "/api/auth/signin", { method: "POST", body: { login: w.g.usernames.Bea, password: "secret2468" } })).cookie;
+  const locked = await call(w.env, w.G + "/expenses", { cookie: phone });
+  assert.deepEqual([locked.status, locked.data.code, locked.data.groupName], [423, "group_locked", "Goa Trip"]);
+  for (const [method, tail] of [["GET", ""], ["GET", "/balances"], ["GET", "/settlements"], ["POST", "/expenses"], ["POST", "/settlements"], ["POST", "/leave"]]) {
+    assert.equal((await call(w.env, w.G + tail, { method, cookie: phone, body: method === "POST" ? {} : undefined })).status, 423, tail);
+  }
+  assert.deepEqual((await call(w.env, "/api/groups", { cookie: phone })).data.groups.map(x => [x.name, x.hasPin, x.unlocked]), [["Goa Trip", true, false]]);
+  // Wrong PINs, then a lock-out for that group.
+  assert.equal((await call(w.env, w.G + "/unlock", { method: "POST", cookie: phone, body: { pin: "12" } })).status, 400);
+  for (let i = 0; i < 4; i++) assert.equal((await call(w.env, w.G + "/unlock", { method: "POST", cookie: phone, body: { pin: "0000" } })).status, 401);
+  await unlockGroup(w.env, w.g.groupId, phone);
+  assert.equal((await call(w.env, w.G + "/expenses", { cookie: phone })).status, 200);
+  assert.equal((await call(w.env, w.G + "/unlock", { method: "POST", cookie: phone, body: { pin: "0000" } })).status, 401, "the 5th wrong PIN");
+  assert.equal((await call(w.env, w.G + "/unlock", { method: "POST", cookie: phone, body: { pin: "1357" } })).status, 429, "then 15 minutes, even with the right PIN");
+  assert.equal((await call(w.env, "/api/groups", { cookie: phone })).data.groups[0].unlocked, true);
+  // Remembered for a day, then asked again.
+  w.raw.prepare("UPDATE appx_group_unlocks SET until=? WHERE group_id=?").run(Date.now() - 1, w.g.groupId);
+  assert.equal((await call(w.env, w.G, { cookie: phone })).status, 423);
+  assert.equal((await call(w.env, w.G, { cookie: w.g.adminCookie })).status, 423, "for everyone, admins too");
+  await unlockGroup(w.env, w.g.groupId, w.g.adminCookie);
+  // Only admins change it; everyone else then needs the new PIN, and is told.
+  assert.equal((await call(w.env, w.G + "/pin", { method: "POST", cookie: w.g.cookies.Cy, body: { pin: "9999" } })).status, 423, "locked for Cy right now");
+  await unlockGroup(w.env, w.g.groupId, w.g.cookies.Cy);
+  assert.equal((await call(w.env, w.G + "/pin", { method: "POST", cookie: w.g.cookies.Cy, body: { pin: "9999" } })).status, 403);
+  assert.equal((await call(w.env, w.G + "/pin", { method: "POST", cookie: w.g.adminCookie, body: { pin: "99" } })).status, 400);
+  assert.equal((await call(w.env, w.G + "/pin", { method: "POST", cookie: w.g.adminCookie, body: { pin: "9999" } })).status, 200);
+  assert.equal((await call(w.env, w.G, { cookie: w.g.adminCookie })).status, 200, "the admin who changed it stays in");
+  assert.equal((await call(w.env, w.G, { cookie: w.g.cookies.Cy })).status, 423);
+  assert.equal((await call(w.env, "/api/notifications", { cookie: w.g.cookies.Cy })).data.items[0].kind, "group_pin");
+  assert.equal((await call(w.env, w.G + "/unlock", { method: "POST", cookie: w.g.cookies.Cy, body: { pin: GROUP_PIN } })).status, 401, "the old PIN no longer works");
+  await unlockGroup(w.env, w.g.groupId, w.g.cookies.Cy, "9999");
+  // Signing out forgets what this device had open.
+  await call(w.env, "/api/logout", { method: "POST", cookie: w.g.cookies.Cy, body: {} });
+  assert.equal(w.raw.prepare("SELECT COUNT(*) AS n FROM appx_group_unlocks WHERE group_id=? AND session_hash NOT IN (SELECT token_hash FROM appx_user_sessions)").get(w.g.groupId).n, 0);
+  assert.ok(ids.Cy);
+});
+
+test("groups from before group PINs open freely until an admin sets one", async t => {
+  const w = await world(t);
+  w.raw.prepare("UPDATE appx_groups SET pin_hash=NULL WHERE id=?").run(w.g.groupId);
+  const phone = (await call(w.env, "/api/auth/signin", { method: "POST", body: { login: w.g.usernames.Bea, password: "secret2468" } })).cookie;
+  assert.equal((await call(w.env, w.G, { cookie: phone })).status, 200);
+  assert.deepEqual((await call(w.env, w.G, { cookie: w.g.adminCookie })).data.group.hasPin, false);
+  assert.equal((await call(w.env, w.G + "/pin", { method: "POST", cookie: w.g.adminCookie, body: { pin: "2468" } })).status, 200);
+  assert.equal((await call(w.env, w.G, { cookie: phone })).status, 423);
+  assert.equal((await call(w.env, "/api/notifications", { cookie: phone })).data.items[0].title, "Alex Admin set the PIN of “Goa Trip”");
 });

@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EASE, LoadingButton, Segmented, Wordmark, fieldClass, haptic } from "@/components/app/bits";
 import { ApiError, get, post } from "@/lib/api";
+import { GoogleButton, PASSWORD_HINT, PasswordInput, PasswordStrength, PinInput, goodPassword, useGoogleClientId } from "@/components/app/secrets";
 import { keys } from "@/hooks/queries";
-import { cn } from "@/lib/utils";
 
 export function Field({ label, htmlFor, children, hint }: { label: string; htmlFor: string; children: React.ReactNode; hint?: string }) {
   return (
@@ -21,14 +21,7 @@ export function Field({ label, htmlFor, children, hint }: { label: string; htmlF
   );
 }
 
-// Four-digit PIN box: digits only, masked, numeric keypad on phones.
-export function PinInput({ id, value, onChange, autoComplete = "current-password", autoFocus }: { id: string; value: string; onChange: (v: string) => void; autoComplete?: string; autoFocus?: boolean }) {
-  return (
-    <Input id={id} type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} required autoComplete={autoComplete} autoFocus={autoFocus}
-      placeholder="••••" value={value} onChange={e => onChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
-      className={cn(fieldClass, "tabular text-center text-[22px] tracking-[0.6em] placeholder:tracking-[0.6em]")} />
-  );
-}
+export { PinInput };
 
 const fade = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 }, transition: { duration: 0.25, ease: EASE } };
 const reveal = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.25, ease: EASE } };
@@ -67,10 +60,10 @@ export function UsernameHint({ state }: { state: ReturnType<typeof useUsernameCh
     : <span className="inline-flex items-center gap-1 text-negative"><X className="size-3.5" strokeWidth={2.6} />Taken. Try another.</span>;
 }
 
-// After the first try, the server may ask for a new PIN: "create" for
+// After the first try, the server may ask for a password: "create" for
 // accounts from before PINs, "choose" for the old administrator (who proved
 // who they are with the old admin PIN).
-type PinStep = null | "create" | "choose";
+type PwStep = null | "create" | "choose";
 
 export function AuthScreen() {
   const qc = useQueryClient();
@@ -79,12 +72,12 @@ export function AuthScreen() {
   const [legacy, setLegacy] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const install = useInstallApp();
-  const [pinStep, setPinStep] = React.useState<PinStep>(null);
-  const [form, setForm] = React.useState({ login: "", pin: "", group: "", name: "", oldPin: "", newPin: "", newPin2: "", suName: "", suUsername: "", suEmail: "", suPin: "", suPin2: "" });
+  const [pwStep, setPwStep] = React.useState<PwStep>(null);
+  const [form, setForm] = React.useState({ login: "", password: "", group: "", name: "", next: "", next2: "", suName: "", suUsername: "", suEmail: "", suPassword: "", suPassword2: "" });
   const [usernameTouched, setUsernameTouched] = React.useState(false);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement> | string) => setForm(f => ({ ...f, [k]: typeof e === "string" ? e : e.target.value }));
   const usernameState = useUsernameCheck(form.suUsername);
-  const resetPinStep = () => { setPinStep(null); setForm(f => ({ ...f, newPin: "", newPin2: "" })); };
+  const resetStep = () => { setPwStep(null); setForm(f => ({ ...f, next: "", next2: "" })); };
 
   const run = async (fn: () => Promise<void>) => {
     if (busy) return;
@@ -96,24 +89,28 @@ export function AuthScreen() {
     await qc.invalidateQueries({ queryKey: keys.me });
     toast.success(message);
   };
-
-  const signIn = () => run(async () => {
-    if (pinStep && form.newPin !== form.newPin2) throw new Error("The two PINs don't match.");
-    const extra = pinStep === "create" ? { pin: form.newPin, createPin: true } : pinStep === "choose" ? { newPin: form.newPin } : {};
-    try {
-      if (legacy) await post("/api/auth/legacy-signin", { group: form.group.trim(), name: form.name.trim(), pin: form.oldPin, ...extra });
-      else await post("/api/auth/signin", { login: form.login.trim(), pin: form.pin, ...extra });
-    } catch (err) {
-      if (err instanceof ApiError && (err.code === "pin_not_set" || err.code === "choose_pin")) { setPinStep(err.code === "pin_not_set" ? "create" : "choose"); setForm(f => ({ ...f, newPin: "", newPin2: "" })); return; }
-      throw err;
-    }
-    setForm(f => ({ ...f, pin: "", oldPin: "", newPin: "", newPin2: "" }));
-    await signedIn(pinStep ? "PIN saved. Welcome back." : "Welcome back.");
-    setPinStep(null);
+  const google = (credential: string) => run(async () => {
+    const d = await post<{ created: boolean }>("/api/auth/google", { credential });
+    await signedIn(d.created ? "Account created with Google. Welcome!" : "Welcome back.");
   });
 
-  const pinReady = legacy ? form.oldPin.length > 0 || pinStep === "create" : form.pin.length === 4 || pinStep === "create";
-  const newPinReady = !pinStep || (form.newPin.length === 4 && form.newPin2.length === 4);
+  const signIn = () => run(async () => {
+    if (pwStep && form.next !== form.next2) throw new Error("The two passwords don't match.");
+    if (pwStep && !goodPassword(form.next)) throw new Error(PASSWORD_HINT);
+    const extra = pwStep === "create" ? { password: form.next, createPassword: true } : pwStep === "choose" ? { newPassword: form.next } : {};
+    try {
+      if (legacy) await post("/api/auth/legacy-signin", { group: form.group.trim(), name: form.name.trim(), password: form.password, ...extra });
+      else await post("/api/auth/signin", { login: form.login.trim(), password: form.password, ...extra });
+    } catch (err) {
+      if (err instanceof ApiError && (err.code === "password_not_set" || err.code === "choose_password")) { setPwStep(err.code === "password_not_set" ? "create" : "choose"); setForm(f => ({ ...f, next: "", next2: "" })); return; }
+      throw err;
+    }
+    setForm(f => ({ ...f, password: "", next: "", next2: "" }));
+    await signedIn(pwStep ? "Password saved. Welcome back." : "Welcome back.");
+    setPwStep(null);
+  });
+
+  const ready = (pwStep === "create" || form.password.length > 0) && (!pwStep || (form.next.length > 0 && form.next2.length > 0));
 
   return (
     <div className="min-h-dvh overflow-x-clip">
@@ -125,9 +122,10 @@ export function AuthScreen() {
         </m.div>
 
         <m.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: EASE, delay: 0.08 }} className="mt-9">
-          <Segmented id="auth-tab" value={tab} onChange={v => { setTab(v); resetPinStep(); }} options={[{ value: "signin", label: "Sign in" }, { value: "signup", label: "Create account" }]} />
+          <Segmented id="auth-tab" value={tab} onChange={v => { setTab(v); resetStep(); }} options={[{ value: "signin", label: "Sign in" }, { value: "signup", label: "Create account" }]} />
 
           <div className="panel mt-4 p-5">
+            {!legacy && <GoogleSection onToken={google} text={tab === "signup" ? "signup_with" : "continue_with"} />}
             <AnimatePresence mode="wait" initial={false}>
               {tab === "signin" ? (
                 <m.form key={legacy ? "legacy" : "signin"} {...fade} className="space-y-5" onSubmit={e => { e.preventDefault(); signIn(); }}>
@@ -135,46 +133,42 @@ export function AuthScreen() {
                     <>
                       <p className="rounded-[14px] bg-tint-soft px-3.5 py-3 text-[13.5px] leading-5 text-tint">Split It now has accounts. Sign in once with your group and name, then pick a username in your profile.</p>
                       <Field label="Group name" htmlFor="legacy-group">
-                        <Input id="legacy-group" required autoComplete="off" placeholder="e.g. Goa Trip" value={form.group} onChange={e => { set("group")(e); resetPinStep(); }} className={fieldClass} />
+                        <Input id="legacy-group" required autoComplete="off" placeholder="e.g. Goa Trip" value={form.group} onChange={e => { set("group")(e); resetStep(); }} className={fieldClass} />
                       </Field>
                       <Field label="Your name in it" htmlFor="legacy-name">
-                        <Input id="legacy-name" required autoComplete="name" placeholder="As the group knows you" value={form.name} onChange={e => { set("name")(e); resetPinStep(); }} className={fieldClass} />
+                        <Input id="legacy-name" required autoComplete="name" placeholder="As the group knows you" value={form.name} onChange={e => { set("name")(e); resetStep(); }} className={fieldClass} />
                       </Field>
-                      {pinStep !== "create" && (
-                        <Field label="PIN" htmlFor="legacy-pin" hint="Your 4-digit PIN. If you were the administrator, your admin PIN.">
-                          <Input id="legacy-pin" type="password" required autoComplete="current-password" placeholder="Required" value={form.oldPin} onChange={set("oldPin")} className={fieldClass} />
-                        </Field>
-                      )}
                     </>
                   ) : (
-                    <>
-                      <Field label="Username or email" htmlFor="signin-login">
-                        <Input id="signin-login" required autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="vicky or vicky@mail.com" value={form.login} onChange={e => { set("login")(e); resetPinStep(); }} className={fieldClass} />
-                      </Field>
-                      {pinStep !== "create" && <Field label="PIN" htmlFor="signin-pin"><PinInput id="signin-pin" value={form.pin} onChange={set("pin")} /></Field>}
-                    </>
+                    <Field label="Username or email" htmlFor="signin-login">
+                      <Input id="signin-login" required autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="vicky or vicky@mail.com" value={form.login} onChange={e => { set("login")(e); resetStep(); }} className={fieldClass} />
+                    </Field>
+                  )}
+                  {pwStep !== "create" && (
+                    <Field label="Password" htmlFor="signin-password" hint={legacy ? "Your password (your old 4-digit PIN works). If you were the administrator, your admin PIN." : "Used Split It with a 4-digit PIN? That PIN is your password."}>
+                      <PasswordInput id="signin-password" value={form.password} onChange={set("password")} placeholder="Password" />
+                    </Field>
                   )}
                   <AnimatePresence initial={false}>
-                    {pinStep && (
-                      <m.div {...reveal} className="overflow-hidden">
-                        <p className="mb-4 px-1 text-[13.5px] text-muted-foreground">{pinStep === "create" ? "Your account has no PIN yet. Choose 4 digits only you know." : "One last step: choose a 4-digit PIN. You'll sign in with it from now on."}</p>
-                        <div className="grid grid-cols-2 gap-3">
-                          <Field label="New PIN" htmlFor="new-pin"><PinInput id="new-pin" value={form.newPin} onChange={set("newPin")} autoComplete="new-password" autoFocus /></Field>
-                          <Field label="Confirm PIN" htmlFor="new-pin2"><PinInput id="new-pin2" value={form.newPin2} onChange={set("newPin2")} autoComplete="new-password" /></Field>
-                        </div>
+                    {pwStep && (
+                      <m.div {...reveal} className="space-y-4 overflow-hidden">
+                        <p className="px-1 text-[13.5px] text-muted-foreground">{pwStep === "create" ? "Your account has no password yet. Choose one only you know." : "One last step: choose a password. You'll sign in with it from now on."}</p>
+                        <Field label="New password" htmlFor="new-password"><PasswordInput id="new-password" value={form.next} onChange={set("next")} autoComplete="new-password" placeholder="New password" autoFocus /></Field>
+                        <Field label="Confirm password" htmlFor="new-password2"><PasswordInput id="new-password2" value={form.next2} onChange={set("next2")} autoComplete="new-password" placeholder="Type it again" /></Field>
+                        <p className="footnote px-1 text-muted-foreground"><PasswordStrength value={form.next} /></p>
                       </m.div>
                     )}
                   </AnimatePresence>
-                  <LoadingButton type="submit" size="xl" className="w-full" disabled={!pinReady || !newPinReady} loading={busy} loadingText="Signing in…">{pinStep ? "Save PIN and sign in" : "Sign in"}</LoadingButton>
-                  <button type="button" onClick={() => { setLegacy(l => !l); resetPinStep(); }} className="mx-auto block cursor-pointer text-center text-[14px] font-medium text-tint">
+                  <LoadingButton type="submit" size="xl" className="w-full" disabled={!ready} loading={busy} loadingText="Signing in…">{pwStep ? "Save password and sign in" : "Sign in"}</LoadingButton>
+                  <button type="button" onClick={() => { setLegacy(l => !l); resetStep(); }} className="mx-auto block cursor-pointer text-center text-[14px] font-medium text-tint">
                     {legacy ? "Sign in with username or email" : "Used Split It before? Sign in with your group"}
                   </button>
                 </m.form>
               ) : (
                 <m.form key="signup" {...fade} className="space-y-5" onSubmit={e => { e.preventDefault(); run(async () => {
-                  if (form.suPin !== form.suPin2) throw new Error("The two PINs don't match.");
-                  await post("/api/auth/signup", { name: form.suName.trim(), username: cleanUsername(form.suUsername), email: form.suEmail.trim() || undefined, pin: form.suPin });
-                  setForm(f => ({ ...f, suPin: "", suPin2: "" }));
+                  if (form.suPassword !== form.suPassword2) throw new Error("The two passwords don't match.");
+                  await post("/api/auth/signup", { name: form.suName.trim(), username: cleanUsername(form.suUsername), email: form.suEmail.trim() || undefined, password: form.suPassword });
+                  setForm(f => ({ ...f, suPassword: "", suPassword2: "" }));
                   await signedIn("Account created. Welcome!");
                 }); }}>
                   <Field label="Your name" htmlFor="su-name">
@@ -189,11 +183,12 @@ export function AuthScreen() {
                   <Field label="Email (optional)" htmlFor="su-email" hint="Friends can invite you by email too.">
                     <Input id="su-email" type="email" autoComplete="email" autoCapitalize="none" placeholder="you@mail.com" value={form.suEmail} onChange={set("suEmail")} className={fieldClass} />
                   </Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Choose a PIN" htmlFor="su-pin"><PinInput id="su-pin" value={form.suPin} onChange={set("suPin")} autoComplete="new-password" /></Field>
-                    <Field label="Confirm PIN" htmlFor="su-pin2"><PinInput id="su-pin2" value={form.suPin2} onChange={set("suPin2")} autoComplete="new-password" /></Field>
+                  <Field label="Password" htmlFor="su-password"><PasswordInput id="su-password" value={form.suPassword} onChange={set("suPassword")} autoComplete="new-password" placeholder="Choose a password" /></Field>
+                  <div>
+                    <Field label="Confirm password" htmlFor="su-password2"><PasswordInput id="su-password2" value={form.suPassword2} onChange={set("suPassword2")} autoComplete="new-password" placeholder="Type it again" /></Field>
+                    <p className="footnote mt-2 px-1 text-muted-foreground"><PasswordStrength value={form.suPassword} /></p>
                   </div>
-                  <LoadingButton type="submit" size="xl" className="w-full" disabled={form.suPin.length !== 4 || form.suPin2.length !== 4 || usernameState === "taken" || usernameState === "invalid"} loading={busy} loadingText="Creating account…">Create account</LoadingButton>
+                  <LoadingButton type="submit" size="xl" className="w-full" disabled={!goodPassword(form.suPassword) || !form.suPassword2 || usernameState === "taken" || usernameState === "invalid"} loading={busy} loadingText="Creating account…">Create account</LoadingButton>
                 </m.form>
               )}
             </AnimatePresence>
@@ -207,6 +202,19 @@ export function AuthScreen() {
         {install.dialog}
         <p className="footnote mt-auto pt-10 text-center text-muted-foreground">Amounts are kept to the exact paisa.<span className="mt-1 block text-[11px] opacity-60">Build {__BUILD__}</span></p>
       </div>
+    </div>
+  );
+}
+
+// "Continue with Google", then "or" above the form. Hidden until Google
+// sign-in is set up on the server.
+function GoogleSection({ onToken, text }: { onToken: (t: string) => void; text: "continue_with" | "signup_with" }) {
+  const clientId = useGoogleClientId().data;
+  if (!clientId) return null;
+  return (
+    <div className="mb-5">
+      <GoogleButton onToken={onToken} text={text} />
+      <div className="mt-5 flex items-center gap-3 text-[12.5px] text-muted-foreground"><span className="h-px flex-1 bg-hairline" />or<span className="h-px flex-1 bg-hairline" /></div>
     </div>
   );
 }

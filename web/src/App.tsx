@@ -1,5 +1,7 @@
 import * as React from "react";
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { GroupGate } from "@/features/groups/GroupGate";
+import { GroupPinDialog, openGroupPin } from "@/components/app/secrets";
 import { AnimatePresence, LazyMotion } from "motion/react";
 import { Bell, Download, LogOut, UserRound, Wallet } from "lucide-react";
 import { NotificationsScreen } from "@/features/notifications/NotificationsScreen";
@@ -23,6 +25,11 @@ import { cn } from "@/lib/utils";
 const loadMotionFeatures = () => import("@/lib/motion-features").then(m => m.default);
 
 const queryClient = new QueryClient({
+  // An action in a group that's locked on this device (e.g. confirming a
+  // payment from Home) asks for the group's PIN.
+  mutationCache: new MutationCache({
+    onError: err => { if (err instanceof ApiError && err.code === "group_locked") openGroupPin({ groupId: String(err.data.groupId), groupName: String(err.data.groupName) }); },
+  }),
   defaultOptions: {
     queries: {
       staleTime: 15_000,
@@ -47,6 +54,7 @@ export default function App() {
       <LazyMotion features={loadMotionFeatures} strict>
         <Root />
       </LazyMotion>
+      <GroupPinDialog />
       <Toaster position="bottom-center" offset={{ bottom: 100 }} mobileOffset={{ bottom: 100, left: 16, right: 16 }} toastOptions={{ classNames: { toast: "!rounded-[20px] !border-0 !bg-[#141716]/95 !text-white !text-[14px] !shadow-[0_14px_36px_-10px_rgb(0_0_0/40%)] backdrop-blur-xl", description: "!text-white/70", success: "[&_[data-icon]]:!text-[#8fd6b8]", error: "[&_[data-icon]]:!text-[#f2a492]" } }} />
     </QueryClientProvider>
   );
@@ -133,9 +141,9 @@ function Shell({ user }: { user: User }) {
           {route.name === "home" && <GroupsScreen user={user} />}
           {route.name === "profile" && <ProfileScreen user={user} />}
           {route.name === "admin" && <SiteAdminScreen user={user} />}
-          {route.name === "group" && <GroupScreen groupId={route.groupId} tab={route.tab} expenseId={route.expenseId} />}
+          {route.name === "group" && <GroupGate groupId={route.groupId}><GroupScreen groupId={route.groupId} tab={route.tab} expenseId={route.expenseId} /></GroupGate>}
           {route.name === "notifications" && <NotificationsScreen />}
-          {route.name === "person" && <PersonScreen groupId={route.groupId} memberId={route.memberId} />}
+          {route.name === "person" && <GroupGate groupId={route.groupId}><PersonScreen groupId={route.groupId} memberId={route.memberId} /></GroupGate>}
         </React.Fragment>
       </AnimatePresence>
     </div>

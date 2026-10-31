@@ -2,7 +2,8 @@ import * as React from "react";
 import { AtSign, ChevronRight, KeyRound, Link2, Wallet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LoadingButton, Page, PersonAvatar, SectionTitle, Segmented, fieldClass, pressableRow } from "@/components/app/bits";
-import { Field, PinInput, USERNAME_RE, UsernameHint, useUsernameCheck } from "@/features/auth/AuthScreen";
+import { Field, USERNAME_RE, UsernameHint, useUsernameCheck } from "@/features/auth/AuthScreen";
+import { GoogleButton, PasswordInput, PasswordStrength, goodPassword, useGoogleClientId } from "@/components/app/secrets";
 import { BackButton } from "@/features/groups/GroupScreen";
 import { PaymentMethodSheet } from "@/features/groups/UpiPayments";
 import { useAccountAction, useMyPaymentMethod } from "@/hooks/queries";
@@ -46,7 +47,8 @@ export function ProfileScreen({ user }: { user: User }) {
       </section>
       <PaymentMethodSheet open={upiOpen} onOpenChange={setUpiOpen} />
 
-      <ChangePin hasPin={user.hasPin} />
+      <ChangePassword hasPin={user.hasPin} />
+      <GoogleAccount user={user} />
       <LinkAccount />
     </Page>
   );
@@ -83,24 +85,52 @@ function DetailsForm({ user }: { user: User }) {
   );
 }
 
-function ChangePin({ hasPin }: { hasPin: boolean }) {
+function ChangePassword({ hasPin }: { hasPin: boolean }) {
   const [f, setF] = React.useState({ current: "", next: "", again: "" });
   const change = useAccountAction(() => {
-    if (f.next !== f.again) return Promise.reject(new Error("The two new PINs don't match."));
-    return post("/api/me/pin", { currentPin: f.current, newPin: f.next });
-  }, () => "PIN changed.");
+    if (f.next !== f.again) return Promise.reject(new Error("The two new passwords don't match."));
+    return post("/api/me/password", { currentPassword: f.current, newPassword: f.next });
+  }, () => hasPin ? "Password changed." : "Password added.");
   return (
     <section className="mt-7">
-      <SectionTitle>PIN</SectionTitle>
+      <SectionTitle>Password</SectionTitle>
       <form className="panel space-y-4 p-5" onSubmit={e => { e.preventDefault(); change.mutate(undefined, { onSuccess: () => setF({ current: "", next: "", again: "" }) }); }}>
-        <p className="flex items-center gap-2 text-[14px] text-muted-foreground"><KeyRound className="size-4" />You sign in with your username or email and this 4-digit PIN.</p>
-        <div className="grid grid-cols-3 gap-3">
-          {hasPin && <Field label="Current" htmlFor="pin-current"><PinInput id="pin-current" value={f.current} onChange={v => setF(x => ({ ...x, current: v }))} /></Field>}
-          <Field label="New" htmlFor="pin-new"><PinInput id="pin-new" value={f.next} onChange={v => setF(x => ({ ...x, next: v }))} autoComplete="new-password" /></Field>
-          <Field label="Again" htmlFor="pin-again"><PinInput id="pin-again" value={f.again} onChange={v => setF(x => ({ ...x, again: v }))} autoComplete="new-password" /></Field>
+        <p className="flex items-center gap-2 text-[14px] text-muted-foreground"><KeyRound className="size-4 shrink-0" />{hasPin ? "You sign in with your username or email and this password." : "You sign in with Google. Add a password to also sign in with your username."}</p>
+        {hasPin && <Field label="Current password" htmlFor="pw-current"><PasswordInput id="pw-current" value={f.current} onChange={v => setF(x => ({ ...x, current: v }))} placeholder="Current password" /></Field>}
+        <Field label="New password" htmlFor="pw-new"><PasswordInput id="pw-new" value={f.next} onChange={v => setF(x => ({ ...x, next: v }))} autoComplete="new-password" placeholder="New password" /></Field>
+        <div>
+          <Field label="Confirm new password" htmlFor="pw-again"><PasswordInput id="pw-again" value={f.again} onChange={v => setF(x => ({ ...x, again: v }))} autoComplete="new-password" placeholder="Type it again" /></Field>
+          <p className="footnote mt-2 px-1 text-muted-foreground"><PasswordStrength value={f.next} /></p>
         </div>
-        <LoadingButton type="submit" variant="secondary" className="w-full rounded-full" disabled={(hasPin && f.current.length !== 4) || f.next.length !== 4 || f.again.length !== 4} loading={change.isPending} loadingText="Changing…">Change PIN</LoadingButton>
+        <LoadingButton type="submit" variant="secondary" className="w-full rounded-full" disabled={(hasPin && !f.current) || !goodPassword(f.next) || !f.again} loading={change.isPending} loadingText="Saving…">{hasPin ? "Change password" : "Add password"}</LoadingButton>
       </form>
+    </section>
+  );
+}
+
+// Connect Google to sign in with it; disconnect needs a password.
+function GoogleAccount({ user }: { user: User }) {
+  const clientId = useGoogleClientId().data;
+  const connect = useAccountAction((credential: string) => post("/api/me/google", { credential }), () => "Google connected. You can sign in with it now.");
+  const disconnect = useAccountAction(() => post("/api/me/google/disconnect"), () => "Google disconnected.");
+  if (!clientId && !user.google) return null;
+  return (
+    <section className="mt-7">
+      <SectionTitle>Google</SectionTitle>
+      <div className="panel space-y-4 p-5">
+        {user.google ? (
+          <>
+            <p className="text-[14px] text-muted-foreground">Google is connected: you can sign in with it.</p>
+            <LoadingButton variant="secondary" className="w-full rounded-full" disabled={!user.hasPin} loading={disconnect.isPending} loadingText="Disconnecting…" onClick={() => disconnect.mutate(undefined)}>Disconnect Google</LoadingButton>
+            {!user.hasPin && <p className="text-[12.5px] text-muted-foreground">Add a password first, so you can still sign in without Google.</p>}
+          </>
+        ) : (
+          <>
+            <p className="text-[14px] text-muted-foreground">Connect your Google account to sign in with one tap.</p>
+            <GoogleButton onToken={t => connect.mutate(t)} text="continue_with" />
+          </>
+        )}
+      </div>
     </section>
   );
 }
@@ -110,7 +140,7 @@ function ChangePin({ hasPin }: { hasPin: boolean }) {
 function LinkAccount() {
   const [by, setBy] = React.useState<"username" | "group">("group");
   const [f, setF] = React.useState({ login: "", group: "", name: "", pin: "" });
-  const link = useAccountAction(() => post<{ merged: string }>("/api/me/link", by === "username" ? { login: f.login.trim(), pin: f.pin } : { group: f.group.trim(), name: f.name.trim(), pin: f.pin }),
+  const link = useAccountAction(() => post<{ merged: string }>("/api/me/link", by === "username" ? { login: f.login.trim(), password: f.pin } : { group: f.group.trim(), name: f.name.trim(), password: f.pin }),
     () => "Linked. Its groups, expenses and payments are now in this account.");
   return (
     <section className="mt-7">
@@ -126,8 +156,8 @@ function LinkAccount() {
             <Field label="Name in it" htmlFor="link-name"><Input id="link-name" required value={f.name} onChange={e => setF(x => ({ ...x, name: e.target.value }))} className={fieldClass} /></Field>
           </div>
         )}
-        <Field label="Its PIN" htmlFor="link-pin"><PinInput id="link-pin" value={f.pin} onChange={v => setF(x => ({ ...x, pin: v }))} autoComplete="off" /></Field>
-        <LoadingButton type="submit" variant="secondary" className="w-full rounded-full" disabled={f.pin.length !== 4} loading={link.isPending} loadingText="Linking…">Link account</LoadingButton>
+        <Field label="Its password (or old PIN)" htmlFor="link-pin"><PasswordInput id="link-pin" value={f.pin} onChange={v => setF(x => ({ ...x, pin: v }))} autoComplete="off" placeholder="That account's password" /></Field>
+        <LoadingButton type="submit" variant="secondary" className="w-full rounded-full" disabled={!f.pin} loading={link.isPending} loadingText="Linking…">Link account</LoadingButton>
       </form>
     </section>
   );

@@ -22,7 +22,7 @@ test("the first account to enter the admin key becomes the site owner; nobody el
     assert.equal((await call(env, path, { cookie: other.cookie })).status, 404, path);
     assert.equal((await call(env, path)).status, 401, path);
   }
-  assert.equal((await post(env, `/api/site-admin/users/${owner.id}/reset-pin`, other.cookie)).status, 404);
+  assert.equal((await post(env, `/api/site-admin/groups/x/reset-pin`, other.cookie)).status, 404);
   // Unlock is rate limited.
   const tries = [];
   for (let i = 0; i < 11; i++) tries.push((await post(env, "/api/site-admin/unlock", owner.cookie, { key: "nope" + i })).status);
@@ -37,7 +37,7 @@ test("the Admin tab needs the key in each session; it shows accounts and groups 
   const owner = await signUp(env, "Owner Person", { email: "owner@x.in" });
   assert.equal((await post(env, "/api/site-admin/unlock", owner.cookie, { key: OLD_ADMIN_PIN })).status, 200);
   // A new session starts locked.
-  const again = (await call(env, "/api/auth/signin", { method: "POST", body: { login: owner.username, pin: "2468" } })).cookie;
+  const again = (await call(env, "/api/auth/signin", { method: "POST", body: { login: owner.username, password: "secret2468" } })).cookie;
   const locked = await call(env, "/api/site-admin/overview", { cookie: again });
   assert.deepEqual([locked.status, locked.data.code], [403, "admin_locked"]);
   assert.deepEqual((await call(env, "/api/me", { cookie: again })).data.user.adminUnlocked, false);
@@ -55,12 +55,16 @@ test("the Admin tab needs the key in each session; it shows accounts and groups 
   assert.deepEqual((await call(env, "/api/groups", { cookie: owner.cookie })).data.groups, []);
   assert.equal((await call(env, `/api/groups/${g.groupId}/expenses`, { cookie: owner.cookie })).status, 404);
 
-  // A forgotten PIN: a temporary one, shown once; the person is signed out.
-  const reset = await post(env, `/api/site-admin/users/${g.ids.Bea}/reset-pin`, owner.cookie);
-  assert.equal(reset.status, 200);
-  assert.match(reset.data.temporaryPin, /^\d{4}$/);
-  assert.equal((await call(env, "/api/me", { cookie: g.cookies.Bea })).data.user, null);
-  assert.equal((await call(env, "/api/auth/signin", { method: "POST", body: { login: g.usernames.Bea, pin: reset.data.temporaryPin } })).status, 200);
+  // The owner can't reset anyone's password: there is no such route.
+  for (const path of [`/api/site-admin/users/${g.ids.Bea}/reset-password`, `/api/site-admin/users/${g.ids.Bea}/reset-pin`]) {
+    assert.equal((await post(env, path, owner.cookie)).status, 404, path);
+  }
+  assert.equal((await call(env, "/api/me", { cookie: g.cookies.Bea })).data.user.name, "Bea", "Bea is still signed in");
+  // A group whose admins forgot its PIN: the owner clears it.
+  assert.deepEqual(groups.map(x => x.hasPin), [true]);
+  assert.equal((await post(env, `/api/site-admin/groups/${g.groupId}/reset-pin`, owner.cookie)).status, 200);
+  const fresh = (await call(env, "/api/auth/signin", { method: "POST", body: { login: g.usernames.Cy, password: "secret2468" } })).cookie;
+  assert.equal((await call(env, `/api/groups/${g.groupId}`, { cookie: fresh })).status, 200, "opens without a PIN until an admin sets one");
   // Locking ends it for this session.
   assert.equal((await post(env, "/api/site-admin/lock", owner.cookie)).status, 200);
   assert.equal((await call(env, "/api/site-admin/users", { cookie: owner.cookie })).status, 403);
