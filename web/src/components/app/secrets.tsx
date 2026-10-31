@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, Lock } from "lucide-react";
+import { Eye, EyeOff, Lock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -131,5 +131,15 @@ export function GoogleButton({ onToken, text = "continue_with" }: { onToken: (to
   }, [clientId, text]);
   if (!clientId) return null;
   if (failed) return <p className="text-center text-[13px] text-muted-foreground">Google sign-in couldn't load. Check your connection.</p>;
-  return <div ref={ref} className="flex min-h-11 w-full justify-center" data-testid="google-button" />;
+  return (
+    <div className="w-full">
+      <div ref={ref} className="flex min-h-11 w-full justify-center" data-testid="google-button" />
+      {/* What Google shares with basic sign-in: name, email and profile picture.
+          Nothing else (no phone, contacts or password). */}
+      <p className="mt-2.5 flex items-start justify-center gap-1.5 text-center text-[12px] leading-4 text-muted-foreground" data-testid="google-privacy">
+        <ShieldCheck className="mt-px size-3.5 shrink-0" />
+        <span>Split It only gets your <b className="font-medium text-foreground">name, email and profile picture</b> from Google. Never your password, contacts or anything else.</span>
+      </p>
+    </div>
+  );
 }
