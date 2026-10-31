@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 export type Route =
   | { name: "home" }
   | { name: "profile" }
+  | { name: "admin" }
   | { name: "notifications" }
   // expenseId: open on that expense, expanded (#/g/:id/e/:expenseId).
   | { name: "group"; groupId: string; tab: GroupTab; expenseId?: string }
@@ -15,6 +16,7 @@ const TABS: GroupTab[] = ["expenses", "balances", "payments", "insights"];
 export function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
   if (parts[0] === "profile") return { name: "profile" };
+  if (parts[0] === "admin") return { name: "admin" };
   if (parts[0] === "notifications") return { name: "notifications" };
   if (parts[0] === "g" && parts[1]) {
     if (parts[2] === "p" && parts[3]) return { name: "person", groupId: parts[1], memberId: parts[3] };
@@ -29,6 +31,7 @@ export function href(route: Route): string {
   switch (route.name) {
     case "home": return "#/";
     case "profile": return "#/profile";
+    case "admin": return "#/admin";
     case "notifications": return "#/notifications";
     case "group": return "#/g/" + encodeURIComponent(route.groupId) + (route.expenseId ? "/e/" + encodeURIComponent(route.expenseId) : route.tab === "expenses" ? "" : "/" + route.tab);
     case "person": return "#/g/" + encodeURIComponent(route.groupId) + "/p/" + encodeURIComponent(route.memberId);

@@ -28,7 +28,12 @@ export const post = <T = { ok: true },>(path: string, body: unknown = {}) => req
 export type Identity = { id: string; name: string };
 // The signed-in account. legacy: from before accounts (auto username, may
 // still sign in with group + name) until they choose a username.
-export type User = Identity & { username: string; email: string | null; legacy: boolean; hasPin: boolean };
+export type User = Identity & { username: string; email: string | null; legacy: boolean; hasPin: boolean;
+  // Only for the site owner: the Admin tab, and whether this session entered the admin key.
+  siteAdmin?: boolean; adminUnlocked?: boolean };
+export type AdminOverview = { users: number; groups: number; expenses: number; totalSpentCents: number; newUsersThisWeek: number };
+export type AdminUser = { id: string; name: string; username: string; email: string | null; createdAt: number; legacy: boolean; siteAdmin: boolean; hasPin: boolean; locked: boolean; groupCount: number };
+export type AdminGroup = { id: string; name: string; createdAt: number; memberCount: number; admins: string | null; expenseCount: number; totalCents: number; lastActivity: number | null };
 export type Me = { user: User | null };
 export type Role = "admin" | "member";
 export type GroupSummary = { id: string; name: string; myBalanceCents: number; role: Role; memberCount: number };

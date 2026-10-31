@@ -121,6 +121,36 @@ What each person can do in a group:
 
 **Isolation:** every `/api/groups/:id/*` route first checks that the caller is an `active` member of that group, and anything else gets 404. There is no public group list. Being admin of one group gives no rights in another; tests cover both.
 
+## 5a. Site owner ("Admin" tab)
+
+The site owner's role is separate from group admins.
+
+**Who the owner is**
+
+- The owner is one account with `appx_users.site_role = 'admin'` (migration `0014`).
+- On existing data, that is the old administrator's account.
+- On a fresh install, the first account to enter the admin key at `#/admin` becomes the owner. After that, the key does nothing for anyone else.
+
+**The two tabs**
+
+- The owner's header shows **General | Admin**. Nobody else sees the switch, and `/api/me` doesn't mention it to them.
+- **General** is the owner's ordinary account: only the groups they are in, with exactly the rights anyone has.
+- **Admin** is the console:
+  - totals (people, new this week, groups, expenses, money recorded);
+  - **People**: search, groups count, locked or no-PIN flags, **Reset PIN**;
+  - **Groups**: members, admins, expense count, total, last activity.
+- The two tabs don't share anything. The console never shows anyone's expenses, and General never gets console powers.
+
+**Unlocking and access**
+
+- **Key per session:** opening Admin needs the admin key (the `ADMIN_PIN` secret) once per session, for 12 hours. **Lock** ends it.
+- **Unlock limits:** unlocking is rate-limited per account and per IP.
+- **Everyone else:** every `/api/site-admin/*` route answers 404 for non-owners.
+
+**Reset PIN**
+
+- Reset PIN covers forgotten PINs. It sets a random temporary 4-digit PIN, shown once to the owner to pass on, and signs the person out everywhere.
+
 ## 6. Moving existing data (migration `0013_accounts.sql`)
 
 The migration only adds tables and columns, plus one index drop: group names no longer need to be unique. It changes no money rows. It does the following:
@@ -236,5 +266,5 @@ Every other group endpoint (expenses, balances, payments, UPI, screenshots, noti
   Email verification (a magic link) can be added later.
 - **Finding out who has an account.** Anyone can create a group and try usernames or emails to see whether someone is on Split It. The product asks for "not found", so this is accepted, but it is rate-limited.
 - **Same display name.** Two different people may share a name in a group, and their `@username` tells them apart.
-- **Forgotten PIN.** Until phase 3 there is no self-service reset. It needs Google, or a manual D1 fix.
+- **Forgotten PIN.** Until phase 3 there is no self-service reset: the site owner resets it from the Admin tab (a temporary PIN they pass on).
 - **One-time sign-in for old members.** Until a member picks a username, anyone who knows their group and name can try their PIN. This is the same exposure as before, with the same lockout. Members who never had a PIN can have it set by whoever signs in first, as before.

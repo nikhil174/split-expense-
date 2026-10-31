@@ -74,7 +74,7 @@ async function legacyWorld(t) {
   const notesBefore = raw.prepare("SELECT recipient_id,COUNT(*) AS n FROM appx_notifications GROUP BY recipient_id ORDER BY recipient_id").all();
 
   // ----- The migration, exactly as production runs it. -----
-  raw.exec(await readFile(new URL("../migrations/0013_accounts.sql", import.meta.url), "utf8"));
+  for (const f of ["0013_accounts.sql", "0014_site_admin.sql"]) raw.exec(await readFile(new URL("../migrations/" + f, import.meta.url), "utf8"));
   const now = (path, opts = {}) => call(env, path, opts);
   return { raw, env, now, snapshot, before, notesBefore, goa, office, ids: { vicky: vicky.id, jagan: jagan.id, mosquito: mosquito.id, rahul: rahul.id, oldTimer: oldTimer.id, pete: pete.id, vickyOffice: vickyOffice.id, zed: zed.id }, waiting, rejected };
 }
@@ -91,6 +91,10 @@ test("after the migration every balance, debt, expense and payment is exactly wh
   assert.equal(me.name, "Nikhil");
   assert.match(me.username, /^nikhil_[0-9a-f]{6}$/);
   assert.equal(me.legacy, true);
+  // The old administrator is the site owner (Admin tab, behind the admin key).
+  assert.deepEqual([me.siteAdmin, me.adminUnlocked], [true, false]);
+  assert.equal((await w.now("/api/site-admin/unlock", { method: "POST", cookie: admin.cookie, body: { key: OLD_ADMIN_PIN } })).status, 200);
+  assert.equal((await w.now("/api/site-admin/overview", { cookie: admin.cookie })).data.groups, 2);
 
   const after = await w.snapshot(w.now, admin.cookie);
   assert.deepEqual(after, w.before);

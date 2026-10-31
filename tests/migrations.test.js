@@ -13,7 +13,7 @@ test("all migrations apply cleanly, in Wrangler order, to an empty isolated data
     "0001_app_tables.sql", "0002_admin_sessions.sql", "0003_app_settings.sql", "0003_reset_app_data.sql",
     "0004_group_access_and_unique_names.sql", "0004_settlements.sql", "0005_admin_profile.sql", "0006_indexes_and_rate_limits.sql",
     "0007_member_pins.sql", "0008_unique_member_names.sql", "0009_settlement_confirmation.sql",
-    "0010_payment_methods.sql", "0011_notifications.sql", "0012_payment_proofs_and_push.sql", "0013_accounts.sql",
+    "0010_payment_methods.sql", "0011_notifications.sql", "0012_payment_proofs_and_push.sql", "0013_accounts.sql", "0014_site_admin.sql",
   ]);
   await applyMigrations(db);
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'appx_%' ORDER BY name").all().map(r => r.name);

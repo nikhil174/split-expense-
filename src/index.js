@@ -10,6 +10,7 @@ const MAX_SPLIT_MEMBERS = 100;
 const MINUTE = 60 * 1000;
 const RATE_LIMITS = {
   signin: { limit: 20, windowMs: 15 * MINUTE },
+  adminKey: { limit: 10, windowMs: 15 * MINUTE },
   signup: { limit: 10, windowMs: 60 * MINUTE },
   link: { limit: 10, windowMs: 60 * MINUTE },
   invite: { limit: 40, windowMs: 10 * MINUTE },
@@ -129,12 +130,14 @@ async function requireUser(req, env) {
   const raw = cookie(req, "split_user");
   if (!raw) return null;
   const db = env['split-expense'], tokenHash = await hash(raw);
-  const s = await db.prepare("SELECT s.expires_at,u.id,u.display_name,u.username,u.email,u.legacy,u.pin_hash IS NOT NULL AS hasPin FROM appx_user_sessions s JOIN appx_users u ON u.id=s.user_id WHERE s.token_hash=?").bind(tokenHash).first();
+  const s = await db.prepare("SELECT s.expires_at,s.admin_until,u.id,u.display_name,u.username,u.email,u.legacy,u.site_role,u.pin_hash IS NOT NULL AS hasPin FROM appx_user_sessions s JOIN appx_users u ON u.id=s.user_id WHERE s.token_hash=?").bind(tokenHash).first();
   if (!s || s.expires_at < Date.now()) {
     if (s) await db.prepare("DELETE FROM appx_user_sessions WHERE token_hash=?").bind(tokenHash).run();
     return null;
   }
-  return { id: s.id, name: s.display_name, username: s.username, email: s.email || null, legacy: !!s.legacy, hasPin: !!s.hasPin };
+  const siteAdmin = s.site_role === "admin";
+  return { id: s.id, name: s.display_name, username: s.username, email: s.email || null, legacy: !!s.legacy, hasPin: !!s.hasPin,
+    siteAdmin, adminUnlocked: siteAdmin && Number(s.admin_until) > Date.now(), tokenHash };
 }
 // Starts a session for an account and returns the response that sets its cookie.
 async function startSession(db, userId, data = { ok: true }, status = 200) {
@@ -143,7 +146,10 @@ async function startSession(db, userId, data = { ok: true }, status = 200) {
   try { await db.prepare("DELETE FROM appx_user_sessions WHERE expires_at<?").bind(Date.now()).run(); } catch {}
   return json(data, status, { "set-cookie": setCookie("split_user", token, SESSION_MS / 1000) });
 }
-const userOut = u => ({ id: u.id, name: u.name, username: u.username, email: u.email, legacy: u.legacy, hasPin: u.hasPin });
+// siteAdmin: may open the Admin tab (the site owner); adminUnlocked: this
+// session entered the admin key. Nobody else learns the Admin tab exists.
+const userOut = u => ({ id: u.id, name: u.name, username: u.username, email: u.email, legacy: u.legacy, hasPin: u.hasPin, ...(u.siteAdmin && { siteAdmin: true, adminUnlocked: u.adminUnlocked }) });
+const ADMIN_UNLOCK_MS = 12 * 60 * 60 * 1000;
 
 // Usernames: 3–30 characters, lowercase letters, digits, "_" and ".",
 // starting with a letter. Stored lowercase; "@vicky" and "Vicky" mean "vicky".
@@ -352,6 +358,74 @@ const owedSql = (g, f, t, reserve = false) => "("
   + `-COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=${g} AND from_member_id=${f} AND to_member_id=${t} AND status ${reserve ? "IN ('confirmed','pending')" : "='confirmed'"}),0)`
   + `+COALESCE((SELECT SUM(amount_cents) FROM appx_settlements WHERE group_id=${g} AND from_member_id=${t} AND to_member_id=${f} AND status='confirmed'),0))`;
 
+// ----- Site owner console ("Admin" tab) -----
+// Only the site owner's account (site_role 'admin'), and only after entering
+// the admin key (the ADMIN_PIN secret) in this session. If no owner exists
+// yet (a fresh install), the first account to enter the key becomes it.
+// Everyone else gets 404, as if it didn't exist. It sees accounts and groups
+// in summary, never anyone's expenses.
+async function siteAdmin(req, env, url, u) {
+  const db = env['split-expense'], p = url.pathname, method = req.method;
+  const hidden = () => fail("Not found.", 404);
+  if (method === "POST" && p === "/api/site-admin/unlock") {
+    if (!u.siteAdmin && await db.prepare("SELECT 1 FROM appx_users WHERE site_role='admin'").first()) return hidden();
+    if (!env.ADMIN_PIN) return fail("The admin key is not configured on the server.", 503);
+    if (await rateLimited(db, "admin-key", u.id, RATE_LIMITS.adminKey) || await rateLimited(db, "admin-key", await clientKey(req), RATE_LIMITS.adminKey)) return tooMany();
+    if (!await secretEquals(textField((await body(req))?.key), String(env.ADMIN_PIN))) return fail("That's not the admin key.", 401);
+    await db.batch([
+      ...(u.siteAdmin ? [] : [db.prepare("UPDATE appx_users SET site_role='admin' WHERE id=? AND NOT EXISTS (SELECT 1 FROM appx_users WHERE site_role='admin')").bind(u.id)]),
+      db.prepare("UPDATE appx_user_sessions SET admin_until=? WHERE token_hash=?").bind(Date.now() + ADMIN_UNLOCK_MS, u.tokenHash),
+    ]);
+    if (!(await db.prepare("SELECT site_role FROM appx_users WHERE id=?").bind(u.id).first())?.site_role) return hidden();
+    return json({ ok: true });
+  }
+  if (!u.siteAdmin) return hidden();
+  if (method === "POST" && p === "/api/site-admin/lock") {
+    await db.prepare("UPDATE appx_user_sessions SET admin_until=NULL WHERE token_hash=?").bind(u.tokenHash).run();
+    return json({ ok: true });
+  }
+  if (!u.adminUnlocked) return json({ error: "Enter the admin key to open the Admin tab.", code: "admin_locked" }, 403);
+  const q = cleanName(url.searchParams.get("q")).toLowerCase();
+  if (method === "GET" && p === "/api/site-admin/overview") {
+    const one = sql => db.prepare(sql).first();
+    const [users, groups, expenses, spent, week] = await Promise.all([
+      one("SELECT COUNT(*) AS n FROM appx_users"), one("SELECT COUNT(*) AS n FROM appx_groups"), one("SELECT COUNT(*) AS n FROM appx_expenses"),
+      one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM appx_expenses"),
+      db.prepare("SELECT COUNT(*) AS n FROM appx_users WHERE created_at>?").bind(Date.now() - 7 * 24 * 60 * MINUTE).first(),
+    ]);
+    return json({ users: users.n, groups: groups.n, expenses: expenses.n, totalSpentCents: spent.n, newUsersThisWeek: week.n });
+  }
+  if (method === "GET" && p === "/api/site-admin/users") {
+    const like = "%" + q.replace(/[%_\\]/g, "\\$&") + "%";
+    const r = await db.prepare("SELECT u.id,u.display_name AS name,u.username,u.email,u.created_at AS createdAt,u.legacy,u.site_role='admin' AS siteAdmin,u.pin_hash IS NOT NULL AS hasPin,u.pin_locked_until>?2 AS locked,"
+      + "(SELECT COUNT(*) FROM appx_group_members m WHERE m.member_id=u.id AND m.status='active') AS groupCount FROM appx_users u "
+      + "WHERE ?1='%%' OR lower(u.username) LIKE ?1 ESCAPE '\\' OR lower(u.display_name) LIKE ?1 ESCAPE '\\' OR lower(COALESCE(u.email,'')) LIKE ?1 ESCAPE '\\' ORDER BY u.created_at DESC LIMIT 100").bind(like, Date.now()).all();
+    return json({ users: r.results.map(x => ({ ...x, legacy: !!x.legacy, siteAdmin: !!x.siteAdmin, hasPin: !!x.hasPin, locked: !!x.locked })) });
+  }
+  // A forgotten PIN: a new temporary PIN, shown once to the admin to pass
+  // on; it signs the person out everywhere and they change it in Profile.
+  const reset = p.match(/^\/api\/site-admin\/users\/([\w-]+)\/reset-pin$/);
+  if (method === "POST" && reset) {
+    const who = await db.prepare("SELECT id,display_name FROM appx_users WHERE id=?").bind(reset[1]).first();
+    if (!who) return fail("Account not found.", 404);
+    const pin = String(crypto.getRandomValues(new Uint32Array(1))[0] % 10000).padStart(4, "0");
+    await db.batch([
+      db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(await hashPin(pin, env), who.id),
+      db.prepare("DELETE FROM appx_user_sessions WHERE user_id=? AND token_hash<>?").bind(who.id, u.tokenHash),
+    ]);
+    return json({ ok: true, name: who.display_name, temporaryPin: pin });
+  }
+  if (method === "GET" && p === "/api/site-admin/groups") {
+    const like = "%" + q.replace(/[%_\\]/g, "\\$&") + "%";
+    const r = await db.prepare("SELECT g.id,g.name,g.created_at AS createdAt,(SELECT COUNT(*) FROM appx_group_members m WHERE m.group_id=g.id AND m.status='active') AS memberCount,"
+      + "(SELECT group_concat(m.name,', ') FROM appx_group_members m WHERE m.group_id=g.id AND m.status='active' AND m.role='admin') AS admins,"
+      + "(SELECT COUNT(*) FROM appx_expenses e WHERE e.group_id=g.id) AS expenseCount,(SELECT COALESCE(SUM(amount_cents),0) FROM appx_expenses e WHERE e.group_id=g.id) AS totalCents,"
+      + "(SELECT MAX(created_at) FROM appx_expenses e WHERE e.group_id=g.id) AS lastActivity FROM appx_groups g WHERE ?1='%%' OR lower(g.name) LIKE ?1 ESCAPE '\\' ORDER BY g.created_at DESC LIMIT 100").bind(like).all();
+    return json({ groups: r.results });
+  }
+  return hidden();
+}
+
 async function api(req, env, url, outbox = []) {
   const db = env['split-expense'];
   // Every notification written during this request, also sent to phones
@@ -422,6 +496,7 @@ async function api(req, env, url, outbox = []) {
   }
   const u = await requireUser(req, env);
   if (!u) return fail("Sign in to continue.", 401);
+  if (p.startsWith("/api/site-admin/")) return siteAdmin(req, env, url, u);
   // Change my name, username and/or email.
   if (method === "POST" && p === "/api/me/profile") {
     if (await rateLimited(db, "profile", u.id, RATE_LIMITS.paymentMethodWrite)) return tooMany();

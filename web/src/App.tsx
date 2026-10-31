@@ -8,12 +8,13 @@ import { useInstallApp } from "@/components/app/InstallApp";
 import { forgetPushOnSignOut, syncPushOnSignIn } from "@/lib/push";
 import { Toaster } from "@/components/ui/sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PersonAvatar, TopProgress, Wordmark } from "@/components/app/bits";
+import { PersonAvatar, Segmented, TopProgress, Wordmark } from "@/components/app/bits";
 import { AuthScreen } from "@/features/auth/AuthScreen";
 import { GroupsScreen } from "@/features/groups/GroupsScreen";
 import { GroupScreen } from "@/features/groups/GroupScreen";
 import { PersonScreen } from "@/features/groups/PersonScreen";
 import { ProfileScreen } from "@/features/profile/ProfileScreen";
+import { SiteAdminScreen } from "@/features/admin/SiteAdminScreen";
 import { keys, useMe, useNotifications } from "@/hooks/queries";
 import { ApiError, post, type User } from "@/lib/api";
 import { navigate, useRoute } from "@/lib/route";
@@ -97,7 +98,13 @@ function Shell({ user }: { user: User }) {
           <button type="button" onClick={() => navigate({ name: "home" })} className="flex cursor-pointer items-baseline gap-1.5" aria-label="Home">
             <Wordmark />
           </button>
-          <div className="flex-1" />
+          <div className="flex flex-1 justify-end">
+            {/* Only the site owner has two separate views: their own account, and the Admin console. */}
+            {user.siteAdmin && (
+              <Segmented id="view-switch" className="w-[156px] min-[400px]:w-[172px]" value={route.name === "admin" ? "admin" : "general"} onChange={v => navigate({ name: v === "admin" ? "admin" : "home" })}
+                options={[{ value: "general", label: "General" }, { value: "admin", label: "Admin" }]} />
+            )}
+          </div>
           <NotificationBell active={route.name === "notifications"} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -125,6 +132,7 @@ function Shell({ user }: { user: User }) {
         <React.Fragment key={screenKey}>
           {route.name === "home" && <GroupsScreen user={user} />}
           {route.name === "profile" && <ProfileScreen user={user} />}
+          {route.name === "admin" && <SiteAdminScreen user={user} />}
           {route.name === "group" && <GroupScreen groupId={route.groupId} tab={route.tab} expenseId={route.expenseId} />}
           {route.name === "notifications" && <NotificationsScreen />}
           {route.name === "person" && <PersonScreen groupId={route.groupId} memberId={route.memberId} />}
