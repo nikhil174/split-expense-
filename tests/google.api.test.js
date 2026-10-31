@@ -35,17 +35,17 @@ async function world(t, { configured = true } = {}) {
 
 test("without GOOGLE_CLIENT_ID, Google sign-in is off and the button stays hidden", async t => {
   const w = await world(t, { configured: false });
-  assert.deepEqual((await call(w.env, "/api/auth/config")).data, { googleClientId: null });
+  assert.deepEqual((await call(w.env, "/api/auth/config")).data, { googleClientId: null, emailEnabled: false });
   assert.equal((await w.google(idToken())).status, 503);
 });
 
 test("Continue with Google creates an account the first time and signs in to it after", async t => {
   const w = await world(t);
-  assert.deepEqual((await call(w.env, "/api/auth/config")).data, { googleClientId: CLIENT_ID });
+  assert.deepEqual((await call(w.env, "/api/auth/config")).data, { googleClientId: CLIENT_ID, emailEnabled: false });
   const first = await w.google(idToken());
   assert.deepEqual([first.status, first.data.created], [201, true]);
   const me = (await call(w.env, "/api/me", { cookie: first.cookie })).data.user;
-  assert.deepEqual([me.name, me.username, me.email, me.google, me.hasPin], ["Vicky Rao", "vickyrao", "vicky@gmail.com", true, false]);
+  assert.deepEqual([me.name, me.username, me.email, me.google, me.hasPin, me.emailVerified], ["Vicky Rao", "vickyrao", "vicky@gmail.com", true, false, true], "Google emails count as confirmed");
   const again = await w.google(idToken());
   assert.deepEqual([again.status, again.data.id, again.data.created], [200, me.id, false]);
   // No password yet: signing in with the username points them to Google.

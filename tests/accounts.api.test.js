@@ -34,9 +34,9 @@ test("sign-up checks every field; usernames and emails are unique, ignoring case
   }
   const bea = await w.signup({ name: " Bea  Rao ", username: "@Bea.Rao", email: "Bea@Example.com" });
   assert.equal(bea.status, 201);
-  assert.match(bea.setCookie, /^split_user=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000$/);
+  assert.match(bea.setCookie, /^split_user=[^;]+; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800$/);
   const me = (await call(w.env, "/api/me", { cookie: bea.cookie })).data.user;
-  assert.deepEqual(me, { id: bea.data.id, name: "Bea Rao", username: "bea.rao", email: "bea@example.com", legacy: false, hasPin: true, google: false });
+  assert.deepEqual(me, { id: bea.data.id, name: "Bea Rao", username: "bea.rao", email: "bea@example.com", legacy: false, hasPin: true, google: false, emailVerified: false });
   assert.equal((await w.signup({ name: "Other", username: "BEA.RAO" })).status, 409);
   const dupEmail = await w.signup({ name: "Other", username: "other", email: "BEA@example.com" });
   assert.deepEqual([dupEmail.status, /email/.test(dupEmail.data.error)], [409, true]);

@@ -32,7 +32,7 @@ export type Identity = { id: string; name: string };
 // The signed-in account. legacy: from before accounts (auto username, may
 // still sign in with group + name) until they choose a username.
 // hasPin: has a password (accounts once had 4-digit PINs); google: Google sign-in connected.
-export type User = Identity & { username: string; email: string | null; legacy: boolean; hasPin: boolean; google: boolean;
+export type User = Identity & { username: string; email: string | null; legacy: boolean; hasPin: boolean; google: boolean; emailVerified: boolean;
   // Only for the site owner: the Admin tab, and whether this session entered the admin key.
   siteAdmin?: boolean; adminUnlocked?: boolean };
 export type AdminOverview = { users: number; groups: number; expenses: number; totalSpentCents: number; newUsersThisWeek: number };

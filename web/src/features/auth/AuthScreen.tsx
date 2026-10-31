@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EASE, LoadingButton, Segmented, Wordmark, fieldClass, haptic } from "@/components/app/bits";
 import { ApiError, get, post } from "@/lib/api";
-import { GoogleButton, PASSWORD_HINT, PasswordInput, PasswordStrength, PinInput, goodPassword, useGoogleClientId } from "@/components/app/secrets";
+import { GoogleButton, PASSWORD_HINT, PasswordInput, PasswordStrength, PinInput, goodPassword, useAuthConfig, useGoogleClientId } from "@/components/app/secrets";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { keys } from "@/hooks/queries";
 
 export function Field({ label, htmlFor, children, hint }: { label: string; htmlFor: string; children: React.ReactNode; hint?: string }) {
@@ -163,6 +164,7 @@ export function AuthScreen() {
                     )}
                   </AnimatePresence>
                   <LoadingButton type="submit" size="xl" className="w-full" disabled={!ready} loading={busy} loadingText="Signing in…">{pwStep ? "Save password and sign in" : "Sign in"}</LoadingButton>
+                  {!legacy && <ForgotPassword login={form.login} />}
                   <button type="button" onClick={() => { setLegacy(l => !l); resetStep(); }} className="mx-auto block cursor-pointer text-center text-[14px] font-medium text-tint">
                     {legacy ? "Sign in with username or email" : "Used Split It before? Sign in with your group"}
                   </button>
@@ -219,5 +221,44 @@ function GoogleSection({ onToken, text }: { onToken: (t: string) => void; text: 
       <GoogleButton onToken={onToken} text={text} />
       <div className="mt-5 flex items-center gap-3 text-[12.5px] text-muted-foreground"><span className="h-px flex-1 bg-hairline" />or<span className="h-px flex-1 bg-hairline" /></div>
     </div>
+  );
+}
+
+// "Forgot password?": emails a reset link to the account's confirmed email.
+// Shown only when email is set up on the server.
+function ForgotPassword({ login }: { login: string }) {
+  const enabled = useAuthConfig().data?.emailEnabled;
+  const [open, setOpen] = React.useState(false), [value, setValue] = React.useState(""), [busy, setBusy] = React.useState(false), [done, setDone] = React.useState("");
+  if (!enabled) return null;
+  const send = async (e: React.FormEvent) => {
+    // The dialog sits inside the sign-in form in React's tree: don't let this
+    // submit reach it.
+    e.preventDefault();
+    e.stopPropagation();
+    setBusy(true);
+    try { setDone((await post<{ message: string }>("/api/auth/forgot", { login: value.trim() })).message); }
+    catch (err) { toast.error((err as Error).message); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button type="button" onClick={() => { setValue(login); setDone(""); setOpen(true); }} className="mx-auto -mt-1 block cursor-pointer text-center text-[14px] text-muted-foreground underline-offset-2 hover:underline">Forgot password?</button>
+      <AlertDialog open={open} onOpenChange={o => { if (!busy) setOpen(o); }}>
+        <AlertDialogContent className="max-w-[360px] rounded-[26px] border-0 p-6">
+          <form className="space-y-4" onSubmit={send}>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="title-2">Forgot password</AlertDialogTitle>
+              <AlertDialogDescription>{done || "We'll email a link to reset it. It goes to the confirmed email on your account."}</AlertDialogDescription>
+            </AlertDialogHeader>
+            {!done && <Input aria-label="Your username or email" autoFocus required autoCapitalize="none" spellCheck={false} placeholder="Username or email" value={value} onChange={e => setValue(e.target.value)} className={fieldClass} />}
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button" disabled={busy} className="rounded-full border-0 bg-[#141716]/[0.06] shadow-none">{done ? "Done" : "Cancel"}</AlertDialogCancel>
+              {!done && <LoadingButton type="submit" disabled={!value.trim()} loading={busy} loadingText="Sending…">Send reset link</LoadingButton>}
+            </AlertDialogFooter>
+            {!done && <p className="text-[12.5px] text-muted-foreground">No confirmed email? Sign in with Google if you connected it; otherwise there's no way to reset it.</p>}
+          </form>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

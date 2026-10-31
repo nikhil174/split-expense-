@@ -7,6 +7,9 @@ export type Route =
   | { name: "profile" }
   | { name: "admin" }
   | { name: "friends" }
+  // Links from emails: reset a forgotten password, confirm an email.
+  | { name: "reset"; token: string }
+  | { name: "verify-email"; token: string }
   // An invite link / QR: #/join/<code>.
   | { name: "join"; code: string }
   | { name: "notifications" }
@@ -21,6 +24,8 @@ export function parse(hash: string): Route {
   if (parts[0] === "profile") return { name: "profile" };
   if (parts[0] === "admin") return { name: "admin" };
   if (parts[0] === "friends") return { name: "friends" };
+  if (parts[0] === "reset" && parts[1]) return { name: "reset", token: parts[1] };
+  if (parts[0] === "verify-email" && parts[1]) return { name: "verify-email", token: parts[1] };
   if (parts[0] === "join" && parts[1]) return { name: "join", code: parts[1] };
   if (parts[0] === "notifications") return { name: "notifications" };
   if (parts[0] === "g" && parts[1]) {
@@ -38,6 +43,8 @@ export function href(route: Route): string {
     case "profile": return "#/profile";
     case "admin": return "#/admin";
     case "friends": return "#/friends";
+    case "reset": return "#/reset/" + encodeURIComponent(route.token);
+    case "verify-email": return "#/verify-email/" + encodeURIComponent(route.token);
     case "join": return "#/join/" + encodeURIComponent(route.code);
     case "notifications": return "#/notifications";
     case "group": return "#/g/" + encodeURIComponent(route.groupId) + (route.expenseId ? "/e/" + encodeURIComponent(route.expenseId) : route.tab === "expenses" ? "" : "/" + route.tab);

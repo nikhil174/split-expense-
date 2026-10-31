@@ -1,10 +1,12 @@
 import { allocateEqualSplit, allocateManualSplit } from "./split-logic.js";
 import { pushEnabled, sendPushes, validSubscription } from "./push.js";
+import { emailEnabled, linkEmail, sendEmail } from "./email.js";
 import { parseAmountToCents } from "./money.js";
 import { computeBalances, computePairwiseDebts, debtsForMember, outstandingDebt, pairwiseActivity, validateSettlement, SettlementError } from "./settlement-logic.js";
 
-// Signed-in sessions last 30 days (the PIN is asked again after that).
-const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
+// Signed-in sessions last 7 days; then the password is asked again. (Each
+// group's PIN is asked again after 1 day: GROUP_UNLOCK_MS.)
+const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_SPLIT_MEMBERS = 100;
 const MINUTE = 60 * 1000;
@@ -139,13 +141,13 @@ async function requireUser(req, env) {
   const raw = cookie(req, "split_user");
   if (!raw) return null;
   const db = env['split-expense'], tokenHash = await hash(raw);
-  const s = await db.prepare("SELECT s.expires_at,s.admin_until,u.id,u.display_name,u.username,u.email,u.legacy,u.site_role,u.google_sub IS NOT NULL AS google,u.pin_hash IS NOT NULL AS hasPin FROM appx_user_sessions s JOIN appx_users u ON u.id=s.user_id WHERE s.token_hash=?").bind(tokenHash).first();
+  const s = await db.prepare("SELECT s.expires_at,s.admin_until,u.id,u.display_name,u.username,u.email,u.legacy,u.site_role,u.google_sub IS NOT NULL AS google,u.email_verified_at IS NOT NULL AS emailVerified,u.pin_hash IS NOT NULL AS hasPin FROM appx_user_sessions s JOIN appx_users u ON u.id=s.user_id WHERE s.token_hash=?").bind(tokenHash).first();
   if (!s || s.expires_at < Date.now()) {
     if (s) await db.prepare("DELETE FROM appx_user_sessions WHERE token_hash=?").bind(tokenHash).run();
     return null;
   }
   const siteAdmin = s.site_role === "admin";
-  return { id: s.id, name: s.display_name, username: s.username, email: s.email || null, legacy: !!s.legacy, hasPin: !!s.hasPin, google: !!s.google,
+  return { id: s.id, name: s.display_name, username: s.username, email: s.email || null, legacy: !!s.legacy, hasPin: !!s.hasPin, google: !!s.google, emailVerified: !!s.emailVerified,
     siteAdmin, adminUnlocked: siteAdmin && Number(s.admin_until) > Date.now(), tokenHash };
 }
 // Starts a session for an account and returns the response that sets its cookie.
@@ -157,7 +159,7 @@ async function startSession(db, userId, data = { ok: true }, status = 200) {
 }
 // siteAdmin: may open the Admin tab (the site owner); adminUnlocked: this
 // session entered the admin key. Nobody else learns the Admin tab exists.
-const userOut = u => ({ id: u.id, name: u.name, username: u.username, email: u.email, legacy: u.legacy, hasPin: u.hasPin, google: u.google, ...(u.siteAdmin && { siteAdmin: true, adminUnlocked: u.adminUnlocked }) });
+const userOut = u => ({ id: u.id, name: u.name, username: u.username, email: u.email, legacy: u.legacy, hasPin: u.hasPin, google: u.google, emailVerified: !!(u.email && u.emailVerified), ...(u.siteAdmin && { siteAdmin: true, adminUnlocked: u.adminUnlocked }) });
 const ADMIN_UNLOCK_MS = 12 * 60 * 60 * 1000;
 
 // Usernames: 3–30 characters, lowercase letters, digits, "_" and ".",
@@ -244,6 +246,31 @@ async function freeUsername(db, name) {
     if (!await db.prepare("SELECT 1 FROM appx_users WHERE username=?").bind(u).first()) return u;
   }
   return "user_" + id().replace(/-/g, "").slice(0, 10);
+}
+
+// ----- Email links -----
+// "Confirm your email" (24 h) and "reset your password" (30 min, only to a
+// confirmed email). The link carries a random token; only its hash is kept,
+// a new link replaces older unused ones, and each works once.
+const EMAIL_LINK_MS = { verify: 24 * 60 * MINUTE, reset: 30 * MINUTE };
+async function sendEmailLink(db, env, origin, user, purpose) {
+  const token = newInviteCode() + newInviteCode(), now = Date.now();
+  await db.batch([
+    db.prepare("DELETE FROM appx_email_tokens WHERE user_id=? AND purpose=? AND used_at IS NULL").bind(user.id, purpose),
+    db.prepare("INSERT INTO appx_email_tokens(token_hash,user_id,purpose,email,expires_at) VALUES(?,?,?,?,?)").bind(await hash(token), user.id, purpose, user.email, now + EMAIL_LINK_MS[purpose]),
+  ]);
+  const url = origin + (purpose === "reset" ? "/#/reset/" : "/#/verify-email/") + token;
+  const mail = purpose === "reset"
+    ? linkEmail({ name: user.name, intro: "Someone (hopefully you) asked to reset your Split It password. Tap the button to choose a new one. The link works once, for 30 minutes.", button: "Choose a new password", url, outro: "Didn't ask? Ignore this email: your password stays the same." })
+    : linkEmail({ name: user.name, intro: "Please confirm this is your email for Split It. Then you can use it to reset your password if you ever forget it.", button: "Confirm my email", url, outro: "Didn't sign up for Split It? Ignore this email." });
+  await sendEmail(env, { to: user.email, toName: user.name, subject: purpose === "reset" ? "Reset your Split It password" : "Confirm your email for Split It", ...mail });
+}
+// The token's row, if it's for this purpose, unused, unexpired, and the
+// account still has that email.
+async function emailToken(db, token, purpose) {
+  const t = await db.prepare("SELECT t.token_hash,t.user_id,t.email,t.expires_at,t.used_at,u.email AS currentEmail,u.username,u.display_name FROM appx_email_tokens t JOIN appx_users u ON u.id=t.user_id WHERE t.token_hash=? AND t.purpose=?").bind(await hash(String(token || "")), purpose).first();
+  if (!t || t.used_at || t.expires_at < Date.now() || t.email !== t.currentEmail) return null;
+  return t;
 }
 
 // Every member row ever added to the group (including people who left or
@@ -540,6 +567,9 @@ async function api(req, env, url, outbox = []) {
       if (String(e).toLowerCase().includes("unique")) return fail("That username or email was just taken. Try again.", 409);
       throw e;
     }
+    if (email && emailEnabled(env)) {
+      try { await sendEmailLink(db, env, url.origin, { id: uid, name, email }, "verify"); } catch (e) { console.error("verify email", String(e)); }
+    }
     return startSession(db, uid, { ok: true, id: uid }, 201);
   }
   // Is this username free? (For the sign-up and profile forms.)
@@ -574,7 +604,55 @@ async function api(req, env, url, outbox = []) {
     return startSession(db, user.id, { ok: true, id: user.id, legacy: true });
   }
   // What the sign-in screen needs: the Google client id, if Google sign-in is set up.
-  if (method === "GET" && p === "/api/auth/config") return json({ googleClientId: env.GOOGLE_CLIENT_ID || null });
+  if (method === "GET" && p === "/api/auth/config") return json({ googleClientId: env.GOOGLE_CLIENT_ID || null, emailEnabled: emailEnabled(env) });
+  // Forgot password: a reset link to the account's confirmed email. The
+  // answer is the same whether or not the account exists or has a confirmed
+  // email, so nobody can probe accounts with it.
+  if (method === "POST" && p === "/api/auth/forgot") {
+    if (!emailEnabled(env)) return fail("Password reset by email isn't set up yet.", 503);
+    if (await rateLimited(db, "forgot", await clientKey(req), RATE_LIMITS.signup)) return tooMany();
+    const who = await findUser(db, (await body(req))?.login);
+    if (who?.email && (await db.prepare("SELECT email_verified_at FROM appx_users WHERE id=?").bind(who.id).first())?.email_verified_at
+      && !await rateLimited(db, "forgot-user", who.id, { limit: 3, windowMs: 60 * MINUTE })) {
+      try { await sendEmailLink(db, env, url.origin, { id: who.id, name: who.display_name, email: who.email }, "reset"); } catch (e) { console.error("reset email", String(e)); }
+    }
+    return json({ ok: true, message: "If that account has a confirmed email, we've sent it a link to reset the password. It works for 30 minutes. Check spam too." });
+  }
+  const resetToken = p.match(/^\/api\/auth\/reset\/([\w-]{20,80})$/);
+  if (method === "GET" && resetToken) {
+    const t = await emailToken(db, resetToken[1], "reset");
+    if (!t) return fail("This reset link has expired or was already used. Ask for a new one.", 410);
+    return json({ ok: true, username: t.username, name: t.display_name });
+  }
+  // Choose a new password with a reset link: signs out every device, then
+  // signs in here.
+  if (method === "POST" && p === "/api/auth/reset") {
+    if (await rateLimited(db, "reset", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
+    const b = await body(req), t = await emailToken(db, b?.token, "reset");
+    if (!t) return fail("This reset link has expired or was already used. Ask for a new one.", 410);
+    const next = passwordOf(b);
+    if (!goodPassword(next)) return fail(PASSWORD_HINT);
+    const done = await db.prepare("UPDATE appx_email_tokens SET used_at=? WHERE token_hash=? AND used_at IS NULL").bind(Date.now(), t.token_hash).run();
+    if (changesOf(done) !== 1) return fail("This reset link was already used.", 410);
+    await db.batch([
+      db.prepare("UPDATE appx_users SET pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=?").bind(await hashPin(next, env), t.user_id),
+      db.prepare("DELETE FROM appx_group_unlocks WHERE session_hash IN (SELECT token_hash FROM appx_user_sessions WHERE user_id=?)").bind(t.user_id),
+      db.prepare("DELETE FROM appx_user_sessions WHERE user_id=?").bind(t.user_id),
+      db.prepare("DELETE FROM appx_email_tokens WHERE user_id=? AND purpose='reset' AND used_at IS NULL").bind(t.user_id),
+    ]);
+    return startSession(db, t.user_id, { ok: true });
+  }
+  // Confirm an email with the link we sent (works signed in or out).
+  if (method === "POST" && p === "/api/auth/verify-email") {
+    if (await rateLimited(db, "verify", await clientKey(req), RATE_LIMITS.signin)) return tooMany();
+    const t = await emailToken(db, (await body(req))?.token, "verify");
+    if (!t) return fail("This link has expired or was already used. Send a new one from your profile.", 410);
+    await db.batch([
+      db.prepare("UPDATE appx_email_tokens SET used_at=? WHERE token_hash=?").bind(Date.now(), t.token_hash),
+      db.prepare("UPDATE appx_users SET email_verified_at=? WHERE id=? AND email=?").bind(Date.now(), t.user_id, t.email),
+    ]);
+    return json({ ok: true, email: t.email });
+  }
   // Continue with Google: sign in if this Google account is connected; create
   // an account if its email is new. If an account already has that email but
   // isn't connected, don't take it over (emails on password accounts aren't
@@ -591,7 +669,7 @@ async function api(req, env, url, outbox = []) {
     if (await rateLimited(db, "signup", await clientKey(req), RATE_LIMITS.signup)) return tooMany();
     const uid = id();
     try {
-      await db.prepare("INSERT INTO appx_users(id,username,display_name,email,google_sub,created_at) VALUES(?,?,?,?,?,?)").bind(uid, await freeUsername(db, g.name), g.name.length >= 2 ? g.name : "Split It user", g.email, g.sub, Date.now()).run();
+      await db.prepare("INSERT INTO appx_users(id,username,display_name,email,google_sub,created_at,email_verified_at) VALUES(?,?,?,?,?,?,?)").bind(uid, await freeUsername(db, g.name), g.name.length >= 2 ? g.name : "Split It user", g.email, g.sub, Date.now(), Date.now()).run();
     } catch (e) {
       if (String(e).toLowerCase().includes("unique")) return fail("Something changed at the same moment. Try again.", 409);
       throw e;
@@ -633,7 +711,12 @@ async function api(req, env, url, outbox = []) {
       if (email && (!EMAIL_RE.test(email) || email.length > 254)) return fail("Enter a valid email, or leave it empty.");
       const taken = email && await db.prepare("SELECT id FROM appx_users WHERE email=?").bind(email).first();
       if (taken && taken.id !== u.id) return fail("That email is already used by another account.", 409);
-      await db.prepare("UPDATE appx_users SET email=? WHERE id=?").bind(email, u.id).run();
+      if (email !== u.email) {
+        await db.prepare("UPDATE appx_users SET email=?,email_verified_at=NULL WHERE id=?").bind(email, u.id).run();
+        if (email && emailEnabled(env)) {
+          try { await sendEmailLink(db, env, url.origin, { id: u.id, name: u.name, email }, "verify"); } catch (e) { console.error("verify email", String(e)); }
+        }
+      }
     }
     if (b?.name !== undefined) {
       const r = await renameUser(db, u.id, b.name);
@@ -647,6 +730,15 @@ async function api(req, env, url, outbox = []) {
     const r = await renameUser(db, u.id, (await body(req))?.name);
     return r instanceof Response ? r : json({ ok: true, id: u.id, name: r });
   }
+  // Send (again) the link that confirms my email.
+  if (method === "POST" && p === "/api/me/email/verify") {
+    if (!emailEnabled(env)) return fail("Email isn't set up yet.", 503);
+    if (!u.email) return fail("Add an email first.", 409);
+    if (u.emailVerified) return json({ ok: true, alreadyVerified: true });
+    if (await rateLimited(db, "verify-send", u.id, { limit: 3, windowMs: 60 * MINUTE })) return tooMany();
+    try { await sendEmailLink(db, env, url.origin, u, "verify"); } catch (e) { console.error("verify email", String(e)); return fail("Couldn't send the email right now. Try again later.", 502); }
+    return json({ ok: true, sentTo: u.email });
+  }
   // Connect my Google account (then I can sign in with it), or disconnect it
   // (only if I have a password, so I can still get in).
   if (method === "POST" && p === "/api/me/google") {
@@ -656,7 +748,8 @@ async function api(req, env, url, outbox = []) {
     const owner = await db.prepare("SELECT id FROM appx_users WHERE google_sub=?").bind(g.sub).first();
     if (owner && owner.id !== u.id) return fail("That Google account is already connected to another Split It account.", 409);
     const emailFree = !u.email && !(await db.prepare("SELECT 1 FROM appx_users WHERE email=? AND id<>?").bind(g.email, u.id).first());
-    if (emailFree) await db.prepare("UPDATE appx_users SET google_sub=?,email=? WHERE id=?").bind(g.sub, g.email, u.id).run();
+    if (emailFree) await db.prepare("UPDATE appx_users SET google_sub=?,email=?,email_verified_at=? WHERE id=?").bind(g.sub, g.email, Date.now(), u.id).run();
+    else if (u.email === g.email) await db.prepare("UPDATE appx_users SET google_sub=?,email_verified_at=COALESCE(email_verified_at,?) WHERE id=?").bind(g.sub, Date.now(), u.id).run();
     else await db.prepare("UPDATE appx_users SET google_sub=? WHERE id=?").bind(g.sub, u.id).run();
     return json({ user: userOut(await requireUser(req, env)) });
   }
