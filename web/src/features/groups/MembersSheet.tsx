@@ -8,7 +8,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { List, LoadingButton, PersonAvatar, SectionTitle, fieldClass, rowClass } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
-import { useAccountAction, useGroup } from "@/hooks/queries";
+import { useAccountAction, useFriends, useGroup } from "@/hooks/queries";
+import { InviteLinkCard } from "@/features/invites/Qr";
 import { post, type Member } from "@/lib/api";
 import { navigate } from "@/lib/route";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,8 @@ export function MembersSheet({ groupId, open, onOpenChange }: { groupId: string;
         <SheetHeader title={`${members.length} ${members.length === 1 ? "member" : "members"}`}
           description={isAdmin ? "You're an admin: invite people, let them in and manage the group." : "Everyone in this group. Admins manage who's in it."} disabled={act.isPending} />
         <div className="safe-bottom min-h-0 space-y-6 overflow-y-auto px-4 pt-1 pb-6">
-          {isAdmin && <InviteForm groupId={groupId} />}
+          <InviteForm groupId={groupId} isAdmin={isAdmin} taken={new Set([...members, ...waiting].map(x => x.id))} />
+          <InviteLinkCard groupId={groupId} groupName={group.data?.group.name || "the group"} />
 
           {isAdmin && waiting.length > 0 && (
             <section data-testid="waiting">
@@ -51,9 +53,9 @@ export function MembersSheet({ groupId, open, onOpenChange }: { groupId: string;
                     <PersonAvatar id={w.id} name={w.name} size="sm" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[15px] font-medium">{w.name}</span>
-                      <span className="flex items-center gap-1 text-[12.5px] text-muted-foreground"><Clock3 className="size-3" />{w.status === "invited" ? "Invited, hasn't answered" : "Asked to join"}{w.username ? " · @" + w.username : ""}</span>
+                      <span className="flex items-center gap-1 text-[12.5px] text-muted-foreground"><Clock3 className="size-3" />{w.status === "invited" ? "Invited, hasn't answered" : w.status === "suggested" ? `Suggested by ${w.invitedBy || "a member"}` : "Asked to join"}{w.username ? " · @" + w.username : ""}</span>
                     </span>
-                    {w.status === "pending" ? (
+                    {w.status === "pending" || w.status === "suggested" ? (
                       <span className="flex gap-1.5">
                         <button type="button" aria-label={"Turn away " + w.name} disabled={act.isPending} onClick={() => act.mutate({ path: `/members/${w.id}/reject`, done: `${w.name} was turned away.` })} className="grid size-9 cursor-pointer place-items-center rounded-full bg-[#141716]/[0.06] transition-transform active:scale-90"><X className="size-4" strokeWidth={2.4} /></button>
                         <button type="button" aria-label={"Let in " + w.name} disabled={act.isPending} onClick={() => act.mutate({ path: `/members/${w.id}/approve`, done: `${w.name} is in.` })} className="grid size-9 cursor-pointer place-items-center rounded-full bg-[#141716] text-white transition-transform active:scale-90"><Check className="size-4" strokeWidth={2.6} /></button>
@@ -139,6 +141,25 @@ export function MembersSheet({ groupId, open, onOpenChange }: { groupId: string;
   );
 }
 
+// Add friend / Requested / Accept next to people in the group.
+function FriendButton({ m }: { m: Member }) {
+  const add = useAccountAction((v: { action: "request" | "accept" }) => v.action === "request" ? post("/api/friends/request", { userId: m.id }) : post(`/api/friends/${m.id}/accept`), v => v.action === "request" ? `Friend request sent to ${m.name}.` : `You and ${m.name} are friends now.`);
+  if (m.friend === "friend") return null;
+  if (m.friend === "requested") return <span title="Friend request sent" className="shrink-0 rounded-full bg-[#141716]/[0.04] px-2 py-1 text-[11.5px] text-muted-foreground">Requested</span>;
+  // Compact, so names keep their room: a round icon (with a label for screen
+  // readers), or "Accept" when they asked me.
+  return m.friend === "asked_you" ? (
+    <LoadingButton type="button" size="sm" variant="secondary" aria-label={"Accept friend request from " + m.name} className="h-7 shrink-0 rounded-full px-2.5 text-[12px]" loading={add.isPending} loadingText="…" onClick={() => add.mutate({ action: "accept" })}>
+      <UserPlus className="size-3.5" />Accept
+    </LoadingButton>
+  ) : (
+    <button type="button" aria-label={"Add friend " + m.name} title="Add friend" disabled={add.isPending} onClick={() => add.mutate({ action: "request" })}
+      className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full border border-[#141716]/[0.1] bg-white transition-transform active:scale-90 disabled:opacity-50">
+      <UserPlus className="size-4" />
+    </button>
+  );
+}
+
 function MemberRow({ m, isMe, isAdmin, lastAdmin, busy, onAction, onRemove }: {
   m: Member; isMe: boolean; isAdmin: boolean; lastAdmin: boolean; busy: boolean; onAction: (path: string, done: string) => void; onRemove: () => void;
 }) {
@@ -149,6 +170,7 @@ function MemberRow({ m, isMe, isAdmin, lastAdmin, busy, onAction, onRemove }: {
         <span className="block truncate text-[15px] font-medium">{m.name}{isMe && <span className="font-normal text-muted-foreground"> (you)</span>}</span>
         <span className="block truncate text-[12.5px] text-muted-foreground">{m.username ? "@" + m.username : "Member"}</span>
       </span>
+      {!isMe && <FriendButton m={m} />}
       {m.role === "admin" && <span className="inline-flex items-center gap-1 rounded-full bg-tint-soft px-2 py-0.5 text-[12px] font-medium text-tint"><ShieldCheck className="size-3.5" />Admin</span>}
       {isAdmin && !(isMe && lastAdmin) && (
         <DropdownMenu>
@@ -167,17 +189,38 @@ function MemberRow({ m, isMe, isAdmin, lastAdmin, busy, onAction, onRemove }: {
   );
 }
 
-function InviteForm({ groupId }: { groupId: string }) {
+// Admins invite anyone by username or email, or pick a friend. Members can
+// only suggest a friend; an admin approves before the friend is invited.
+function InviteForm({ groupId, isAdmin, taken }: { groupId: string; isAdmin: boolean; taken: Set<string> }) {
   const [login, setLogin] = React.useState("");
-  const invite = useAccountAction((v: string) => post<{ status: "invited" | "active"; name: string }>(`/api/groups/${groupId}/members/invite`, { login: v }));
+  const friends = useFriends();
+  const invite = useAccountAction((v: string) => post<{ status: "invited" | "active" | "suggested"; name: string }>(`/api/groups/${groupId}/members/invite`, { login: v }));
+  const send = (v: string) => invite.mutate(v, { onSuccess: d => { setLogin(""); toast.success(d.status === "active" ? `${d.name} is in.` : d.status === "suggested" ? `Suggested ${d.name}. An admin will approve.` : `Invited ${d.name}. They join when they accept.`); } });
+  const pickable = (friends.data?.friends || []).filter(f => !taken.has(f.id));
   return (
-    <form data-testid="invite-form" className="panel space-y-3 p-4" onSubmit={e => { e.preventDefault(); const v = login.trim(); if (v) invite.mutate(v, { onSuccess: d => { setLogin(""); toast.success(d.status === "active" ? `${d.name} is in.` : `Invited ${d.name}. They join when they accept.`); } }); }}>
-      <p className="flex items-center gap-2 text-[15px] font-medium"><UserPlus className="size-[18px]" />Invite someone</p>
-      <div className="flex gap-2">
-        <Input aria-label="Username or email to invite" autoCapitalize="none" spellCheck={false} placeholder="Username or email" value={login} onChange={e => setLogin(e.target.value)} className={cn(fieldClass, "h-11 min-w-0 flex-1")} />
-        <LoadingButton type="submit" className="h-11 shrink-0 rounded-full px-5" disabled={!login.trim()} loading={invite.isPending} loadingText="Inviting…">Invite</LoadingButton>
-      </div>
-      <p className="text-[12.5px] text-muted-foreground">They need a Split It account. They'll see the invitation when they open the app.</p>
+    <form data-testid="invite-form" className="panel space-y-3 p-4" onSubmit={e => { e.preventDefault(); const v = login.trim(); if (v) send(v); }}>
+      <p className="flex items-center gap-2 text-[15px] font-medium"><UserPlus className="size-[18px]" />{isAdmin ? "Invite someone" : "Suggest a friend"}</p>
+      {pickable.length > 0 && (
+        <div className="flex flex-wrap gap-2" data-testid="friend-picks">
+          {pickable.map(f => (
+            <button key={f.id} type="button" disabled={invite.isPending} onClick={() => send(f.username)} aria-label={(isAdmin ? "Invite " : "Suggest ") + f.name}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-[#141716]/[0.05] py-1 pr-3 pl-1 text-[13.5px] font-medium transition-transform active:scale-95 disabled:opacity-50">
+              <PersonAvatar id={f.id} name={f.name} size="sm" className="size-6 text-[10px]" />{f.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {isAdmin ? (
+        <>
+          <div className="flex gap-2">
+            <Input aria-label="Username or email to invite" autoCapitalize="none" spellCheck={false} placeholder="Username or email" value={login} onChange={e => setLogin(e.target.value)} className={cn(fieldClass, "h-11 min-w-0 flex-1")} />
+            <LoadingButton type="submit" className="h-11 shrink-0 rounded-full px-5" disabled={!login.trim()} loading={invite.isPending} loadingText="Inviting…">Invite</LoadingButton>
+          </div>
+          <p className="text-[12.5px] text-muted-foreground">They need a Split It account. They'll see the invitation when they open the app.</p>
+        </>
+      ) : (
+        <p className="text-[12.5px] text-muted-foreground">{pickable.length ? "Tap a friend to suggest them. An admin approves, then they're invited." : "Add friends (account menu → Friends) to suggest them here. Or share the invite link below."}</p>
+      )}
     </form>
   );
 }

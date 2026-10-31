@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 // createRequire so a globally installed Playwright (NODE_PATH) also works.
-const { chromium, devices } = createRequire(import.meta.url)("playwright");
+const require = createRequire(import.meta.url);
+const { chromium, devices } = require("playwright");
 
 const BASE = process.env.E2E_BASE_URL || "http://127.0.0.1:8787";
 const ADMIN = "E2E Admin";
@@ -18,7 +19,7 @@ if (/workers\.dev|split-expense\./.test(BASE) && !process.env.E2E_ALLOW_REMOTE) 
 const RUN = Date.now().toString(36);
 const GROUP = "E2E Trip " + RUN;
 // Usernames for this run's accounts.
-const USER = { admin: "e2eadmin_" + RUN, bea: "bea_" + RUN, cy: "cy_" + RUN };
+const USER = { admin: "e2eadmin_" + RUN, bea: "bea_" + RUN, cy: "cy_" + RUN, dee: "dee_" + RUN, eve: "eve_" + RUN };
 const browser = await chromium.launch();
 const step = name => console.log("✓", name);
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
@@ -410,11 +411,12 @@ try {
   await bea.getByRole("button", { name: /3 members/ }).click();
   members = bea.getByRole("dialog");
   await members.getByText("Bea E2E").first().waitFor();
-  assert.equal(await members.getByTestId("invite-form").count(), 0, "members can't invite");
+  await members.getByTestId("invite-form").getByText("Suggest a friend").waitFor();
+  assert.equal(await members.getByLabel("Username or email to invite").count(), 0, "members can't invite anyone directly");
   assert.equal(await members.getByRole("button", { name: /^Manage / }).count(), 0, "members can't manage");
   await bea.keyboard.press("Escape");
   await members.waitFor({ state: "detached" });
-  step("admins make others admin; everyone sees who is admin; only admins see invite and manage controls");
+  step("admins make others admin; everyone sees who is admin; only admins invite directly and manage (members can suggest friends)");
 
   // Profile: change your name (shows on past payments) and username.
   await cy.getByRole("button", { name: "Account", exact: true }).click();
@@ -433,6 +435,72 @@ try {
   await admin.locator("tbody").getByText(/Cyrus E2E/).first().waitFor();
   assert.equal(await admin.locator("tbody").getByText(/\bCy E2E\b/).count(), 0, "old name gone from history");
   step("profile: a person changes their name and username; the new name shows on their past payments");
+
+  // Invite link: anyone in the group can show it; a new person opens it
+  // signed out, creates an account, asks to join with the group PIN, and an
+  // admin lets them in.
+  await bea.goto(BASE + "/#/"); await bea.reload();
+  await openGroup(bea);
+  await bea.getByRole("button", { name: /3 members/ }).click();
+  const link = await bea.getByRole("dialog").getByTestId("invite-url").innerText();
+  assert.match(link, /\/#\/join\/[\w-]{22}$/);
+  await bea.getByRole("dialog").getByRole("img", { name: "QR code to join " + GROUP }).waitFor();
+  await shot(bea, "invite-link");
+  await bea.keyboard.press("Escape");
+  const dee = await newPage();
+  await dee.goto(link);
+  await dee.getByTestId("join-signin-note").waitFor();
+  await dee.getByRole("tab", { name: "Create account", exact: true }).click();
+  await dee.getByLabel("Your name").fill("Dee E2E");
+  await dee.getByLabel("Username").fill(USER.dee);
+  await dee.getByText("Available").waitFor();
+  await dee.getByLabel("Password", { exact: true }).fill(MEMBER_PIN);
+  await dee.getByLabel("Confirm password").fill(MEMBER_PIN);
+  await dee.getByRole("button", { name: "Create account" }).last().click();
+  const card = dee.getByTestId("join-card");
+  await card.getByRole("heading", { name: GROUP }).waitFor();
+  await card.locator("#join-link-pin").fill(GROUP_PIN);
+  await card.getByRole("button", { name: "Ask to join" }).click();
+  await card.getByText("You've asked to join").waitFor();
+  await shot(dee, "join-asked");
+  await admin.goto(BASE + "/#/"); await admin.reload();
+  await openGroup(admin);
+  await admin.getByRole("button", { name: /3 members/ }).click();
+  await admin.getByRole("dialog").getByTestId("waiting").getByText("Asked to join").waitFor();
+  await admin.getByRole("button", { name: "Let in Dee E2E" }).click();
+  await toast(admin, "Dee E2E is in");
+  await admin.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+  await admin.getByRole("dialog").waitFor({ state: "detached" });
+  await dee.reload();
+  await card.getByRole("button", { name: /You're in/ }).click();
+  await dee.getByRole("heading", { name: GROUP }).waitFor();
+  step("invite link (everyone sees it + QR): a new person opens it signed out, signs up, asks to join with the group PIN; an admin lets them in");
+
+  // Scanning the group's QR (from a photo of it) opens the same invite.
+  const eve = await newPage();
+  await signUp(eve, "Eve E2E", USER.eve);
+  await eve.getByRole("button", { name: "Join", exact: true }).click();
+  const qrPng = await require("qrcode").toBuffer(link, { width: 400 });
+  await eve.getByLabel("Choose a photo of a QR code").setInputFiles({ name: "qr.png", mimeType: "image/png", buffer: qrPng });
+  await eve.getByTestId("join-card").getByRole("heading", { name: GROUP }).waitFor();
+  step("Home → Join → scanning the group's QR opens the invite");
+
+  // Friends: Bea adds Dee from the members list; Dee accepts on Friends.
+  await bea.goto(BASE + "/#/"); await bea.reload();
+  await openGroup(bea);
+  await bea.getByRole("button", { name: /4 members/ }).click();
+  await bea.getByRole("button", { name: "Add friend Dee E2E" }).click();
+  await toast(bea, "Friend request sent to Dee E2E");
+  await bea.getByRole("dialog").getByText("Requested").waitFor();
+  await shot(bea, "members-friends");
+  await bea.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+  await bea.getByRole("dialog").waitFor({ state: "detached" });
+  await dee.goto(BASE + "/#/friends"); await dee.reload();
+  await dee.getByTestId("friend-requests").getByRole("button", { name: "Accept Bea E2E" }).click();
+  await toast(dee, "You and Bea E2E are friends now");
+  await dee.getByText("1 friend").waitFor();
+  await shot(dee, "friends");
+  step("friends: add someone from the group's member list; they accept on Friends");
 
   for (const page of [admin, cy]) {
     await page.getByRole("button", { name: "Account", exact: true }).click();

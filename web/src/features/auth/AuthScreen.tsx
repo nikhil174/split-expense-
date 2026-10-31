@@ -122,6 +122,9 @@ export function AuthScreen() {
         </m.div>
 
         <m.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: EASE, delay: 0.08 }} className="mt-9">
+          {/^#\/join\//.test(location.hash) && (
+            <p className="mb-4 rounded-[16px] bg-tint-soft px-4 py-3 text-center text-[14px] leading-5 text-tint" data-testid="join-signin-note">You've opened a group invite. Sign in or create an account, and we'll take you to it.</p>
+          )}
           <Segmented id="auth-tab" value={tab} onChange={v => { setTab(v); resetStep(); }} options={[{ value: "signin", label: "Sign in" }, { value: "signup", label: "Create account" }]} />
 
           <div className="panel mt-4 p-5">

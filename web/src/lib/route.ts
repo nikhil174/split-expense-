@@ -6,6 +6,9 @@ export type Route =
   | { name: "home" }
   | { name: "profile" }
   | { name: "admin" }
+  | { name: "friends" }
+  // An invite link / QR: #/join/<code>.
+  | { name: "join"; code: string }
   | { name: "notifications" }
   // expenseId: open on that expense, expanded (#/g/:id/e/:expenseId).
   | { name: "group"; groupId: string; tab: GroupTab; expenseId?: string }
@@ -17,6 +20,8 @@ export function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
   if (parts[0] === "profile") return { name: "profile" };
   if (parts[0] === "admin") return { name: "admin" };
+  if (parts[0] === "friends") return { name: "friends" };
+  if (parts[0] === "join" && parts[1]) return { name: "join", code: parts[1] };
   if (parts[0] === "notifications") return { name: "notifications" };
   if (parts[0] === "g" && parts[1]) {
     if (parts[2] === "p" && parts[3]) return { name: "person", groupId: parts[1], memberId: parts[3] };
@@ -32,6 +37,8 @@ export function href(route: Route): string {
     case "home": return "#/";
     case "profile": return "#/profile";
     case "admin": return "#/admin";
+    case "friends": return "#/friends";
+    case "join": return "#/join/" + encodeURIComponent(route.code);
     case "notifications": return "#/notifications";
     case "group": return "#/g/" + encodeURIComponent(route.groupId) + (route.expenseId ? "/e/" + encodeURIComponent(route.expenseId) : route.tab === "expenses" ? "" : "/" + route.tab);
     case "person": return "#/g/" + encodeURIComponent(route.groupId) + "/p/" + encodeURIComponent(route.memberId);
@@ -60,4 +67,14 @@ const subscribe = (cb: () => void) => {
 export function useRoute(): Route {
   const hash = useSyncExternalStore(subscribe, () => location.hash);
   return parse(hash);
+}
+
+// The full invite link for a group's code, and the code inside a scanned or
+// pasted link (or a bare code).
+export const joinUrl = (code: string) => location.origin + "/#/join/" + encodeURIComponent(code);
+export function joinCodeFrom(text: string): string | null {
+  const t = text.trim();
+  const m = /#\/join\/([\w-]{10,40})/.exec(t);
+  if (m) return m[1];
+  return /^[\w-]{16,40}$/.test(t) ? t : null;
 }

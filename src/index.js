@@ -271,6 +271,14 @@ async function checkGroupPin(db, env, u, gid, pinHash, pin) {
   return fail("That's not the group's PIN. Ask a group admin for it.", 401);
 }
 
+// 16 random bytes, URL-safe: the secret part of an invite link.
+const newInviteCode = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const pairOf = (x, y) => (x < y ? [x, y] : [y, x]);
+async function areFriends(db, x, y) {
+  const [a, b] = pairOf(x, y);
+  return !!(await db.prepare("SELECT 1 FROM appx_friendships WHERE user_a=? AND user_b=? AND status='accepted'").bind(a, b).first());
+}
+
 function nameLookup(members) {
   const names = new Map(members.map(m => [m.id, m.name]));
   return memberId => names.get(memberId) || FORMER_MEMBER;
@@ -311,7 +319,7 @@ async function renameUser(db, uid, rawName) {
 async function mergeStatements(db, to, from) {
   const toName = (await db.prepare("SELECT display_name FROM appx_users WHERE id=?").bind(to).first())?.display_name;
   const groups = (await db.prepare("SELECT group_id,role,status,joined_at FROM appx_group_members WHERE member_id=?").bind(from).all()).results;
-  const rank = { active: 3, pending: 2, invited: 1, removed: 0 };
+  const rank = { active: 3, pending: 2, invited: 1, suggested: 1, removed: 0 };
   const out = [];
   for (const g of groups) {
     const gid = g.group_id, mine = await db.prepare("SELECT role,status FROM appx_group_members WHERE group_id=? AND member_id=?").bind(gid, to).first();
@@ -341,6 +349,9 @@ async function mergeStatements(db, to, from) {
     db.prepare("UPDATE OR IGNORE appx_payment_methods SET member_id=? WHERE member_id=?").bind(to, from),
     db.prepare("DELETE FROM appx_payment_methods WHERE member_id=?").bind(from),
     db.prepare("UPDATE appx_notifications SET recipient_id=? WHERE recipient_id=?").bind(to, from),
+    // Friends move over too (a friendship between the two accounts is dropped).
+    db.prepare("INSERT OR IGNORE INTO appx_friendships(user_a,user_b,requested_by,status,created_at) SELECT min(?1,other),max(?1,other),CASE requested_by WHEN ?2 THEN ?1 ELSE requested_by END,status,created_at FROM (SELECT CASE WHEN user_a=?2 THEN user_b ELSE user_a END AS other,requested_by,status,created_at FROM appx_friendships WHERE user_a=?2 OR user_b=?2) WHERE other<>?1").bind(to, from),
+    db.prepare("DELETE FROM appx_friendships WHERE user_a=?1 OR user_b=?1").bind(from),
     db.prepare("UPDATE appx_push_subscriptions SET member_id=? WHERE member_id=?").bind(to, from),
     db.prepare("DELETE FROM appx_user_sessions WHERE user_id=?").bind(from),
     db.prepare("DELETE FROM appx_users WHERE id=?").bind(from),
@@ -692,7 +703,7 @@ async function api(req, env, url, outbox = []) {
     if (!PIN_RE.test(textField(b?.pin))) return fail("Choose a 4-digit PIN for the group. Members need it to join and to open the group.");
     const gid = id(), now = Date.now();
     await db.batch([
-      db.prepare("INSERT INTO appx_groups(id,name,created_at,created_by,pin_hash) VALUES(?,?,?,?,?)").bind(gid, name, now, u.id, await hashPin(textField(b.pin), env)),
+      db.prepare("INSERT INTO appx_groups(id,name,created_at,created_by,pin_hash,invite_code) VALUES(?,?,?,?,?,?)").bind(gid, name, now, u.id, await hashPin(textField(b.pin), env), newInviteCode()),
       db.prepare("INSERT INTO appx_group_members(group_id,member_id,name,role,status,joined_at) VALUES(?,?,?,'admin','active',?)").bind(gid, u.id, u.name, now),
       unlockStmt(db, u.tokenHash, gid),
     ]);
@@ -830,6 +841,89 @@ async function api(req, env, url, outbox = []) {
     await db.prepare("UPDATE appx_notifications SET read_at=? WHERE recipient_id=? AND read_at IS NULL").bind(Date.now(), u.id).run();
     return json({ ok: true, unread: 0 });
   }
+  // ----- Joining with an invite link / QR -----
+  // GET shows which group it is; POST asks to join (with the group's PIN).
+  // A group admin then approves. Someone already invited joins straight away.
+  const joinLink = p.match(/^\/api\/join\/([\w-]{10,40})$/);
+  if (joinLink) {
+    const g = await db.prepare("SELECT id,name,pin_hash FROM appx_groups WHERE invite_code=?").bind(joinLink[1]).first();
+    if (!g) return fail("This invite link doesn't work any more. Ask someone in the group for a new one.", 404);
+    const mine = await db.prepare("SELECT status FROM appx_group_members WHERE group_id=? AND member_id=?").bind(g.id, u.id).first();
+    const status = mine && mine.status !== "removed" ? mine.status : null;
+    const memberCount = Number((await db.prepare("SELECT COUNT(*) AS n FROM appx_group_members WHERE group_id=? AND status='active'").bind(g.id).first()).n);
+    if (method === "GET") return json({ groupId: g.id, groupName: g.name, memberCount, hasPin: !!g.pin_hash, status });
+    if (method !== "POST") return fail("Not found.", 404);
+    if (status === "active") return json({ ok: true, groupId: g.id, status: "active" });
+    if (status === "pending") return fail("You've already asked to join. A group admin will let you in.", 409);
+    if (await rateLimited(db, "join", u.id, RATE_LIMITS.invite)) return tooMany();
+    if (g.pin_hash) {
+      const bad = await checkGroupPin(db, env, u, g.id, g.pin_hash, (await body(req))?.pin);
+      if (bad) return bad;
+    }
+    const now = Date.now();
+    if (status === "invited") {
+      await db.batch([db.prepare("UPDATE appx_group_members SET status='active',name=?,joined_at=? WHERE group_id=? AND member_id=?").bind(u.name, now, g.id, u.id), unlockStmt(db, u.tokenHash, g.id)]);
+      return json({ ok: true, groupId: g.id, status: "active" });
+    }
+    const admins = (await db.prepare("SELECT member_id FROM appx_group_members WHERE group_id=? AND role='admin' AND status='active'").bind(g.id).all()).results.map(r => r.member_id);
+    await db.batch([
+      db.prepare("INSERT INTO appx_group_members(group_id,member_id,name,role,status,invited_by) VALUES(?1,?2,?3,'member','pending',NULL) ON CONFLICT(group_id,member_id) DO UPDATE SET status='pending',role='member',invited_by=NULL,name=?3").bind(g.id, u.id, u.name),
+      unlockStmt(db, u.tokenHash, g.id),
+      ...admins.map(to => note({ to, groupId: g.id, kind: "join_request", title: `${u.name} asked to join “${g.name}”`, body: "Let them in from Members → Waiting.", link: `#/g/${g.id}`, actor: u.name })),
+    ]);
+    return json({ ok: true, groupId: g.id, status: "pending" });
+  }
+
+  // ----- Friends -----
+  // Ask by username or email; the other person accepts. Only exact matches:
+  // there is no browsing of people.
+  if (method === "GET" && p === "/api/friends") {
+    const r = await db.prepare("SELECT f.status,f.requested_by AS requestedBy,f.created_at AS createdAt,u.id,u.display_name AS name,u.username FROM appx_friendships f JOIN appx_users u ON u.id=CASE WHEN f.user_a=?1 THEN f.user_b ELSE f.user_a END WHERE f.user_a=?1 OR f.user_b=?1 ORDER BY lower(u.display_name)").bind(u.id).all();
+    const out = x => ({ id: x.id, name: x.name, username: x.username, since: x.createdAt });
+    return json({
+      friends: r.results.filter(x => x.status === "accepted").map(out),
+      incoming: r.results.filter(x => x.status === "pending" && x.requestedBy !== u.id).map(out),
+      outgoing: r.results.filter(x => x.status === "pending" && x.requestedBy === u.id).map(out),
+    });
+  }
+  if (method === "POST" && p === "/api/friends/request") {
+    if (await rateLimited(db, "friend", u.id, RATE_LIMITS.invite)) return tooMany();
+    const b = await body(req), login = textField(b?.login).trim();
+    const who = b?.userId ? await db.prepare("SELECT id,display_name FROM appx_users WHERE id=?").bind(textField(b.userId)).first() : login ? await findUser(db, login) : null;
+    if (!who) return fail(login ? `No one on Split It has the ${login.includes("@") && !login.startsWith("@") ? "email" : "username"} “${login}”.` : "Enter a username or email.", login ? 404 : 400);
+    if (who.id === u.id) return fail("That's you.", 409);
+    const [a, bb] = pairOf(u.id, who.id);
+    const row = await db.prepare("SELECT status,requested_by FROM appx_friendships WHERE user_a=? AND user_b=?").bind(a, bb).first();
+    if (row?.status === "accepted") return fail(`You and ${who.display_name} are already friends.`, 409);
+    if (row && row.requested_by === u.id) return fail(`You've already asked ${who.display_name}.`, 409);
+    if (row) {
+      // They had asked me: asking back accepts.
+      await db.batch([db.prepare("UPDATE appx_friendships SET status='accepted' WHERE user_a=? AND user_b=?").bind(a, bb),
+        note({ to: who.id, kind: "friend_accepted", title: `${u.name} accepted your friend request`, body: "You can now invite each other to groups.", link: "#/friends", actor: u.name })]);
+      return json({ ok: true, status: "friends", name: who.display_name });
+    }
+    await db.batch([db.prepare("INSERT INTO appx_friendships(user_a,user_b,requested_by,status,created_at) VALUES(?,?,?,'pending',?)").bind(a, bb, u.id, Date.now()),
+      note({ to: who.id, kind: "friend_request", title: `${u.name} wants to be friends`, body: "Accept it in Friends.", link: "#/friends", actor: u.name })]);
+    return json({ ok: true, status: "requested", name: who.display_name });
+  }
+  const friendAct = p.match(/^\/api\/friends\/([\w-]+)\/(accept|decline|remove)$/);
+  if (method === "POST" && friendAct) {
+    const [, other, action] = friendAct;
+    const [a, bb] = pairOf(u.id, other);
+    const row = await db.prepare("SELECT status,requested_by FROM appx_friendships WHERE user_a=? AND user_b=?").bind(a, bb).first();
+    if (!row) return fail("No friend request with that person.", 404);
+    if (action === "accept") {
+      if (row.status !== "pending" || row.requested_by === u.id) return fail("There's no request from them to accept.", 409);
+      await db.batch([db.prepare("UPDATE appx_friendships SET status='accepted' WHERE user_a=? AND user_b=?").bind(a, bb),
+        note({ to: other, kind: "friend_accepted", title: `${u.name} accepted your friend request`, body: "You can now invite each other to groups.", link: "#/friends", actor: u.name })]);
+      return json({ ok: true });
+    }
+    // decline (their request), cancel (mine) or remove (friends): the row goes.
+    if (action === "decline" && (row.status !== "pending" || row.requested_by === u.id)) return fail("There's no request from them to decline.", 409);
+    await db.prepare("DELETE FROM appx_friendships WHERE user_a=? AND user_b=?").bind(a, bb).run();
+    return json({ ok: true });
+  }
+
   const gm = p.match(/^\/api\/groups\/([\w-]+)(?:\/(.*))?$/);
   if (gm) {
     const gid = gm[1], tail = gm[2] || "";
@@ -870,21 +964,43 @@ async function api(req, env, url, outbox = []) {
     if (method === "GET" && !tail) {
       const g = await db.prepare("SELECT id,name FROM appx_groups WHERE id=?").bind(gid).first();
       const all = await groupMembers(db, gid);
-      const pick = x => ({ id: x.id, name: x.name, username: x.username, role: x.role, status: x.status });
+      // Where I stand with each person: friends, or a request either way.
+      const friends = new Map((await db.prepare("SELECT CASE WHEN user_a=?1 THEN user_b ELSE user_a END AS other,status,requested_by FROM appx_friendships WHERE user_a=?1 OR user_b=?1").bind(u.id).all()).results
+        .map(f => [f.other, f.status === "accepted" ? "friend" : f.requested_by === u.id ? "requested" : "asked_you"]));
+      const inviters = new Map(all.map(x => [x.id, x.name]));
+      const rows = (await db.prepare("SELECT member_id,invited_by FROM appx_group_members WHERE group_id=?").bind(gid).all()).results;
+      const invitedBy = new Map(rows.map(r => [r.member_id, r.invited_by ? inviters.get(r.invited_by) || null : null]));
+      const pick = x => ({ id: x.id, name: x.name, username: x.username, role: x.role, status: x.status, friend: x.id === u.id ? null : friends.get(x.id) || null, invitedBy: invitedBy.get(x.id) || null });
       return json({
         group: { ...g, hasPin: !!gp.pin_hash },
         members: all.filter(x => x.active).map(pick),
-        // Only admins see who is waiting: asked to join, or invited and not answered.
-        waiting: isAdmin ? all.filter(x => x.status === "pending" || x.status === "invited").map(pick) : [],
+        // Only admins see who is waiting: asked to join (link/QR), suggested
+        // by a member, or invited and not answered yet.
+        waiting: isAdmin ? all.filter(x => ["pending", "suggested", "invited"].includes(x.status)).map(pick) : [],
         me: { id: u.id, name: u.name, isAdmin, role: member.role },
       });
+    }
+    // The group's invite link / QR (#/join/<code>). Everyone in the group can
+    // see and share it; admins make it (first time), replace it or turn it off.
+    if (tail === "invite-link" || tail === "invite-link/reset" || tail === "invite-link/off") {
+      let code = (await db.prepare("SELECT invite_code FROM appx_groups WHERE id=?").bind(gid).first())?.invite_code || null;
+      if (method === "GET" && tail === "invite-link") {
+        if (!code && isAdmin) { code = newInviteCode(); await db.prepare("UPDATE appx_groups SET invite_code=? WHERE id=? AND invite_code IS NULL").bind(code, gid).run(); }
+        return json({ code: (await db.prepare("SELECT invite_code FROM appx_groups WHERE id=?").bind(gid).first())?.invite_code || null, canManage: isAdmin });
+      }
+      if (method !== "POST") return fail("Not found.", 404);
+      if (!isAdmin) return fail("Only a group admin can do that.", 403);
+      code = tail === "invite-link/reset" ? newInviteCode() : null;
+      await db.prepare("UPDATE appx_groups SET invite_code=? WHERE id=?").bind(code, gid).run();
+      return json({ code, canManage: true });
     }
     // ----- Group admin: who is in the group -----
     const needAdmin = () => fail("Only a group admin can do that.", 403);
     // Invite someone already on Split It by their username or email. They
     // join when they accept. Someone who asked to join is let in straight away.
+    // Members (not admins) may suggest one of their friends: an admin then
+    // approves, and only then is the friend invited.
     if (method === "POST" && tail === "members/invite") {
-      if (!isAdmin) return needAdmin();
       if (await rateLimited(db, "invite", u.id, RATE_LIMITS.invite)) return tooMany();
       const login = textField((await body(req))?.login).trim();
       if (!login) return fail("Enter a username or email.");
@@ -894,9 +1010,19 @@ async function api(req, env, url, outbox = []) {
       const row = await db.prepare("SELECT status FROM appx_group_members WHERE group_id=? AND member_id=?").bind(gid, who.id).first();
       if (row?.status === "active") return fail(`${who.display_name} is already in this group.`, 409);
       if (row?.status === "invited") return fail(`${who.display_name} is already invited. They'll see it when they open Split It.`, 409);
+      if (!isAdmin) {
+        if (!await areFriends(db, u.id, who.id)) return fail("You can suggest your friends. Add them as a friend first, or ask a group admin to invite them.", 403);
+        if (row?.status === "suggested" || row?.status === "pending") return fail(`${who.display_name} is already waiting for an admin to approve.`, 409);
+        const admins = (await db.prepare("SELECT member_id FROM appx_group_members WHERE group_id=? AND role='admin' AND status='active'").bind(gid).all()).results.map(r => r.member_id);
+        await db.batch([
+          db.prepare("INSERT INTO appx_group_members(group_id,member_id,name,role,status,invited_by) VALUES(?1,?2,?3,'member','suggested',?4) ON CONFLICT(group_id,member_id) DO UPDATE SET status='suggested',role='member',invited_by=?4,name=?3").bind(gid, who.id, who.display_name, u.id),
+          ...admins.map(to => note({ to, groupId: gid, kind: "member_suggested", title: `${u.name} wants to add ${who.display_name} to “${g.name}”`, body: "Approve it in Members → Waiting.", link: `#/g/${gid}`, actor: u.name })),
+        ]);
+        return json({ ok: true, status: "suggested", name: who.display_name });
+      }
       if (row?.status === "pending") {
         await db.batch([
-          db.prepare("UPDATE appx_group_members SET status='active',joined_at=? WHERE group_id=? AND member_id=?").bind(Date.now(), gid, who.id),
+          db.prepare("UPDATE appx_group_members SET status='active',joined_at=? WHERE group_id=? AND member_id=? AND status='pending'").bind(Date.now(), gid, who.id),
           note({ to: who.id, groupId: gid, kind: "approved", title: `You're in “${g.name}”`, body: `${u.name} let you in. Add expenses and settle up here.`, link: `#/g/${gid}`, actor: u.name }),
         ]);
         return json({ ok: true, status: "active", name: who.display_name });
@@ -916,6 +1042,13 @@ async function api(req, env, url, outbox = []) {
       const admins = Number((await db.prepare("SELECT COUNT(*) AS n FROM appx_group_members WHERE group_id=? AND role='admin' AND status='active'").bind(gid).first()).n);
       const lastAdmin = row.role === "admin" && row.status === "active" && admins <= 1;
       const set = (sql, ...args) => db.prepare("UPDATE appx_group_members SET " + sql + " WHERE group_id=? AND member_id=?").bind(...args, gid, mid);
+      if ((action === "approve" || action === "reject") && row.status === "suggested") {
+        // A member's suggestion: approving invites the person (they still accept).
+        await db.batch(action === "approve"
+          ? [set("status='invited'"), note({ to: mid, groupId: gid, kind: "group_invite", title: `You're invited to “${row.groupName}”`, body: "Open Split It to accept or decline.", link: "#/", actor: u.name })]
+          : [set("status='removed'")]);
+        return json({ ok: true, status: action === "approve" ? "invited" : "removed" });
+      }
       if (action === "approve" || action === "reject") {
         if (row.status !== "pending") return fail("This person isn't waiting to join.", 409);
         await db.batch(action === "approve"

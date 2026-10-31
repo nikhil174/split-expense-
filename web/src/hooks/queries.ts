@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { toast } from "sonner";
 import {
   get, post, type Balance, type Dashboard,
-  type Debt, type Expense, type GroupDetail, type GroupSummary, type Invitation, type Me, type MemberSummary, type AppNotification, type GroupPaymentMethod, type Mine, type PaymentMethod, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
+  type Debt, type Expense, type GroupDetail, type Friends, type GroupSummary, type Invitation, type Me, type MemberSummary, type AppNotification, type GroupPaymentMethod, type Mine, type PaymentMethod, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
 } from "@/lib/api";
 
 export const keys = {
@@ -14,6 +14,7 @@ export const keys = {
   notifications: ["notifications"] as const,
   group: (id: string) => ["group", id] as const,
   invitations: ["invitations"] as const,
+  friends: ["friends"] as const,
 };
 
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => get<Me>("/api/me"), staleTime: 60_000 });
@@ -111,6 +112,9 @@ export function useRecordPayment(groupId: string) {
   });
 }
 
+export const useFriends = () => useQuery({ queryKey: keys.friends, queryFn: () => get<Friends>("/api/friends") });
+export const useInviteLink = (groupId: string, enabled = true) => useQuery({ ...groupQuery<{ code: string | null; canManage: boolean }>(groupId, "invite-link", "/invite-link"), enabled });
+
 // ----- Accounts and group membership -----
 // Any write that changes who is where: refresh everything that could show it.
 export function useAccountAction<V, R = unknown>(fn: (v: V) => Promise<R>, success?: (v: V) => string) {
@@ -119,7 +123,7 @@ export function useAccountAction<V, R = unknown>(fn: (v: V) => Promise<R>, succe
     mutationFn: fn,
     onSuccess: async (_d, v) => {
       if (success) toast.success(success(v));
-      await Promise.all([qc.invalidateQueries({ queryKey: keys.me }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.invitations }), qc.invalidateQueries({ queryKey: ["group"] }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.notifications })]);
+      await Promise.all([qc.invalidateQueries({ queryKey: keys.me }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.invitations }), qc.invalidateQueries({ queryKey: keys.friends }), qc.invalidateQueries({ queryKey: ["group"] }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.notifications })]);
     },
     onError: (e: Error) => toast.error(e.message),
   });
