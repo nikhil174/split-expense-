@@ -61,7 +61,7 @@ async function signIn(page, login, pin = MEMBER_PIN) {
 }
 // Opens the group; on a device where it's locked, enters the group PIN.
 async function openGroup(page) {
-  await page.getByRole("button", { name: new RegExp(GROUP) }).click();
+  await page.getByRole("button", { name: new RegExp(GROUP + ".*Open dashboard") }).click();
   const locked = page.getByTestId("group-locked");
   await locked.or(page.locator("button:enabled", { hasText: "Add expense" }).first()).waitFor();
   if (await locked.isVisible()) await locked.locator("input").fill(GROUP_PIN);
@@ -126,7 +126,7 @@ try {
   await signIn(cy, USER.cy);
   // A new sign-in is a new device: the group is locked until its PIN is entered.
   await cy.getByLabel("Locked: needs the group PIN").waitFor();
-  await cy.getByRole("button", { name: new RegExp(GROUP) }).click();
+  await cy.getByRole("button", { name: new RegExp(GROUP + ".*Open dashboard") }).click();
   await cy.getByTestId("group-locked").locator("input").fill("0000");
   await cy.getByTestId("group-locked").getByText("That's not the group's PIN").waitFor();
   await cy.getByTestId("group-locked").locator("input").fill(GROUP_PIN);
@@ -513,6 +513,19 @@ try {
   await signIn(admin, USER.admin);
   await signIn(cy, USER.cy);
   step("sign out lands on the sign-in screen, stays there after reload, and signing back in works (new username too)");
+  // Group settings: the ⚙ on Home's group list, only for the group's admins.
+  await admin.goto(BASE + "/#/"); await admin.reload();
+  await admin.getByRole("button", { name: "Settings for " + GROUP }).click();
+  const settings = admin.getByTestId("group-settings");
+  await settings.getByRole("button", { name: "Change PIN" }).waitFor();
+  await settings.getByRole("button", { name: "Delete group" }).waitFor();
+  await shot(admin, "group-settings");
+  await admin.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+  await bea.goto(BASE + "/#/"); await bea.reload();
+  await bea.getByRole("button", { name: new RegExp(GROUP + ".*Open dashboard") }).waitFor();
+  assert.equal(await bea.getByRole("button", { name: "Settings for " + GROUP }).count(), 0, "members have no group settings");
+  step("group settings (rename, PIN, delete) open from the ⚙ in Home's group list, for admins only");
+
   // Installable: manifest, icons and service worker are served, Chrome reports no
   // installability errors, and "Install the app" explains how on this phone.
   const fresh = await newPage();

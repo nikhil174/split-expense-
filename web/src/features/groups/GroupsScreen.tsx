@@ -1,6 +1,7 @@
 import * as React from "react";
 import { m } from "motion/react";
-import { AtSign, ChevronRight, Lock, Plus, QrCode, Users } from "lucide-react";
+import { AtSign, ChevronRight, Lock, Plus, QrCode, Settings, Users } from "lucide-react";
+import { GroupSettingsSheet } from "./GroupSettingsSheet";
 import { JoinSheet } from "@/features/invites/JoinScreen";
 import { PinInput } from "@/components/app/secrets";
 import { toast } from "sonner";
@@ -43,6 +44,8 @@ export const cardTap = "block w-full cursor-pointer rounded-[14px] text-left tra
 export function GroupsScreen({ user }: { user: User }) {
   const name = user.name;
   const [creating, setCreating] = React.useState(false), [joining, setJoining] = React.useState(false);
+  // The group whose settings are open (admins only).
+  const [settingsId, setSettingsId] = React.useState<string | null>(null);
   const groups = useGroups(), people = usePeopleBalances();
   const list = groups.data || [];
   // The filter stays put while the sheet animates closed.
@@ -110,22 +113,31 @@ export function GroupsScreen({ user }: { user: User }) {
           {list.map((g, i) => {
             const c = Number(g.myBalanceCents || 0);
             return (
-              <m.button key={g.id} custom={i} variants={listItem} initial="initial" animate="animate" type="button"
-                onClick={() => navigate({ name: "group", groupId: g.id, tab: "expenses" })} className={pressableRow}>
+              <m.div key={g.id} custom={i} variants={listItem} initial="initial" animate="animate" className="flex items-center">
+              <button type="button" onClick={() => navigate({ name: "group", groupId: g.id, tab: "expenses" })} className={cn(pressableRow, "min-w-0 flex-1", g.role === "admin" && "pr-1")}>
                 <PersonAvatar id={g.id} name={g.name} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5 truncate text-[15.5px] font-medium">{g.name}{g.hasPin && !g.unlocked && <Lock aria-label="Locked: needs the group PIN" className="size-3.5 shrink-0 text-muted-foreground" />}</span>
                   <span className={cn("block text-[13px]", c > 0 ? "text-positive" : c < 0 ? "text-negative" : "text-muted-foreground")}>{c > 0 ? "you are owed " + inr(c) : c < 0 ? "you owe " + inr(-c) : "settled up"}<span className="text-muted-foreground">{" · " + g.memberCount + (g.memberCount === 1 ? " member" : " members") + (g.role === "admin" ? " · admin" : "")}</span></span>
                 </span>
                 <span className="sr-only">Open dashboard</span>
-                <ChevronRight className="size-[18px] text-[#141716]/25" strokeWidth={2.4} />
-              </m.button>
+                {g.role !== "admin" && <ChevronRight className="size-[18px] text-[#141716]/25" strokeWidth={2.4} />}
+              </button>
+              {/* Group settings: only for the group's admins. */}
+              {g.role === "admin" && (
+                <button type="button" onClick={() => setSettingsId(g.id)} aria-label={"Settings for " + g.name} title="Group settings"
+                  className="mr-3 grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-[#141716]/[0.05] text-foreground transition-transform active:scale-90">
+                  <Settings className="size-[18px]" />
+                </button>
+              )}
+              </m.div>
             );
           })}
         </List>
       </div>
       <NewGroupDialog open={creating} onClose={() => setCreating(false)} />
       <JoinSheet open={joining} onOpenChange={setJoining} />
+      <GroupSettingsSheet group={list.find(g => g.id === settingsId) || null} onOpenChange={o => { if (!o) setSettingsId(null); }} />
     </Page>
   );
 }
