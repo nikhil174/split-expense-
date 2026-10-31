@@ -136,7 +136,7 @@ function Shell({ user, isAdmin }: { user: { id: string; name: string }; isAdmin:
         <React.Fragment key={screenKey}>
           {route.name === "home" && <GroupsScreen name={user.name} />}
           {route.name === "admin" && isAdmin && <AdminScreen adminName={user.name} />}
-          {route.name === "group" && <GroupScreen groupId={route.groupId} tab={route.tab} />}
+          {route.name === "group" && <GroupScreen groupId={route.groupId} tab={route.tab} expenseId={route.expenseId} />}
           {route.name === "notifications" && <NotificationsScreen />}
           {route.name === "person" && <PersonScreen groupId={route.groupId} memberId={route.memberId} />}
         </React.Fragment>

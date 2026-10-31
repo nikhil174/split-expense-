@@ -275,7 +275,7 @@ function notifyStmt(db, n) {
     .bind(id(), n.to, n.groupId ?? null, n.kind, n.title, n.body ?? null, n.link ?? null, n.actor ?? null, Date.now());
 }
 // Everyone in an expense (payer and split), told what it means for them.
-function expenseNotes(note, { kind, gid, actor, desc, cents, paidBy, splitRows, nameOf, alsoTell = [] }) {
+function expenseNotes(note, { kind, gid, expenseId, actor, desc, cents, paidBy, splitRows, nameOf, alsoTell = [] }) {
   const verb = { expense_added: "added", expense_edited: "changed", expense_deleted: "deleted" }[kind];
   const people = new Set([paidBy, ...splitRows.map(r => r.memberId), ...alsoTell]);
   people.delete(actor.id);
@@ -284,7 +284,9 @@ function expenseNotes(note, { kind, gid, actor, desc, cents, paidBy, splitRows, 
     const effect = (paidBy === to ? cents : 0) - share;
     const body = kind === "expense_deleted" ? "It no longer counts in your balance."
       : `${paidBy === to ? "You" : nameOf(paidBy)} paid ${inrText(cents)} · ${effect > 0 ? `you get back ${inrText(effect)}` : effect < 0 ? `you owe ${inrText(-effect)}` : "you're not in the split"}`;
-    return note({ to, groupId: gid, kind, title: `${actor.name} ${verb} “${desc}”`, body, link: `#/g/${gid}`, actor: actor.name });
+    // Opens that expense (expanded); a deleted one opens the group.
+    const link = kind === "expense_deleted" || !expenseId ? `#/g/${gid}` : `#/g/${gid}/e/${expenseId}`;
+    return note({ to, groupId: gid, kind, title: `${actor.name} ${verb} “${desc}”`, body, link, actor: actor.name });
   });
 }
 
@@ -769,7 +771,7 @@ async function api(req, env, url, outbox = []) {
       await db.batch([
         db.prepare("INSERT INTO appx_expenses(id,group_id,description,amount_cents,paid_by,created_by,created_at) VALUES(?,?,?,?,?,?,?)").bind(eid, gid, desc, cents, paidBy, u.id, Date.now()),
         ...splitRows.map(row => db.prepare("INSERT INTO appx_splits(expense_id,member_id,amount_cents) VALUES(?,?,?)").bind(eid, row.memberId, row.amountCents)),
-        ...expenseNotes(note, { kind: "expense_added", gid, actor: u, desc, cents, paidBy, splitRows, nameOf }),
+        ...expenseNotes(note, { kind: "expense_added", gid, expenseId: eid, actor: u, desc, cents, paidBy, splitRows, nameOf }),
       ]);
       return json({ ok: true, id: eid, amountCents: cents, splits: splitRows }, 201);
     }
@@ -787,7 +789,7 @@ async function api(req, env, url, outbox = []) {
       // People taken out of the split hear about it too.
       const before = (await db.prepare("SELECT member_id FROM appx_splits WHERE expense_id=?").bind(e.id).all()).results.map(r => r.member_id);
       await db.batch([
-        ...expenseNotes(note, { kind: "expense_edited", gid, actor: u, desc, cents, paidBy, splitRows, nameOf: nameLookup(await groupMembers(db, gid)), alsoTell: [e.paid_by, ...before] }),
+        ...expenseNotes(note, { kind: "expense_edited", gid, expenseId: e.id, actor: u, desc, cents, paidBy, splitRows, nameOf: nameLookup(await groupMembers(db, gid)), alsoTell: [e.paid_by, ...before] }),
         db.prepare("UPDATE appx_expenses SET description=?,amount_cents=?,paid_by=? WHERE id=? AND group_id=?").bind(desc, cents, paidBy, e.id, gid),
         db.prepare("DELETE FROM appx_splits WHERE expense_id=?").bind(e.id),
         ...splitRows.map(row => db.prepare("INSERT INTO appx_splits(expense_id,member_id,amount_cents) VALUES(?,?,?)").bind(e.id, row.memberId, row.amountCents)),
@@ -973,10 +975,11 @@ async function api(req, env, url, outbox = []) {
       const nm = x => byId.get(x)?.name || FORMER_MEMBER, notes = [];
       if (to !== u.id) notes.push(note({ to, groupId: gid, kind: status === "pending" ? "payment_pending" : "payment_recorded", actor: u.name,
         title: status === "pending" ? `${nm(from)} says they paid you ${inrText(cents)}` : `${u.name} recorded ${inrText(cents)} from ${nm(from)} to you`,
-        body: status === "pending" ? (proof ? "They attached a screenshot. Confirm it once you've received it." : "Confirm it once you've received it.") : "It counts in your balance now.", link: "#/" }));
+        // Pending: the group, where the approve card is on top; otherwise what's between you two.
+        body: status === "pending" ? (proof ? "They attached a screenshot. Confirm it once you've received it." : "Confirm it once you've received it.") : "It counts in your balance now.", link: status === "pending" ? `#/g/${gid}` : `#/g/${gid}/p/${from}` }));
       if (from !== u.id) notes.push(note({ to: from, groupId: gid, kind: "payment_recorded", actor: u.name,
         title: `${u.name} recorded your payment of ${inrText(cents)} to ${to === u.id ? "them" : nm(to)}`,
-        body: status === "pending" ? `It counts once ${nm(to)} confirms it.` : "It counts in your balance now.", link: `#/g/${gid}/payments` }));
+        body: status === "pending" ? `It counts once ${nm(to)} confirms it.` : "It counts in your balance now.", link: `#/g/${gid}/p/${to}` }));
       if (notes.length) await db.batch(notes);
       return json({ ok: true, id: settlementId, amountCents: cents, status }, 201);
     }
@@ -997,7 +1000,8 @@ async function api(req, env, url, outbox = []) {
       if (pay.status !== "pending") return fail(`This payment was already ${pay.status}.`, 409);
       const now = Date.now();
       const nm = nameLookup(await groupMembers(db, gid));
-      const tell = (to, kind, title, body, link = `#/g/${gid}/payments`) => to === u.id ? Promise.resolve() : db.batch([note({ to, groupId: gid, kind, title, body, link, actor: u.name })]);
+      // Each side is taken to what's between them and the other person.
+      const tell = (to, kind, title, body) => to === u.id ? Promise.resolve() : db.batch([note({ to, groupId: gid, kind, title, body, link: `#/g/${gid}/p/${to === pay.fromId ? pay.toId : pay.fromId}`, actor: u.name })]);
       if (action === "cancel") {
         if (!isAdmin && pay.fromId !== u.id) return fail("Only the person who paid or the admin can cancel this payment.", 403);
         await db.batch([

@@ -6,7 +6,8 @@ export type Route =
   | { name: "home" }
   | { name: "admin" }
   | { name: "notifications" }
-  | { name: "group"; groupId: string; tab: GroupTab }
+  // expenseId: open on that expense, expanded (#/g/:id/e/:expenseId).
+  | { name: "group"; groupId: string; tab: GroupTab; expenseId?: string }
   | { name: "person"; groupId: string; memberId: string };
 export type GroupTab = "expenses" | "balances" | "payments" | "insights";
 const TABS: GroupTab[] = ["expenses", "balances", "payments", "insights"];
@@ -17,6 +18,7 @@ export function parse(hash: string): Route {
   if (parts[0] === "notifications") return { name: "notifications" };
   if (parts[0] === "g" && parts[1]) {
     if (parts[2] === "p" && parts[3]) return { name: "person", groupId: parts[1], memberId: parts[3] };
+    if (parts[2] === "e" && parts[3]) return { name: "group", groupId: parts[1], tab: "expenses", expenseId: parts[3] };
     const tab = TABS.includes(parts[2] as GroupTab) ? (parts[2] as GroupTab) : "expenses";
     return { name: "group", groupId: parts[1], tab };
   }
@@ -28,7 +30,7 @@ export function href(route: Route): string {
     case "home": return "#/";
     case "admin": return "#/admin";
     case "notifications": return "#/notifications";
-    case "group": return "#/g/" + encodeURIComponent(route.groupId) + (route.tab === "expenses" ? "" : "/" + route.tab);
+    case "group": return "#/g/" + encodeURIComponent(route.groupId) + (route.expenseId ? "/e/" + encodeURIComponent(route.expenseId) : route.tab === "expenses" ? "" : "/" + route.tab);
     case "person": return "#/g/" + encodeURIComponent(route.groupId) + "/p/" + encodeURIComponent(route.memberId);
   }
 }

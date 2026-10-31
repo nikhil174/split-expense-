@@ -39,7 +39,7 @@ export function BackButton({ label, onClick }: { label: string; onClick: () => v
   );
 }
 
-export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }) {
+export function GroupScreen({ groupId, tab, expenseId }: { groupId: string; tab: GroupTab; expenseId?: string }) {
   const group = useGroup(groupId);
   const mine = useMine(groupId);
   const [adding, setAdding] = React.useState(false);
@@ -91,7 +91,7 @@ export function GroupScreen({ groupId, tab }: { groupId: string; tab: GroupTab }
 
       <AnimatePresence mode="wait" initial={false}>
         <m.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }} className="mt-7">
-          {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} onAdd={() => setAdding(true)} onEdit={x => setEditing({ open: true, x })} />}
+          {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} focusId={expenseId} onAdd={() => setAdding(true)} onEdit={x => setEditing({ open: true, x })} />}
           {tab === "balances" && <BalancesTab groupId={groupId} />}
           {tab === "payments" && <PaymentsTab groupId={groupId} meId={mine.data?.memberId} />}
           {tab === "insights" && <InsightsTab groupId={groupId} />}
@@ -128,10 +128,19 @@ function TableHead({ cols }: { cols: [string, string?][] }) {
 const tr = "border-b border-hairline last:border-0";
 
 // ----- Expenses -----
-function ExpensesTab({ groupId, meId, onAdd, onEdit }: { groupId: string; meId?: string; onAdd: () => void; onEdit: (x: Expense) => void }) {
+function ExpensesTab({ groupId, meId, focusId, onAdd, onEdit }: { groupId: string; meId?: string; focusId?: string; onAdd: () => void; onEdit: (x: Expense) => void }) {
   const expenses = useExpenses(groupId);
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState<string | null>(null);
+  // Opened from a notification (#/g/:id/e/:expenseId): expand that expense
+  // and bring it into view, or say it is gone.
+  React.useEffect(() => {
+    if (!focusId || !expenses.data) return;
+    if (!expenses.data.some(x => x.id === focusId)) { toast.message("That expense was deleted."); return; }
+    setQuery(""); setOpen(focusId);
+    const t = window.setTimeout(() => document.getElementById("expense-" + focusId)?.scrollIntoView({ block: "center", behavior: "smooth" }), 350);
+    return () => window.clearTimeout(t);
+  }, [focusId, !!expenses.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const q = query.toLowerCase();
   const list = (expenses.data || []).filter(x => !q || x.description.toLowerCase().includes(q) || x.paidByName.toLowerCase().includes(q));
   const total = (expenses.data || []).reduce((s, x) => s + x.amountCents, 0);
@@ -170,7 +179,7 @@ function ExpenseRow({ x, meId, groupId, open, onToggle, onEdit }: { x: Expense; 
   const d = shortDate(x.createdAt);
   return (
     <>
-      <tr aria-expanded={open} tabIndex={0} onClick={onToggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+      <tr id={"expense-" + x.id} aria-expanded={open} tabIndex={0} onClick={onToggle} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
         className={cn("cursor-pointer transition-colors duration-150 active:bg-[#141716]/[0.04]", !open && tr, open && "bg-[#141716]/[0.025]")}>
         <td className="w-full max-w-0 py-3 pr-2 pl-4">
           <span className="flex items-center gap-3">

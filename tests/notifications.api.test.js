@@ -22,20 +22,20 @@ test("adding, changing and deleting an expense tells everyone in it, with what i
   const cy = await f.inbox("Cy");
   assert.equal(cy.unread, 1);
   assert.deepEqual([cy.items[0].kind, cy.items[0].title, cy.items[0].body, cy.items[0].groupName, cy.items[0].link],
-    ["expense_added", "Bea added “Dinner”", "Bea paid ₹90.00 · you owe ₹30.00", "Goa Trip", `#/g/${f.g.groupId}`]);
+    ["expense_added", "Bea added “Dinner”", "Bea paid ₹90.00 · you owe ₹30.00", "Goa Trip", `#/g/${f.g.groupId}/e/${e.data.id}`]);
   assert.deepEqual(await f.titles("admin"), ["Bea added “Dinner”"]);
   assert.deepEqual(await f.titles("Bea"), [], "not told about their own action");
 
   // Cy is taken out of the split: Cy is told, and so is the admin (still in it).
   await f.post("Bea", `/expenses/${e.data.id}/edit`, { description: "Dinner", amount: "60", paidBy: ids.Bea, memberIds: [ids.Bea, ids.admin] });
   const cy2 = (await f.inbox("Cy")).items[0];
-  assert.deepEqual([cy2.kind, cy2.title, cy2.body], ["expense_edited", "Bea changed “Dinner”", "Bea paid ₹60.00 · you're not in the split"]);
+  assert.deepEqual([cy2.kind, cy2.title, cy2.body, cy2.link], ["expense_edited", "Bea changed “Dinner”", "Bea paid ₹60.00 · you're not in the split", `#/g/${f.g.groupId}/e/${e.data.id}`]);
   assert.equal((await f.inbox("admin")).items[0].body, "Bea paid ₹60.00 · you owe ₹30.00");
 
   // The admin deletes it: Bea (who paid) is told; Cy, no longer in it, is not.
   await f.post("admin", `/expenses/${e.data.id}/delete`);
   const bea = (await f.inbox("Bea")).items[0];
-  assert.deepEqual([bea.kind, bea.title, bea.body], ["expense_deleted", "Alex Admin deleted “Dinner”", "It no longer counts in your balance."]);
+  assert.deepEqual([bea.kind, bea.title, bea.body, bea.link], ["expense_deleted", "Alex Admin deleted “Dinner”", "It no longer counts in your balance.", `#/g/${f.g.groupId}`]);
   assert.equal((await f.inbox("Cy")).items.length, 2);
 });
 
@@ -47,9 +47,10 @@ test("payments: the receiver is asked to confirm; the payer hears confirmed, rej
 
   const a = await pay("20");
   const bea = (await f.inbox("Bea")).items[0];
-  assert.deepEqual([bea.kind, bea.title, bea.body], ["payment_pending", "Cy says they paid you ₹20.00", "Confirm it once you've received it."]);
+  // Links: the approver goes to the group (approve card on top); the payer to what's between them.
+  assert.deepEqual([bea.kind, bea.title, bea.body, bea.link], ["payment_pending", "Cy says they paid you ₹20.00", "Confirm it once you've received it.", `#/g/${f.g.groupId}`]);
   await f.post("Bea", `/settlements/${a.data.id}/confirm`);
-  assert.deepEqual((await f.inbox("Cy")).items.map(n => [n.kind, n.title])[0], ["payment_confirmed", "Bea confirmed your payment of ₹20.00"]);
+  assert.deepEqual((await f.inbox("Cy")).items.map(n => [n.kind, n.title, n.link])[0], ["payment_confirmed", "Bea confirmed your payment of ₹20.00", `#/g/${f.g.groupId}/p/${ids.Bea}`]);
 
   const b = await pay("10");
   await f.post("Bea", `/settlements/${b.data.id}/reject`);
@@ -57,7 +58,7 @@ test("payments: the receiver is asked to confirm; the payer hears confirmed, rej
 
   const c = await pay("5");
   await f.post("Cy", `/settlements/${c.data.id}/cancel`);
-  assert.deepEqual([(await f.inbox("Bea")).items[0].kind, (await f.inbox("Bea")).items[0].title], ["payment_cancelled", "Cy cancelled a payment of ₹5.00"]);
+  assert.deepEqual([(await f.inbox("Bea")).items[0].kind, (await f.inbox("Bea")).items[0].title, (await f.inbox("Bea")).items[0].link], ["payment_cancelled", "Cy cancelled a payment of ₹5.00", `#/g/${f.g.groupId}/p/${ids.Cy}`]);
 
   // The admin records Cy paying Bea: both are told (Bea to confirm).
   await f.post("admin", "/settlements", { fromMemberId: ids.Cy, toMemberId: ids.Bea, amount: "5" });

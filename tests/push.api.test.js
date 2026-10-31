@@ -53,14 +53,15 @@ test("a notification reaches the phone: encrypted for that browser and signed wi
   assert.equal((await call(f.env, "/api/push/key", { cookie: f.g.cookies.Cy })).data.publicKey, f.keys.VAPID_PUBLIC_KEY);
   const phone = browser();
   assert.equal((await f.subscribe("Cy", phone.sub)).status, 200);
-  assert.equal((await f.addExpense()).status, 201);
+  const added = await f.addExpense();
+  assert.equal(added.status, 201);
   assert.equal(f.sent.length, 1, "only Cy's phone (Bea added it)");
   const { url, init } = f.sent[0];
   assert.equal(url, phone.sub.endpoint);
   assert.equal(init.headers["Content-Encoding"], "aes128gcm");
   assert.equal(init.headers.TTL, "86400");
   // The browser can decrypt it and read the same text as the bell.
-  assert.deepEqual(decrypt(Buffer.from(init.body), phone), { title: "Bea added “Dinner”", body: "Bea paid ₹90.00 · you owe ₹45.00", link: `#/g/${f.g.groupId}`, tag: "expense_added" });
+  assert.deepEqual(decrypt(Buffer.from(init.body), phone), { title: "Bea added “Dinner”", body: "Bea paid ₹90.00 · you owe ₹45.00", link: `#/g/${f.g.groupId}/e/${added.data.id}`, tag: "expense_added" });
   // The VAPID header is a valid ES256 JWT for that push service, signed by our key.
   const [, jwt, k] = /^vapid t=([^,]+), k=(.+)$/.exec(init.headers.Authorization);
   assert.equal(k, f.keys.VAPID_PUBLIC_KEY);
