@@ -9,7 +9,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  AnimatedMoney, BottomTabs, CategoryTile, DateBadge, EASE, EmptyState, Footnote, List, Page, PersonAvatar, SectionTitle, haptic, listItem, pressableRow, searchFieldClass,
+  AnimatedMoney, BottomTabs, CategoryTile, DateBadge, EASE, EmptyState, Footnote, List, Page, PersonAvatar, SectionTitle, Segmented, haptic, listItem, pressableRow, searchFieldClass,
 } from "@/components/app/bits";
 import { AquaCard, cardTap } from "./GroupsScreen";
 import { PeopleSheet } from "./PeopleSheet";
@@ -328,21 +328,32 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
   const payments = useSettlements(groupId);
   const [proof, setProof] = React.useState<Settlement | null>(null);
   const who = (id: string, name: string) => (id === meId ? "You" : name);
+  // All payments in the group, only yours (you paid or were paid), or only between other people.
+  const [filter, setFilter] = React.useState<"all" | "mine" | "others">("all");
+  const isMine = (s: Settlement) => s.fromMemberId === meId || s.toMemberId === meId;
+  const shown = payments.data?.filter(s => filter === "all" || (filter === "mine") === isMine(s));
   return (
     <div className="space-y-7">
     <UpiPeople groupId={groupId} />
     <div>
-      <SectionTitle action={payments.data && payments.data.length > 0 ? <span className="tabular text-[13px] text-muted-foreground">Total {inr(payments.data.reduce((s, x) => s + (x.status === "confirmed" ? x.amountCents : 0), 0))}</span> : undefined}>
-        {payments.data ? `${payments.data.length} ${payments.data.length === 1 ? "payment" : "payments"}` : "Payments"}
+      {payments.data && payments.data.length > 0 && (
+        <Segmented id="payments-filter" className="mb-4" value={filter} onChange={setFilter} options={[{ value: "all", label: "All" }, { value: "mine", label: "Yours" }, { value: "others", label: "Others" }]} />
+      )}
+      <SectionTitle action={shown && shown.length > 0 ? <span className="tabular text-[13px] text-muted-foreground">Total {inr(shown.reduce((s, x) => s + (x.status === "confirmed" ? x.amountCents : 0), 0))}</span> : undefined}>
+        {shown ? `${shown.length} ${shown.length === 1 ? "payment" : "payments"}` : "Payments"}
       </SectionTitle>
       <div className="panel overflow-hidden">
         {payments.isPending ? <RowsSkeleton /> : !payments.data?.length ? (
           <EmptyState icon={<Wallet />} title="No payments yet">When someone pays back, it shows up here.</EmptyState>
+        ) : !shown?.length ? (
+          <EmptyState icon={<Wallet />} title={filter === "mine" ? "No payments with you yet" : "No payments between others yet"}>
+            {filter === "mine" ? "Payments you make or receive show up here." : "When other people in the group pay each other, it shows up here."}
+          </EmptyState>
         ) : (
           <table className="w-full text-[14px]">
             <TableHead cols={[["Date", "w-12"], ["Payment"], ["Amount", "text-right"]]} />
             <tbody>
-              {payments.data.map(s => (
+              {shown.map(s => (
                 <tr key={s.id} className={tr}>
                   <td className="py-3 pr-1 pl-4"><DateBadge ts={s.createdAt} /></td>
                   <td className="w-full max-w-0 px-2 py-3">
