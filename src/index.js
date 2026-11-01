@@ -34,6 +34,15 @@ class HttpError extends Error {
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
 const fail = (message, status = 400) => json({ error: message }, status);
 const id = () => crypto.randomUUID();
+
+// One entry in a group's permanent history (appx_history): what an expense or
+// payment was before and after a change, and who made it. Returns a statement
+// to put in the same batch as the change itself.
+function historyEntry(db, { gid, entity, entityId, action, actor, before = null, after = null }) {
+  return db.prepare("INSERT INTO appx_history(id,group_id,entity,entity_id,action,actor_id,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
+    .bind(id(), gid, entity, entityId, action, actor, before && JSON.stringify(before), after && JSON.stringify(after), Date.now());
+}
+const expenseSnapshot = (desc, cents, paidBy, splitRows) => ({ description: desc, amountCents: cents, paidBy, splits: splitRows.map(r => ({ memberId: r.memberId, amountCents: r.amountCents })) });
 const hex = b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
 const rupees = cents => cents / 100;
 const cleanName = value => String(value ?? "").trim().replace(/\s+/g, " ");
@@ -367,7 +376,7 @@ async function mergeStatements(db, to, from) {
       db.prepare("UPDATE appx_settlements SET to_member_id=? WHERE group_id=? AND to_member_id=?").bind(to, gid, from),
       db.prepare("UPDATE appx_settlements SET created_by=? WHERE group_id=? AND created_by=?").bind(to, gid, from),
       db.prepare("UPDATE appx_settlements SET decided_by=? WHERE group_id=? AND decided_by=?").bind(to, gid, from),
-      db.prepare("UPDATE appx_invites SET created_by=? WHERE group_id=? AND created_by=?").bind(to, gid, from),
+      db.prepare("UPDATE appx_history SET actor_id=? WHERE group_id=? AND actor_id=?").bind(to, gid, from),
       db.prepare("DELETE FROM appx_group_members WHERE group_id=? AND member_id=?").bind(gid, from),
     );
   }
@@ -1203,10 +1212,8 @@ async function api(req, env, url, outbox = []) {
         db.prepare("DELETE FROM appx_settlements WHERE group_id=?").bind(gid),
         db.prepare("DELETE FROM appx_splits WHERE expense_id IN (SELECT id FROM appx_expenses WHERE group_id=?)").bind(gid),
         db.prepare("DELETE FROM appx_expenses WHERE group_id=?").bind(gid),
-        db.prepare("DELETE FROM appx_invites WHERE group_id=?").bind(gid),
         db.prepare("DELETE FROM appx_group_members WHERE group_id=?").bind(gid),
-        db.prepare("DELETE FROM appx_sessions WHERE request_id IN (SELECT id FROM appx_access_requests WHERE group_id=?)").bind(gid),
-        db.prepare("DELETE FROM appx_access_requests WHERE group_id=?").bind(gid),
+        db.prepare("DELETE FROM appx_history WHERE group_id=?").bind(gid),
         db.prepare("DELETE FROM appx_notifications WHERE group_id=?").bind(gid),
         db.prepare("DELETE FROM appx_group_unlocks WHERE group_id=?").bind(gid),
         db.prepare("DELETE FROM appx_groups WHERE id=?").bind(gid),
@@ -1240,6 +1247,7 @@ async function api(req, env, url, outbox = []) {
         db.prepare("INSERT INTO appx_expenses(id,group_id,description,amount_cents,paid_by,created_by,created_at) VALUES(?,?,?,?,?,?,?)").bind(eid, gid, desc, cents, paidBy, u.id, Date.now()),
         ...splitRows.map(row => db.prepare("INSERT INTO appx_splits(expense_id,member_id,amount_cents) VALUES(?,?,?)").bind(eid, row.memberId, row.amountCents)),
         ...expenseNotes(note, { kind: "expense_added", gid, expenseId: eid, actor: u, desc, cents, paidBy, splitRows, nameOf }),
+        historyEntry(db, { gid, entity: "expense", entityId: eid, action: "created", actor: u.id, after: expenseSnapshot(desc, cents, paidBy, splitRows) }),
       ]);
       return json({ ok: true, id: eid, amountCents: cents, splits: splitRows }, 201);
     }
@@ -1248,21 +1256,40 @@ async function api(req, env, url, outbox = []) {
     const editExpense = tail.match(/^expenses\/([\w-]+)\/edit$/);
     if (method === "POST" && editExpense) {
       if (await rateLimited(db, "expense", u.id, RATE_LIMITS.expenseWrite)) return tooMany();
-      const e = await db.prepare("SELECT id,paid_by FROM appx_expenses WHERE id=? AND group_id=?").bind(editExpense[1], gid).first();
+      const e = await db.prepare("SELECT id,paid_by,description,amount_cents FROM appx_expenses WHERE id=? AND group_id=?").bind(editExpense[1], gid).first();
       if (!e) return fail("Expense not found.", 404);
       if (!isAdmin && e.paid_by !== u.id) return fail("Only the person who paid for this expense or a group admin can edit it.", 403);
       const parsed = await parseExpense(db, gid, await body(req));
       if (parsed.error) return fail(parsed.error);
       const { desc, cents, paidBy, splitRows } = parsed;
       // People taken out of the split hear about it too.
-      const before = (await db.prepare("SELECT member_id FROM appx_splits WHERE expense_id=?").bind(e.id).all()).results.map(r => r.member_id);
+      const oldSplits = (await db.prepare("SELECT member_id AS memberId,amount_cents AS amountCents FROM appx_splits WHERE expense_id=? ORDER BY member_id").bind(e.id).all()).results;
+      const before = oldSplits.map(r => r.memberId);
       await db.batch([
+        historyEntry(db, { gid, entity: "expense", entityId: e.id, action: "edited", actor: u.id, before: expenseSnapshot(e.description, e.amount_cents, e.paid_by, oldSplits), after: expenseSnapshot(desc, cents, paidBy, splitRows) }),
         ...expenseNotes(note, { kind: "expense_edited", gid, expenseId: e.id, actor: u, desc, cents, paidBy, splitRows, nameOf: nameLookup(await groupMembers(db, gid)), alsoTell: [e.paid_by, ...before] }),
         db.prepare("UPDATE appx_expenses SET description=?,amount_cents=?,paid_by=? WHERE id=? AND group_id=?").bind(desc, cents, paidBy, e.id, gid),
         db.prepare("DELETE FROM appx_splits WHERE expense_id=?").bind(e.id),
         ...splitRows.map(row => db.prepare("INSERT INTO appx_splits(expense_id,member_id,amount_cents) VALUES(?,?,?)").bind(e.id, row.memberId, row.amountCents)),
       ]);
       return json({ ok: true, id: e.id, amountCents: cents, splits: splitRows });
+    }
+    // The group's permanent history: expenses added, edited and deleted, and
+    // payments cancelled, newest first. ?expense=<id> narrows it to one expense.
+    if (method === "GET" && tail === "history") {
+      const only = url.searchParams.get("expense");
+      const rows = (only
+        ? await db.prepare("SELECT * FROM appx_history WHERE group_id=? AND entity='expense' AND entity_id=? ORDER BY created_at DESC, rowid DESC LIMIT 100").bind(gid, only).all()
+        : await db.prepare("SELECT * FROM appx_history WHERE group_id=? ORDER BY created_at DESC, rowid DESC LIMIT 200").bind(gid).all()).results;
+      const nameOf = nameLookup(await groupMembers(db, gid));
+      const named = x => {
+        if (!x) return null;
+        const v = JSON.parse(x);
+        for (const [k, out] of [["paidBy", "paidByName"], ["fromMemberId", "fromName"], ["toMemberId", "toName"], ["createdBy", "createdByName"]]) if (v[k]) v[out] = nameOf(v[k]);
+        if (v.splits) v.splits = v.splits.map(r => ({ ...r, name: nameOf(r.memberId) }));
+        return v;
+      };
+      return json({ history: rows.map(r => ({ id: r.id, entity: r.entity, entityId: r.entity_id, action: r.action, actorId: r.actor_id, actorName: nameOf(r.actor_id), createdAt: r.created_at, before: named(r.before_json), after: named(r.after_json) })) });
     }
     if (method === "GET" && tail === "expenses") {
       const [members, r, splits] = await Promise.all([
@@ -1294,6 +1321,7 @@ async function api(req, env, url, outbox = []) {
       const oldSplits = (await db.prepare("SELECT member_id AS memberId,amount_cents AS amountCents FROM appx_splits WHERE expense_id=?").bind(e.id).all()).results;
       await db.batch([
         ...expenseNotes(note, { kind: "expense_deleted", gid, actor: u, desc: e.description, cents: e.amount_cents, paidBy: e.paid_by, splitRows: oldSplits, nameOf: nameLookup(await groupMembers(db, gid)) }),
+        historyEntry(db, { gid, entity: "expense", entityId: e.id, action: "deleted", actor: u.id, before: expenseSnapshot(e.description, e.amount_cents, e.paid_by, oldSplits) }),
         db.prepare("DELETE FROM appx_splits WHERE expense_id=?").bind(e.id),
         db.prepare("DELETE FROM appx_expenses WHERE id=? AND group_id=?").bind(e.id, gid),
       ]);
@@ -1524,7 +1552,7 @@ async function api(req, env, url, outbox = []) {
     const decide = tail.match(/^settlements\/([\w-]+)\/(confirm|reject|cancel)$/);
     if (method === "POST" && decide) {
       const [, sid, action] = decide;
-      const pay = await db.prepare("SELECT id,from_member_id AS fromId,to_member_id AS toId,amount_cents AS cents,status,created_by AS createdBy FROM appx_settlements WHERE id=? AND group_id=?").bind(sid, gid).first();
+      const pay = await db.prepare("SELECT id,from_member_id AS fromId,to_member_id AS toId,amount_cents AS cents,status,created_by AS createdBy,created_at AS createdAt FROM appx_settlements WHERE id=? AND group_id=?").bind(sid, gid).first();
       if (!pay) return fail("Payment not found.", 404);
       if (pay.status !== "pending") return fail(`This payment was already ${pay.status}.`, 409);
       const now = Date.now();
@@ -1536,6 +1564,7 @@ async function api(req, env, url, outbox = []) {
       if (action === "cancel") {
         if (!isAdmin && pay.fromId !== u.id && pay.createdBy !== u.id) return fail("Only the person who recorded it, the payer or a group admin can cancel this payment.", 403);
         await db.batch([
+          historyEntry(db, { gid, entity: "payment", entityId: sid, action: "cancelled", actor: u.id, before: { fromMemberId: pay.fromId, toMemberId: pay.toId, amountCents: pay.cents, createdBy: pay.createdBy, createdAt: pay.createdAt } }),
           db.prepare("DELETE FROM appx_payment_proofs WHERE settlement_id=?").bind(sid),
           db.prepare("DELETE FROM appx_settlements WHERE id=? AND status='pending'").bind(sid),
         ]);
@@ -1582,7 +1611,28 @@ async function api(req, env, url, outbox = []) {
   return fail("Not found.", 404);
 }
 
+// Daily housekeeping (cron in wrangler.toml): removes rows that have
+// expired and are never read again. Nothing about money or history is touched.
+export async function cleanup(db, now = Date.now()) {
+  const DAY = 24 * 60 * 60 * 1000;
+  const results = await db.batch([
+    db.prepare("DELETE FROM appx_user_sessions WHERE expires_at < ?").bind(now),
+    db.prepare("DELETE FROM appx_group_unlocks WHERE until < ?").bind(now),
+    // The longest rate-limit window or lockout is an hour.
+    db.prepare("DELETE FROM appx_rate_limits WHERE window_start < ?").bind(now - DAY),
+    db.prepare("DELETE FROM appx_email_tokens WHERE expires_at < ? OR used_at < ?").bind(now - DAY, now - DAY),
+    // Notifications already read and older than 90 days.
+    db.prepare("DELETE FROM appx_notifications WHERE read_at IS NOT NULL AND created_at < ?").bind(now - 90 * DAY),
+  ]);
+  const [sessions, unlocks, rateLimits, emailLinks, notifications] = results.map(r => r.meta?.changes ?? 0);
+  return { sessions, unlocks, rateLimits, emailLinks, notifications };
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    const done = cleanup(env['split-expense']).then(r => console.log("cleanup", JSON.stringify(r))).catch(e => console.error("cleanup", String(e)));
+    if (ctx?.waitUntil) ctx.waitUntil(done); else await done;
+  },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": url.origin, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" } });
