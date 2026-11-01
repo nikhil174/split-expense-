@@ -15,7 +15,7 @@ import { AquaCard, cardTap } from "./GroupsScreen";
 import { PeopleSheet } from "./PeopleSheet";
 import { MembersSheet } from "./MembersSheet";
 import { PendingPayments } from "./PendingPayments";
-import { MemberSheet } from "./MemberSheet";
+import { MemberSheet, ShareExcelIcon } from "./MemberSheet";
 import { UpiPeople } from "./UpiPayments";
 import { AwaitingBadge, ProofDialog, proofSrc } from "./Awaiting";
 import { PairSheet } from "./PairDetail";
@@ -414,14 +414,21 @@ function InsightsTab({ groupId }: { groupId: string }) {
       <section>
         <SectionTitle>People</SectionTitle>
         <List inset={60}>
-          {group.data?.members.map(mm => (
-            <button key={mm.id} type="button" onClick={() => setInspecting(mm.id)} className={pressableRow}>
-              <PersonAvatar id={mm.id} name={mm.name} size="sm" />
-              <span className="flex-1 truncate text-[15px]">{mm.name}{mm.id === group.data.me.id && <span className="text-muted-foreground"> (you)</span>}</span>
-              <span className="text-[13px] text-muted-foreground">{mm.role === "admin" ? "Admin" : ""}</span>
-              <ChevronRight className={CHEVRON} strokeWidth={2.4} />
-            </button>
-          ))}
+          {group.data?.members.map(mm => {
+            const isMe = mm.id === group.data.me.id;
+            return (
+              <div key={mm.id} className="flex items-center">
+                <button type="button" onClick={() => setInspecting(mm.id)} className={cn(pressableRow, "min-w-0 flex-1 pr-1")}>
+                  <PersonAvatar id={mm.id} name={mm.name} size="sm" />
+                  <span className="min-w-0 flex-1 truncate text-[15px]">{mm.name}{isMe && <span className="text-muted-foreground"> (you)</span>}</span>
+                  <span className="text-[13px] text-muted-foreground">{mm.role === "admin" ? "Admin" : ""}</span>
+                  <ChevronRight className={CHEVRON} strokeWidth={2.4} />
+                </button>
+                {/* Share this person's statement as Excel, in one tap. */}
+                <span className="mr-3"><ShareExcelIcon groupId={groupId} memberId={mm.id} name={isMe ? "your" : mm.name + "'s"} /></span>
+              </div>
+            );
+          })}
         </List>
       </section>
       <MemberSheet groupId={groupId} memberId={inspecting} onClose={() => setInspecting(null)} meId={group.data?.me.id} />
