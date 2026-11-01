@@ -367,7 +367,7 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
                   <td className="w-full max-w-0 px-2 py-3">
                     <span className={cn("block truncate text-[15px] font-medium", s.status === "rejected" && "text-muted-foreground line-through")}>{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</span>
                     <span className="block truncate text-[12.5px] text-muted-foreground">
-                      {s.status === "pending" ? <AwaitingBadge label={s.needsAdmin ? "awaiting admin approval" : `awaiting ${s.toMemberId === meId ? "your" : s.toName + "'s"} approval`} /> : s.status === "rejected" ? <span className="font-medium text-negative">{s.needsAdmin ? "Not approved by an admin" : `Rejected by ${s.toMemberId === meId ? "you" : s.toName}`}</span> : new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}
+                      {s.status === "pending" ? <AwaitingBadge label={s.needsAdmin ? "waiting for admin approval" : s.toMemberId === meId ? "waiting for you to confirm" : `waiting for ${s.toName} to confirm`} /> : s.status === "rejected" ? <span className="font-medium text-negative">{s.needsAdmin ? "Not approved by an admin" : `Rejected by ${s.toMemberId === meId ? "you" : s.toName}`}</span> : new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}
                       {s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
                     </span>
                   </td>
