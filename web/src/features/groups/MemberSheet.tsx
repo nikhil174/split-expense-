@@ -139,9 +139,10 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
 // "Share as Excel": this person's statement as a workbook (Summary sheet plus
 // one sheet per other member), shared to WhatsApp, Drive, mail… or
 // downloaded where the phone can't share files. Built in the browser.
-export function ShareExcelButton({ groupId, memberId, name }: { groupId: string; memberId: string; name: string }) {
+function useShareStatement(groupId: string, memberId: string) {
   const [busy, setBusy] = React.useState(false);
   const share = async () => {
+    if (busy) return;
     setBusy(true);
     try {
       const { shareStatement } = await import("./statementExcel");
@@ -150,9 +151,25 @@ export function ShareExcelButton({ groupId, memberId, name }: { groupId: string;
     } catch (e) { toast.error((e as Error).message || "Couldn't make the Excel file."); }
     finally { setBusy(false); }
   };
+  return { busy, share };
+}
+
+export function ShareExcelButton({ groupId, memberId, name }: { groupId: string; memberId: string; name: string }) {
+  const { busy, share } = useShareStatement(groupId, memberId);
   return (
     <LoadingButton type="button" variant="secondary" className="w-full rounded-full" loading={busy} loadingText="Making the Excel file…" onClick={share} aria-label={`Share ${name} statement as Excel`}>
       <FileSpreadsheet className="size-4" />Share {name} statement (Excel)
     </LoadingButton>
+  );
+}
+
+// The same, as a small round button for lists (Insights → People).
+export function ShareExcelIcon({ groupId, memberId, name }: { groupId: string; memberId: string; name: string }) {
+  const { busy, share } = useShareStatement(groupId, memberId);
+  return (
+    <button type="button" onClick={share} disabled={busy} aria-label={`Share ${name} statement as Excel`} title="Share as Excel"
+      className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full bg-[#141716]/[0.05] text-positive transition-transform active:scale-90 disabled:opacity-60">
+      {busy ? <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <FileSpreadsheet className="size-[18px]" />}
+    </button>
   );
 }

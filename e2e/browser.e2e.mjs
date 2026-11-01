@@ -518,9 +518,9 @@ try {
   await bea.goto(BASE + "/#/"); await bea.reload();
   await openGroup(bea);
   await bea.getByRole("tab", { name: "Insights", exact: true }).click();
-  await bea.locator("section", { hasText: "People" }).last().getByRole("button", { name: /Bea E2E/ }).click();
+  // One tap from the People list (the person's sheet has the same button).
   const download = bea.waitForEvent("download");
-  await bea.getByRole("button", { name: "Share your statement as Excel" }).click();
+  await bea.locator("section", { hasText: "People" }).last().getByRole("button", { name: "Share your statement as Excel" }).click();
   const file = await download;
   assert.match(file.suggestedFilename(), /^Split It - Bea E2E - E2E Trip \w+\.xlsx$/);
   const xlsxPath = (SHOTS || "/tmp") + "/statement-bea.xlsx";
@@ -530,8 +530,8 @@ try {
   assert.match(text("xl/workbook.xml"), /<sheet name="Summary".*<sheet name="Cyrus E2E".*<sheet name="Dee E2E".*<sheet name="E2E Admin"/s);
   assert.match(text("xl/worksheets/sheet1.xml"), /Cumulative share.*Dinner/s);
   assert.match(text("xl/worksheets/sheet2.xml"), /Bea E2E and Cyrus E2E.*Paid back \(confirmed\)/s);
-  await bea.keyboard.press("Escape");
-  step("Share as Excel: a person's statement with a Summary sheet and one sheet per member, payments marked paid back or not");
+  await shot(bea, "insights-people-excel");
+  step("Share as Excel from Insights → People in one tap: Summary sheet + one sheet per member, payments marked paid back or not");
 
   // Group settings: the ⚙ on Home's group list, only for the group's admins.
   await admin.goto(BASE + "/#/"); await admin.reload();
