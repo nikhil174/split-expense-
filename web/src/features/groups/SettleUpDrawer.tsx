@@ -128,7 +128,7 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                 <p className="title-2 text-center">{debt.fromMemberId === meId ? "You" : debt.fromName} {debt.fromMemberId === meId ? "pay" : "pays"} {debt.toMemberId === meId ? "you" : debt.toName}</p>
                 <p className="subhead mt-1 text-center text-muted-foreground">{debt.fromMemberId === meId ? "You owe" : debt.fromName + " owes"} <span className="tabular text-foreground">{inr(debt.owedCents)}</span> in total{debt.owedCents > debt.amountCents ? <> · <span className="tabular">{inr(debt.owedCents - debt.amountCents)}</span> already waiting for approval</> : null}</p>
                 {debt.toMemberId === meId && !mine.data?.isAdmin && (
-                  <p className="mx-auto mt-3 max-w-sm rounded-[14px] bg-tint-soft px-3.5 py-2.5 text-center text-[13px] leading-5 text-tint" data-testid="paid-me-note">You're recording that {debt.fromName} paid you. A group admin approves it, then it's settled.</p>
+                  <p className="mx-auto mt-3 max-w-sm rounded-[14px] bg-tint-soft px-3.5 py-2.5 text-center text-[13px] leading-5 text-tint" data-testid="paid-me-note">You're recording that {debt.fromName} paid you. An admin approves it, then it's settled.</p>
                 )}
 
                 <label htmlFor="settle-amount" className="sr-only">Amount paid</label>

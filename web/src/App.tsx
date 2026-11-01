@@ -23,6 +23,7 @@ import { ResetPasswordScreen, VerifyEmailScreen } from "@/features/auth/EmailLin
 import { keys, refreshVisible, useMe, useNotifications } from "@/hooks/queries";
 import { ApiError, post, type User } from "@/lib/api";
 import { navigate, useRoute } from "@/lib/route";
+import { useAppUpdate } from "@/lib/update";
 import { cn } from "@/lib/utils";
 
 const loadMotionFeatures = () => import("@/lib/motion-features").then(m => m.default);
@@ -72,6 +73,8 @@ function Splash() {
 }
 
 function Root() {
+  // Update to the newest version when one is live (signed in or not).
+  useAppUpdate();
   const me = useMe();
   const route = useRoute();
   // Links from emails work signed in or out.

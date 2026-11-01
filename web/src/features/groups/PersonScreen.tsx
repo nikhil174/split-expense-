@@ -50,7 +50,7 @@ export function PersonScreen({ groupId, memberId }: { groupId: string; memberId:
           {n < 0 && myDebt && myDebt.waitingCents > 0 && (
             <div className="mt-3 rounded-[18px] bg-[#e4c06c]/[0.12] px-4 py-3 text-center">
               <AwaitingBadge cents={myDebt.waitingCents} />
-              <p className="subhead mt-1.5 text-muted-foreground">You sent this; it counts once {d.other.name} approves it.</p>
+              <p className="subhead mt-1.5 text-muted-foreground">Waiting for approval ({d.other.name} confirms a payment you record; an admin approves one {d.other.name} recorded). It isn't counted until then.</p>
             </div>
           )}
           {n < 0 && !myDebt && debts.data && <p className="subhead rounded-[18px] bg-[#141716]/[0.035] px-4 py-3 text-muted-foreground">{d.other.name} is no longer an active member. Ask the admin to record this payment.</p>}

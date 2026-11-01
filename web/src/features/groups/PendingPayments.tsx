@@ -45,7 +45,7 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                       {x.needsAdmin ? (
                         <>
                           <p className="text-[15px] leading-5 font-medium">{x.toName} says {x.fromName} paid them <span className="tabular text-positive">{inr(x.amountCents)}</span></p>
-                          <p className="truncate text-[12.5px] text-muted-foreground">Approve as admin if it's right{showGroup ? " · " + x.groupName : ""}</p>
+                          <p className="text-[12.5px] leading-[17px] text-muted-foreground">You're an admin: approve it if {x.fromName} really paid, then it counts.{showGroup ? " · " + x.groupName : ""}</p>
                         </>
                       ) : (
                         <>
@@ -53,7 +53,7 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                           <p className="truncate text-[12.5px] text-muted-foreground">Did you receive it?{showGroup ? " · " + x.groupName : ""}</p>
                         </>
                       )}
-                      <AwaitingBadge label={x.needsAdmin ? "awaiting admin approval" : "awaiting your approval"} className="mt-1" />
+                      <AwaitingBadge label={x.needsAdmin ? "waiting for your approval (admin)" : "waiting for you to confirm"} className="mt-1" />
                     </div>
                     {x.hasProof && (
                       <button type="button" aria-label={`View ${x.fromName}'s payment screenshot`} onClick={() => setProof(x)} className="relative size-12 shrink-0 cursor-pointer overflow-hidden rounded-[10px] bg-white ring-1 ring-[#141716]/[0.08] transition-transform active:scale-95">
@@ -74,19 +74,31 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
       )}
       {waiting.length > 0 && (
         <div className={toConfirm.length ? "mt-4" : ""}>
-          <SectionTitle>Waiting for confirmation</SectionTitle>
+          <SectionTitle>{waiting.every(x => x.needsAdmin) ? "Waiting for admin approval" : "Waiting for approval"}</SectionTitle>
           <div className="panel overflow-hidden [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-hairline">
-            {waiting.map(x => (
-              <div key={x.id} className="flex items-center gap-3 px-4 py-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#141716]/[0.05] text-muted-foreground"><Hourglass className="size-[18px]" /></span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-medium">{x.needsAdmin && x.toMemberId === meId ? <>{x.fromName} paid you <span className="tabular">{inr(x.amountCents)}</span></> : x.needsAdmin ? <>{x.toName} recorded you paid <span className="tabular">{inr(x.amountCents)}</span></> : <>You paid {x.toName} <span className="tabular">{inr(x.amountCents)}</span></>}</p>
-                  <p className="truncate text-[12.5px] text-muted-foreground">{x.needsAdmin ? "Counts once a group admin approves" : `Counts once ${x.toName} approves`}{showGroup ? " · " + x.groupName : ""}</p>
-                  <AwaitingBadge label={x.needsAdmin ? "awaiting admin approval" : "awaiting approval"} className="mt-1" />
+            {waiting.map(x => {
+              const iRecordedIt = x.needsAdmin && x.toMemberId === meId;
+              return (
+                <div key={x.id} className="flex items-center gap-3 px-4 py-3" data-testid="waiting-payment">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#141716]/[0.05] text-muted-foreground"><Hourglass className="size-[18px]" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] leading-5 font-medium">
+                      {iRecordedIt ? <>You recorded: {x.fromName} paid you <span className="tabular">{inr(x.amountCents)}</span></>
+                        : x.needsAdmin ? <>{x.toName} recorded that you paid them <span className="tabular">{inr(x.amountCents)}</span></>
+                        : <>You paid {x.toName} <span className="tabular">{inr(x.amountCents)}</span></>}
+                    </p>
+                    <p className="mt-0.5 text-[12.5px] leading-[17px] text-muted-foreground">
+                      {x.needsAdmin
+                        ? <>Waiting for <b className="font-medium text-foreground">an admin</b> to approve it. It isn't counted until then.</>
+                        : <>Waiting for <b className="font-medium text-foreground">{x.toName}</b> to confirm they got the money. It isn't counted until then.</>}
+                      {showGroup ? " · " + x.groupName : ""}
+                    </p>
+                    <AwaitingBadge label={x.needsAdmin ? "waiting for admin approval" : `waiting for ${x.toName} to confirm`} className="mt-1" />
+                  </div>
+                  <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" aria-label={iRecordedIt ? `Cancel ${inr(x.amountCents)} from ${x.fromName}` : `Cancel ${inr(x.amountCents)} to ${x.toName}`} disabled={decide.isPending} onClick={() => act(x, "cancel")}>Cancel</Button>
                 </div>
-                <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" aria-label={x.needsAdmin && x.toMemberId === meId ? `Cancel ${inr(x.amountCents)} from ${x.fromName}` : `Cancel ${inr(x.amountCents)} to ${x.toName}`} disabled={decide.isPending} onClick={() => act(x, "cancel")}>Cancel</Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -9,10 +9,17 @@ import tailwindcss from "@tailwindcss/vite";
 const commit = (process.env.WORKERS_CI_COMMIT_SHA || process.env.GITHUB_SHA || "local").slice(0, 7);
 const built = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
 
+const build = `${commit} · ${built}`;
+
 export default defineConfig({
   root: "web",
-  define: { __BUILD__: JSON.stringify(`${commit} · ${built}`) },
-  plugins: [react(), tailwindcss()],
+  define: { __BUILD__: JSON.stringify(build) },
+  plugins: [react(), tailwindcss(), {
+    // dist/version.json: the open app compares it with its own build and
+    // updates itself when a newer one is live (see web/src/lib/update.ts).
+    name: "split-it-version",
+    generateBundle() { this.emitFile({ type: "asset", fileName: "version.json", source: JSON.stringify({ build }) }); },
+  }],
   resolve: { alias: { "@": fileURLToPath(new URL("./web/src", import.meta.url)) } },
   build: {
     outDir: "../dist",

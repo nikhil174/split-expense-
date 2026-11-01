@@ -296,14 +296,14 @@ try {
   await toast(cy, "Sent ₹20.00 to Bea E2E to confirm");
   await cy.unroute("**/settlements");
   await cy.getByText("₹20.00 awaiting approval").waitFor();
-  await cy.getByText("You sent this; it counts once Bea E2E approves it.").waitFor();
+  await cy.getByText(/Waiting for approval \(Bea E2E confirms/).waitFor();
   await cy.getByText("You owe Bea E2E ₹55.00").waitFor();
   assert.equal(await cy.locator("tbody tr").count(), 2, "a pending payment is not in the history yet");
   // Bea sees it on Home and confirms.
   await bea.goto(BASE + "/#/");
   await bea.reload();
   await bea.getByText("Cy E2E says they paid you ₹20.00").waitFor();
-  await bea.getByText("awaiting your approval").first().waitFor();
+  await bea.getByText("waiting for you to confirm").first().waitFor();
   await bea.getByRole("button", { name: "View Cy E2E's payment screenshot" }).click();
   await bea.getByRole("alertdialog").getByRole("img", { name: "Payment screenshot" }).waitFor();
   await bea.getByRole("button", { name: "Close" }).click();
