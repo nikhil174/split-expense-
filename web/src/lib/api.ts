@@ -74,6 +74,8 @@ export type Settlement = {
   amountCents: number; createdAt: number; recordedByName: string;
   // A payment counts only once the receiver confirms it.
   status: "pending" | "confirmed" | "rejected"; canDecide: boolean; canCancel: boolean; hasProof: boolean;
+  // Recorded by the receiver ("they paid me"): a group admin approves it.
+  needsAdmin?: boolean;
 };
 // One member's whole picture in a group (GET /api/groups/:id/members/:memberId).
 export type MemberSummary = {
@@ -94,6 +96,8 @@ export type AppNotification = {
 export type PendingPayment = {
   id: string; groupId: string; groupName: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
   amountCents: number; createdAt: number; incoming: boolean; hasProof: boolean;
+  // "They paid me", recorded by the receiver: a group admin approves it.
+  needsAdmin?: boolean;
 };
 export type Spending = { memberId: string; name: string; paidCents: number; shareCents: number };
 export type Dashboard = { totalSpentCents: number; expenseCount: number; spending: Spending[] };

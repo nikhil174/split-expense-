@@ -533,6 +533,41 @@ try {
   await shot(bea, "insights-people-excel");
   step("Share as Excel from Insights → People in one tap: Summary sheet + one sheet per member, payments marked paid back or not");
 
+  // "They paid me": Bea lent Cy; she records Cy's payment, a group admin approves it.
+  await bea.goto(BASE + "/#/"); await bea.reload();
+  await openGroup(bea);
+  const gid = decodeURIComponent(new URL(bea.url()).hash.split("/")[2]);
+  const ids = await bea.evaluate(async gid => (await (await fetch("/api/groups/" + gid)).json()).members.map(m => [m.name, m.id]), gid);
+  const idOf = name => ids.find(([n]) => n === name)[1];
+  await bea.evaluate(async ([gid, body]) => { const r = await fetch(`/api/groups/${gid}/expenses`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) throw new Error(await r.text()); },
+    [gid, { description: "Ice cream", amount: "40", paidBy: idOf("Bea E2E"), memberIds: [idOf("Bea E2E"), idOf("Cyrus E2E")] }]);
+  await bea.reload();
+  await bea.getByRole("button", { name: "Settle up" }).click();
+  const settle = bea.getByRole("dialog");
+  const owedRow = settle.getByRole("button", { name: /Cyrus E2E pays you/ });
+  if (await owedRow.count()) await owedRow.click();
+  await settle.getByTestId("paid-me-note").waitFor();
+  await shot(bea, "paid-me");
+  await settle.getByRole("button", { name: "Send ₹20.00 for admin approval" }).click();
+  await toast(bea, "Sent to the group's admins");
+  await admin.goto(BASE + "/#/"); await admin.reload();
+  const approveCard = admin.getByTestId("pending-payments");
+  await approveCard.getByText("Bea E2E says Cyrus E2E paid them").waitFor();
+  await shot(admin, "paid-me-approve");
+  await approveCard.getByRole("button", { name: /^Confirm ₹20\.00 from Cyrus E2E/ }).click();
+  // If the group is locked on this phone, approving asks for its PIN first.
+  const pinPrompt = admin.getByTestId("group-pin-form");
+  await pinPrompt.or(admin.locator("[data-sonner-toast]", { hasText: "Approved ₹20.00" })).first().waitFor();
+  if (await pinPrompt.isVisible()) {
+    await pinPrompt.locator("input").fill(GROUP_PIN);
+    await toast(admin, "is open. Try that again");
+    await approveCard.getByRole("button", { name: /^Confirm ₹20\.00 from Cyrus E2E/ }).click();
+  }
+  await toast(admin, "Approved ₹20.00 from Cyrus E2E to Bea E2E");
+  await bea.reload();
+  await bea.getByTestId("balance-card").getByText(/settled up/i).waitFor();
+  step("they paid me: the lender records the payment, a group admin approves it, and it's settled");
+
   // Group settings: the ⚙ on Home's group list, only for the group's admins.
   await admin.goto(BASE + "/#/"); await admin.reload();
   await admin.getByRole("button", { name: "Settings for " + GROUP }).click();

@@ -870,9 +870,16 @@ async function api(req, env, url, outbox = []) {
   // Payments waiting on me (to confirm) or on someone else (that I sent),
   // across all my groups. Admins see only their own here too.
   if (method === "GET" && p === "/api/payments/pending") {
-    const r = await db.prepare("SELECT s.id,s.group_id AS groupId,g.name AS groupName,s.from_member_id AS fromMemberId,COALESCE(f.name,'" + FORMER_MEMBER + "') AS fromName,s.to_member_id AS toMemberId,COALESCE(t.name,'" + FORMER_MEMBER + "') AS toName,s.amount_cents AS amountCents,s.created_at AS createdAt,EXISTS(SELECT 1 FROM appx_payment_proofs p WHERE p.settlement_id=s.id) AS hasProof FROM appx_settlements s JOIN appx_groups g ON g.id=s.group_id JOIN appx_group_members me ON me.group_id=s.group_id AND me.member_id=?1 LEFT JOIN appx_group_members f ON f.group_id=s.group_id AND f.member_id=s.from_member_id LEFT JOIN appx_group_members t ON t.group_id=s.group_id AND t.member_id=s.to_member_id WHERE s.status='pending' AND (s.to_member_id=?1 OR s.from_member_id=?1) ORDER BY s.created_at DESC LIMIT 100").bind(u.id).all();
-    const rows = r.results.map(x => ({ ...x, hasProof: !!x.hasProof, incoming: x.toMemberId === u.id }));
-    return json({ toConfirm: rows.filter(x => x.incoming), waiting: rows.filter(x => !x.incoming) });
+    // Mine to decide: payments to me, or (as a group admin) "they paid me"
+    // payments recorded by someone else that wait for an admin. Waiting:
+    // payments I sent or recorded that wait on someone else.
+    const r = await db.prepare("SELECT s.id,s.group_id AS groupId,g.name AS groupName,s.from_member_id AS fromMemberId,COALESCE(f.name,'" + FORMER_MEMBER + "') AS fromName,s.to_member_id AS toMemberId,COALESCE(t.name,'" + FORMER_MEMBER + "') AS toName,s.amount_cents AS amountCents,s.created_at AS createdAt,s.created_by AS createdBy,s.created_by=s.to_member_id AS needsAdmin,(me.role='admin' AND me.status='active') AS iAmAdmin,EXISTS(SELECT 1 FROM appx_payment_proofs p WHERE p.settlement_id=s.id) AS hasProof FROM appx_settlements s JOIN appx_groups g ON g.id=s.group_id JOIN appx_group_members me ON me.group_id=s.group_id AND me.member_id=?1 LEFT JOIN appx_group_members f ON f.group_id=s.group_id AND f.member_id=s.from_member_id LEFT JOIN appx_group_members t ON t.group_id=s.group_id AND t.member_id=s.to_member_id WHERE s.status='pending' AND (s.to_member_id=?1 OR s.from_member_id=?1 OR (s.created_by=s.to_member_id AND me.role='admin' AND me.status='active')) ORDER BY s.created_at DESC LIMIT 100").bind(u.id).all();
+    const rows = r.results.map(x => {
+      const needsAdmin = !!x.needsAdmin;
+      const decide = needsAdmin ? !!x.iAmAdmin && x.createdBy !== u.id : x.toMemberId === u.id;
+      return { id: x.id, groupId: x.groupId, groupName: x.groupName, fromMemberId: x.fromMemberId, fromName: x.fromName, toMemberId: x.toMemberId, toName: x.toName, amountCents: x.amountCents, createdAt: x.createdAt, hasProof: !!x.hasProof, needsAdmin, incoming: decide };
+    });
+    return json({ toConfirm: rows.filter(x => x.incoming), waiting: rows.filter(x => !x.incoming && (x.fromMemberId === u.id || x.toMemberId === u.id)) });
   }
   // My own payment method (how others pay me), the same in every group.
   if (p === "/api/payment-method" && method === "GET") {
@@ -1407,8 +1414,10 @@ async function api(req, env, url, outbox = []) {
       const r = await db.prepare("SELECT s.id,s.from_member_id AS fromMemberId,COALESCE(f.name,'" + FORMER_MEMBER + "') AS fromName,s.to_member_id AS toMemberId,COALESCE(t.name,'" + FORMER_MEMBER + "') AS toName,s.amount_cents AS amountCents,s.status,s.created_by AS createdBy,EXISTS(SELECT 1 FROM appx_payment_proofs p WHERE p.settlement_id=s.id) AS hasProof,s.decided_at AS decidedAt,s.created_at AS createdAt,COALESCE(c.name,'" + FORMER_MEMBER + "') AS recordedByName FROM appx_settlements s LEFT JOIN appx_group_members f ON f.group_id=s.group_id AND f.member_id=s.from_member_id LEFT JOIN appx_group_members t ON t.group_id=s.group_id AND t.member_id=s.to_member_id LEFT JOIN appx_group_members c ON c.group_id=s.group_id AND c.member_id=s.created_by WHERE s.group_id=? ORDER BY s.created_at DESC LIMIT 200").bind(gid).all();
       return json({ settlements: r.results.map(x => ({
         ...x, amount: rupees(x.amountCents),
-        canDecide: x.status === "pending" && (isAdmin || x.toMemberId === u.id),
-        canCancel: x.status === "pending" && (isAdmin || x.fromMemberId === u.id),
+        // needsAdmin: recorded by the receiver ("they paid me"); an admin decides it.
+        needsAdmin: x.createdBy === x.toMemberId,
+        canDecide: x.status === "pending" && (x.createdBy === x.toMemberId ? isAdmin : isAdmin || x.toMemberId === u.id),
+        canCancel: x.status === "pending" && (isAdmin || x.fromMemberId === u.id || x.createdBy === u.id),
         hasProof: !!x.hasProof,
       })) });
     }
@@ -1420,7 +1429,8 @@ async function api(req, env, url, outbox = []) {
       // Normal members may only record their own outgoing payments, to an
       // active member. The admin may record any payment (including to or from
       // a removed member, so such debts can still be cleared).
-      const canRecord = d => isAdmin || (d.fromMemberId === u.id && activeIds.has(d.toMemberId));
+      // (Members can also record "they paid me"; an admin approves it.)
+      const canRecord = d => isAdmin || (d.fromMemberId === u.id && activeIds.has(d.toMemberId)) || d.toMemberId === u.id;
       const waiting = new Map((await db.prepare("SELECT from_member_id AS f,to_member_id AS t,SUM(amount_cents) AS c FROM appx_settlements WHERE group_id=? AND status='pending' GROUP BY from_member_id,to_member_id").bind(gid).all()).results.map(x => [x.f + ">" + x.t, Number(x.c)]));
       // waitingCents: already sent and waiting for the receiver to confirm, so
       // at most amountCents - waitingCents more can be recorded.
@@ -1448,13 +1458,15 @@ async function api(req, env, url, outbox = []) {
       const from = textField(b?.fromMemberId), to = textField(b?.toMemberId);
       if (!from || !to) return fail("Choose who is paying and who is being paid.");
       if (from === to) return fail("A member cannot pay themselves.");
-      if (!isAdmin && from !== u.id) return fail("You can only record a payment made by your own account.", 403);
+      // Members record a payment they made (the receiver confirms it), or one
+      // made to them ("they paid me": a group admin approves it).
+      if (!isAdmin && from !== u.id && to !== u.id) return fail("You can only record a payment you made or one made to you.", 403);
       let cents;
       try { cents = parseAmountToCents(b?.amount); } catch (error) { return fail(error.message); }
       const members = await groupMembers(db, gid);
       const byId = new Map(members.map(x => [x.id, x]));
       if (!byId.has(from) || !byId.has(to)) return fail("Both members must belong to this group.");
-      if (!isAdmin && !byId.get(to).active) return fail(byId.get(to).name + " is no longer in this group. Ask a group admin to record this payment.", 409);
+      if (!isAdmin && from === u.id && !byId.get(to).active) return fail(byId.get(to).name + " is no longer in this group. Ask a group admin to record this payment.", 409);
       try {
         validateSettlement({ debts: computePairwiseDebts(await loadLedger(db, gid)), fromMemberId: from, toMemberId: to, amountCents: cents, actorId: u.id, actorIsAdmin: isAdmin });
       } catch (error) {
@@ -1466,12 +1478,14 @@ async function api(req, env, url, outbox = []) {
       const waiting = Number((await db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS c FROM appx_settlements WHERE group_id=? AND from_member_id=? AND to_member_id=? AND status='pending'").bind(gid, from, to).first())?.c || 0);
       if (waiting) {
         const due = outstandingDebt(computePairwiseDebts(await loadLedger(db, gid)), from, to);
-        if (cents > due - waiting) return fail(`₹${(waiting / 100).toFixed(2)} is already waiting for ${byId.get(to).name} to confirm, so at most ₹${(Math.max(0, due - waiting) / 100).toFixed(2)} more can be recorded now.`, 409);
+        if (cents > due - waiting) return fail(`₹${(waiting / 100).toFixed(2)} is already waiting for approval, so at most ₹${(Math.max(0, due - waiting) / 100).toFixed(2)} more can be recorded now.`, 409);
       }
-      // The receiver has to confirm a payment before it counts, unless the
-      // receiver is the one recording it, or (admin only) can no longer sign
-      // in to confirm it.
-      const status = to === u.id || (isAdmin && !byId.get(to).active) ? "confirmed" : "pending";
+      // The receiver has to confirm a payment before it counts. When the
+      // receiver records it themselves ("they paid me"), a group admin has to
+      // approve it, unless the receiver is an admin. An admin may also record
+      // a payment to someone who left (who can't confirm it any more).
+      const byReceiver = to === u.id;
+      const status = (byReceiver && isAdmin) || (isAdmin && !byId.get(to).active) ? "confirmed" : "pending";
       // Re-check the outstanding amount inside the INSERT itself so two
       // concurrent payments can never overpay the same debt.
       const settlementId = id(), now = Date.now();
@@ -1481,14 +1495,20 @@ async function api(req, env, url, outbox = []) {
       if (changesOf(result) !== 1) return fail("The outstanding amount changed. Refresh and try again.", 409);
       if (proof) await db.prepare("INSERT INTO appx_payment_proofs(settlement_id,mime,base64,created_at) VALUES(?,?,?,?)").bind(settlementId, proof.mime, proof.base64, now).run();
       // Tell the receiver (to confirm it) and, if someone else recorded it, the payer.
+      // "They paid me" waiting for approval goes to the group's admins.
       const nm = x => byId.get(x)?.name || FORMER_MEMBER, notes = [];
+      if (byReceiver && status === "pending") {
+        for (const a of members.filter(x => x.role === "admin" && x.active && x.id !== u.id)) {
+          notes.push(note({ to: a.id, groupId: gid, kind: "payment_admin_approval", actor: u.name, title: `${u.name} says ${nm(from)} paid them ${inrText(cents)}`, body: "Approve it if it's right; it counts once an admin approves.", link: `#/g/${gid}` }));
+        }
+      }
       if (to !== u.id) notes.push(note({ to, groupId: gid, kind: status === "pending" ? "payment_pending" : "payment_recorded", actor: u.name,
         title: status === "pending" ? `${nm(from)} says they paid you ${inrText(cents)}` : `${u.name} recorded ${inrText(cents)} from ${nm(from)} to you`,
         // Pending: the group, where the approve card is on top; otherwise what's between you two.
         body: status === "pending" ? (proof ? "They attached a screenshot. Confirm it once you've received it." : "Confirm it once you've received it.") : "It counts in your balance now.", link: status === "pending" ? `#/g/${gid}` : `#/g/${gid}/p/${from}` }));
       if (from !== u.id) notes.push(note({ to: from, groupId: gid, kind: "payment_recorded", actor: u.name,
         title: `${u.name} recorded your payment of ${inrText(cents)} to ${to === u.id ? "them" : nm(to)}`,
-        body: status === "pending" ? `It counts once ${nm(to)} confirms it.` : "It counts in your balance now.", link: `#/g/${gid}/p/${to}` }));
+        body: status === "pending" ? (byReceiver ? "It counts once a group admin approves it." : `It counts once ${nm(to)} confirms it.`) : "It counts in your balance now.", link: `#/g/${gid}/p/${to}` }));
       if (notes.length) await db.batch(notes);
       return json({ ok: true, id: settlementId, amountCents: cents, status }, 201);
     }
@@ -1511,25 +1531,33 @@ async function api(req, env, url, outbox = []) {
       const nm = nameLookup(await groupMembers(db, gid));
       // Each side is taken to what's between them and the other person.
       const tell = (to, kind, title, body) => to === u.id ? Promise.resolve() : db.batch([note({ to, groupId: gid, kind, title, body, link: `#/g/${gid}/p/${to === pay.fromId ? pay.toId : pay.fromId}`, actor: u.name })]);
+      // "They paid me", recorded by the receiver: a group admin decides it.
+      const needsAdmin = pay.createdBy === pay.toId;
       if (action === "cancel") {
-        if (!isAdmin && pay.fromId !== u.id) return fail("Only the person who paid or a group admin can cancel this payment.", 403);
+        if (!isAdmin && pay.fromId !== u.id && pay.createdBy !== u.id) return fail("Only the person who recorded it, the payer or a group admin can cancel this payment.", 403);
         await db.batch([
           db.prepare("DELETE FROM appx_payment_proofs WHERE settlement_id=?").bind(sid),
           db.prepare("DELETE FROM appx_settlements WHERE id=? AND status='pending'").bind(sid),
         ]);
-        await tell(pay.toId, "payment_cancelled", `${u.id === pay.fromId ? nm(pay.fromId) : u.name} cancelled a payment of ${inrText(pay.cents)}`, "You don't need to confirm it any more.");
+        if (!needsAdmin) await tell(pay.toId, "payment_cancelled", `${u.id === pay.fromId ? nm(pay.fromId) : u.name} cancelled a payment of ${inrText(pay.cents)}`, "You don't need to confirm it any more.");
+        else await tell(pay.fromId, "payment_cancelled", `${u.name} cancelled the payment of ${inrText(pay.cents)} recorded for you`, "It doesn't count.");
         return json({ ok: true, cancelled: true });
       }
+      if (needsAdmin && !isAdmin) return fail("A group admin approves this payment.", 403);
       if (!isAdmin && pay.toId !== u.id) return fail("Only the person who received this payment can confirm or reject it.", 403);
       if (action === "reject") {
         await db.prepare("UPDATE appx_settlements SET status='rejected',decided_by=?,decided_at=? WHERE id=? AND status='pending'").bind(u.id, now, sid).run();
-        await tell(pay.fromId, "payment_rejected", `${u.name} said they didn't receive your ${inrText(pay.cents)}`, "It doesn't count. Check with them and record it again if needed.");
+        if (needsAdmin) await tell(pay.toId, "payment_rejected", `${u.name} didn't approve the ${inrText(pay.cents)} from ${nm(pay.fromId)}`, "It doesn't count. Check with them and record it again if needed.");
+        else await tell(pay.fromId, "payment_rejected", `${u.name} said they didn't receive your ${inrText(pay.cents)}`, "It doesn't count. Check with them and record it again if needed.");
         return json({ ok: true, status: "rejected" });
       }
       // Confirm only while it still fits what is owed (expenses may have changed).
       const result = await db.prepare("UPDATE appx_settlements SET status='confirmed',decided_by=?1,decided_at=?2 WHERE id=?3 AND status='pending' AND amount_cents <= " + owedSql("?4", "?5", "?6")).bind(u.id, now, sid, gid, pay.fromId, pay.toId).run();
       if (changesOf(result) !== 1) return fail("This payment is now more than what is owed, because expenses changed since it was sent. Reject it and ask for a new one.", 409);
-      await tell(pay.fromId, "payment_confirmed", `${u.name} confirmed your payment of ${inrText(pay.cents)}`, "It counts in your balance now.");
+      if (needsAdmin) {
+        await tell(pay.toId, "payment_confirmed", `${u.name} approved the ${inrText(pay.cents)} from ${nm(pay.fromId)}`, "It counts in your balance now.");
+        await tell(pay.fromId, "payment_confirmed", `Your payment of ${inrText(pay.cents)} to ${nm(pay.toId)} is approved`, "It counts in your balance now.");
+      } else await tell(pay.fromId, "payment_confirmed", `${u.name} confirmed your payment of ${inrText(pay.cents)}`, "It counts in your balance now.");
       return json({ ok: true, status: "confirmed" });
     }
     if (method === "GET" && tail === "balances") {

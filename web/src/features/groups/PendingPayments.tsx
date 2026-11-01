@@ -3,7 +3,7 @@ import { Check, Hourglass, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EASE, LoadingButton, PersonAvatar, SectionTitle, haptic } from "@/components/app/bits";
 import { glitterBurst } from "@/components/app/glitter";
-import { useDecidePayment, usePendingPayments } from "@/hooks/queries";
+import { useDecidePayment, useMe, usePendingPayments } from "@/hooks/queries";
 import type { PendingPayment } from "@/lib/api";
 import { inr } from "@/lib/money";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { AwaitingBadge, ProofDialog, proofSrc } from "./Awaiting";
 // With groupId it shows only that group.
 export function PendingPayments({ groupId, className }: { groupId?: string; className?: string }) {
   const q = usePendingPayments();
+  const meId = useMe().data?.user?.id;
   const decide = useDecidePayment();
   const only = (list: PendingPayment[] = []) => list.filter(x => !groupId || x.groupId === groupId);
   const toConfirm = only(q.data?.toConfirm), waiting = only(q.data?.waiting);
@@ -22,8 +23,8 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
   const busy = (id: string, action: string) => decide.isPending && decide.variables?.id === id && decide.variables.action === action;
   const act = (x: PendingPayment, action: "confirm" | "reject" | "cancel") => decide.mutate({ groupId: x.groupId, id: x.id, action }, {
     onSuccess: () => {
-      if (action === "confirm") { haptic([10, 40, 14]); glitterBurst(); toast.success(`Confirmed ${inr(x.amountCents)} from ${x.fromName}.`); }
-      else toast.success(action === "reject" ? `Rejected ${x.fromName}'s payment. It won't count.` : "Payment cancelled.");
+      if (action === "confirm") { haptic([10, 40, 14]); glitterBurst(); toast.success(x.needsAdmin ? `Approved ${inr(x.amountCents)} from ${x.fromName} to ${x.toName}.` : `Confirmed ${inr(x.amountCents)} from ${x.fromName}.`); }
+      else toast.success(action === "reject" ? (x.needsAdmin ? "Not approved. It won't count." : `Rejected ${x.fromName}'s payment. It won't count.`) : "Payment cancelled.");
     },
   });
   const [proof, setProof] = React.useState<PendingPayment | null>(null);
@@ -41,9 +42,18 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                   <div className="flex items-center gap-3">
                     <PersonAvatar id={x.fromMemberId} name={x.fromName} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-medium">{x.fromName} says they paid you <span className="tabular text-positive">{inr(x.amountCents)}</span></p>
-                      <p className="truncate text-[12.5px] text-muted-foreground">Did you receive it?{showGroup ? " · " + x.groupName : ""}</p>
-                      <AwaitingBadge label="awaiting your approval" className="mt-1" />
+                      {x.needsAdmin ? (
+                        <>
+                          <p className="text-[15px] leading-5 font-medium">{x.toName} says {x.fromName} paid them <span className="tabular text-positive">{inr(x.amountCents)}</span></p>
+                          <p className="truncate text-[12.5px] text-muted-foreground">Approve as admin if it's right{showGroup ? " · " + x.groupName : ""}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="truncate text-[15px] font-medium">{x.fromName} says they paid you <span className="tabular text-positive">{inr(x.amountCents)}</span></p>
+                          <p className="truncate text-[12.5px] text-muted-foreground">Did you receive it?{showGroup ? " · " + x.groupName : ""}</p>
+                        </>
+                      )}
+                      <AwaitingBadge label={x.needsAdmin ? "awaiting admin approval" : "awaiting your approval"} className="mt-1" />
                     </div>
                     {x.hasProof && (
                       <button type="button" aria-label={`View ${x.fromName}'s payment screenshot`} onClick={() => setProof(x)} className="relative size-12 shrink-0 cursor-pointer overflow-hidden rounded-[10px] bg-white ring-1 ring-[#141716]/[0.08] transition-transform active:scale-95">
@@ -53,8 +63,8 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                     )}
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <LoadingButton variant="secondary" className="rounded-full" aria-label={`Reject ${inr(x.amountCents)} from ${x.fromName}`} loading={busy(x.id, "reject")} loadingText="Rejecting…" disabled={decide.isPending} onClick={() => act(x, "reject")}><X />Not received</LoadingButton>
-                    <LoadingButton className="rounded-full" aria-label={`Confirm ${inr(x.amountCents)} from ${x.fromName}`} loading={busy(x.id, "confirm")} loadingText="Confirming…" disabled={decide.isPending} onClick={() => act(x, "confirm")}><Check />Confirm</LoadingButton>
+                    <LoadingButton variant="secondary" className="rounded-full" aria-label={`Reject ${inr(x.amountCents)} from ${x.fromName}`} loading={busy(x.id, "reject")} loadingText="Rejecting…" disabled={decide.isPending} onClick={() => act(x, "reject")}><X />{x.needsAdmin ? "Reject" : "Not received"}</LoadingButton>
+                    <LoadingButton className="rounded-full" aria-label={`Confirm ${inr(x.amountCents)} from ${x.fromName}`} loading={busy(x.id, "confirm")} loadingText="Confirming…" disabled={decide.isPending} onClick={() => act(x, "confirm")}><Check />{x.needsAdmin ? "Approve" : "Confirm"}</LoadingButton>
                   </div>
                 </m.div>
               ))}
@@ -70,11 +80,11 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
               <div key={x.id} className="flex items-center gap-3 px-4 py-3">
                 <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#141716]/[0.05] text-muted-foreground"><Hourglass className="size-[18px]" /></span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-medium">You paid {x.toName} <span className="tabular">{inr(x.amountCents)}</span></p>
-                  <p className="truncate text-[12.5px] text-muted-foreground">Counts once {x.toName} approves{showGroup ? " · " + x.groupName : ""}</p>
-                  <AwaitingBadge label="awaiting approval" className="mt-1" />
+                  <p className="truncate text-[15px] font-medium">{x.needsAdmin && x.toMemberId === meId ? <>{x.fromName} paid you <span className="tabular">{inr(x.amountCents)}</span></> : x.needsAdmin ? <>{x.toName} recorded you paid <span className="tabular">{inr(x.amountCents)}</span></> : <>You paid {x.toName} <span className="tabular">{inr(x.amountCents)}</span></>}</p>
+                  <p className="truncate text-[12.5px] text-muted-foreground">{x.needsAdmin ? "Counts once a group admin approves" : `Counts once ${x.toName} approves`}{showGroup ? " · " + x.groupName : ""}</p>
+                  <AwaitingBadge label={x.needsAdmin ? "awaiting admin approval" : "awaiting approval"} className="mt-1" />
                 </div>
-                <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" aria-label={`Cancel ${inr(x.amountCents)} to ${x.toName}`} disabled={decide.isPending} onClick={() => act(x, "cancel")}>Cancel</Button>
+                <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" aria-label={x.needsAdmin && x.toMemberId === meId ? `Cancel ${inr(x.amountCents)} from ${x.fromName}` : `Cancel ${inr(x.amountCents)} to ${x.toName}`} disabled={decide.isPending} onClick={() => act(x, "cancel")}>Cancel</Button>
               </div>
             ))}
           </div>

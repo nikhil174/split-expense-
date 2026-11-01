@@ -77,7 +77,7 @@ test("payments waiting for confirmation count against what can still be paid", a
   assert.deepEqual([debt.amountCents, debt.waitingCents], [5000, 3000]);
   const over = await f.pay("Bea", "Bea", "admin", "30");
   assert.equal(over.status, 409);
-  assert.match(over.data.error, /₹30\.00 is already waiting for Alex Admin to confirm, so at most ₹20\.00 more/);
+  assert.match(over.data.error, /₹30\.00 is already waiting for approval, so at most ₹20\.00 more/);
   assert.equal((await f.pay("Bea", "Bea", "admin", "20")).status, 201);
   assert.equal((await f.pay("Bea", "Bea", "admin", "0.01")).status, 409, "nothing left once both are counted");
 });
