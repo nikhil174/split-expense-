@@ -1312,6 +1312,54 @@ async function api(req, env, url, outbox = []) {
       const bytes = Uint8Array.from(atob(r.qr_base64), c => c.charCodeAt(0));
       return new Response(bytes, { headers: { "content-type": r.qr_mime, "cache-control": "private, no-cache", "x-content-type-options": "nosniff", "content-disposition": "inline" } });
     }
+    // Everything for one person's statement (the "Share as Excel" export):
+    // every expense they paid for or share in, oldest first, and, for each
+    // other member, every expense and payment between the two of them with a
+    // running balance. Payments not counted (waiting for approval, rejected)
+    // are listed with their status. Anyone in the group may export it, like
+    // the person summary and pair views.
+    const statement = tail.match(/^members\/([\w-]+)\/statement$/);
+    if (method === "GET" && statement) {
+      const mid = statement[1];
+      const members = await groupMembers(db, gid);
+      const who = members.find(x => x.id === mid);
+      if (!who) return fail("That person is not in this group.", 404);
+      const nameOf = nameLookup(members);
+      const [expRows, shares, pays, ledger] = await Promise.all([
+        db.prepare("SELECT e.id,e.description,e.amount_cents AS totalCents,e.paid_by AS paidBy,e.created_at AS createdAt,COALESCE((SELECT amount_cents FROM appx_splits WHERE expense_id=e.id AND member_id=?2),0) AS shareCents,(SELECT COUNT(*) FROM appx_splits WHERE expense_id=e.id) AS splitCount FROM appx_expenses e WHERE e.group_id=?1 AND (e.paid_by=?2 OR e.id IN (SELECT expense_id FROM appx_splits WHERE member_id=?2)) ORDER BY e.created_at,e.id").bind(gid, mid).all(),
+        db.prepare("SELECT e.id AS expenseId,e.description,e.paid_by AS paidBy,e.amount_cents AS totalCents,e.created_at AS createdAt,s.member_id AS memberId,s.amount_cents AS amountCents FROM appx_splits s JOIN appx_expenses e ON e.id=s.expense_id WHERE e.group_id=?1 AND (e.paid_by=?2 OR s.member_id=?2)").bind(gid, mid).all(),
+        db.prepare("SELECT id,from_member_id AS fromMemberId,to_member_id AS toMemberId,amount_cents AS amountCents,created_at AS createdAt,status FROM appx_settlements WHERE group_id=?1 AND (from_member_id=?2 OR to_member_id=?2) ORDER BY created_at,id").bind(gid, mid).all(),
+        loadLedger(db, gid),
+      ]);
+      const expenses = expRows.results.map(x => ({ id: x.id, createdAt: x.createdAt, description: x.description, totalCents: Number(x.totalCents), paidBy: x.paidBy, paidByName: nameOf(x.paidBy), shareCents: Number(x.shareCents), splitCount: Number(x.splitCount) }));
+      let cumulative = 0;
+      for (const x of expenses) { cumulative += x.shareCents; x.cumulativeShareCents = cumulative; }
+      const others = members.filter(x => x.id !== mid && (x.active || shares.results.some(r => r.paidBy === x.id || r.memberId === x.id) || pays.results.some(r => r.fromMemberId === x.id || r.toMemberId === x.id)));
+      const pairs = others.map(o => {
+        const counted = pays.results.filter(r => r.status === "confirmed");
+        const activity = pairwiseActivity({ shares: shares.results, settlements: counted, me: mid, other: o.id });
+        const items = activity.items.slice().reverse().map(it => ({ ...it, status: "counted" }));
+        // Payments not counted yet (or never): listed, but they don't move the balance.
+        for (const r of pays.results) {
+          if (r.status === "confirmed" || !((r.fromMemberId === mid && r.toMemberId === o.id) || (r.fromMemberId === o.id && r.toMemberId === mid))) continue;
+          items.push({ type: "payment", id: r.id, fromMemberId: r.fromMemberId, toMemberId: r.toMemberId, amountCents: Number(r.amountCents), effectCents: 0, createdAt: r.createdAt, status: r.status });
+        }
+        items.sort((a, b) => a.createdAt - b.createdAt || String(a.id).localeCompare(String(b.id)));
+        let running = 0;
+        for (const it of items) { running += it.effectCents; it.runningCents = running; }
+        return { id: o.id, name: o.name, active: o.active, netCents: activity.netCents, items: items.map(it => ({ ...it, paidByName: it.paidBy ? nameOf(it.paidBy) : undefined, fromName: it.fromMemberId ? nameOf(it.fromMemberId) : undefined, toName: it.toMemberId ? nameOf(it.toMemberId) : undefined })) };
+      });
+      const sum = (rows, key) => rows.filter(r => r[key] === mid).reduce((t, r) => t + r.amountCents, 0);
+      return json({
+        group: { id: gid, name: gp.name },
+        person: { id: mid, name: who.name, username: who.username, active: who.active },
+        generatedAt: Date.now(),
+        // Positive: the group owes them; negative: they owe.
+        totals: { paidCents: sum(ledger.paidTotals, "memberId"), shareCents: sum(ledger.splitEdges, "memberId"), balanceCents: computeBalances(ledger).get(mid) || 0 },
+        expenses,
+        pairs,
+      });
+    }
     const memberSummary = tail.match(/^members\/([\w-]+)$/);
     if (method === "GET" && memberSummary) {
       const mid = memberSummary[1];
