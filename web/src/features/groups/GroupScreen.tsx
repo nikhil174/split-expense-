@@ -99,7 +99,7 @@ export function GroupScreen({ groupId, tab, expenseId }: { groupId: string; tab:
 
       <AnimatePresence mode="wait" initial={false}>
         <m.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25, ease: EASE }} className="mt-7">
-          {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} focusId={expenseId} onAdd={() => setAdding(true)} onEdit={x => setEditing({ open: true, x })} />}
+          {tab === "expenses" && <ExpensesTab groupId={groupId} meId={mine.data?.memberId} focusId={expenseId} onEdit={x => setEditing({ open: true, x })} />}
           {tab === "balances" && <BalancesTab groupId={groupId} />}
           {tab === "payments" && <PaymentsTab groupId={groupId} meId={mine.data?.memberId} />}
           {tab === "insights" && <InsightsTab groupId={groupId} />}
@@ -136,7 +136,7 @@ function TableHead({ cols }: { cols: [string, string?][] }) {
 const tr = "border-b border-hairline last:border-0";
 
 // ----- Expenses -----
-function ExpensesTab({ groupId, meId, focusId, onAdd, onEdit }: { groupId: string; meId?: string; focusId?: string; onAdd: () => void; onEdit: (x: Expense) => void }) {
+function ExpensesTab({ groupId, meId, focusId, onEdit }: { groupId: string; meId?: string; focusId?: string; onEdit: (x: Expense) => void }) {
   const expenses = useExpenses(groupId);
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState<string | null>(null);
@@ -165,8 +165,7 @@ function ExpensesTab({ groupId, meId, focusId, onAdd, onEdit }: { groupId: strin
         {expenses.isPending || !meId ? <RowsSkeleton /> : !list.length ? (
           expenses.data?.length ? <EmptyState icon={<Search />} title="No matches">Try a different word.</EmptyState> : (
             <EmptyState icon={<ReceiptText />} title="No expenses yet">
-              Add the first one and we'll work out who owes whom.
-              <Button className="mt-4" onClick={onAdd}><Plus />Add expense</Button>
+              Tap Add expense to add the first one, and we'll work out who owes whom.
             </EmptyState>
           )
         ) : (
