@@ -94,7 +94,7 @@ test("API: rejects overpayment, self-payment, impersonation, bad amounts and no-
   await f.expense("Bea", { description: "Dinner", amount: "90", paidBy: ids.Bea, memberIds: [ids.admin, ids.Bea, ids.Cy] });
   assert.equal((await f.pay("Cy", ids.Cy, ids.Bea, "30.01")).status, 409, "overpayment");
   assert.equal((await f.pay("Cy", ids.Cy, ids.Cy, "1")).status, 400, "self-payment");
-  assert.equal((await f.pay("Bea", ids.Cy, ids.Bea, "1")).status, 403, "recording someone else's payment");
+  assert.equal((await f.pay("Cy", ids.admin, ids.Bea, "1")).status, 403, "recording a payment between two other people");
   assert.equal((await f.pay("Bea", ids.Bea, ids.Cy, "1")).status, 409, "no debt in that direction");
   for (const amount of ["0", "-5", "1.005", "abc", "1e2", true, null, [1]]) {
     assert.equal((await f.pay("Cy", ids.Cy, ids.Bea, amount)).status, 400, "amount " + JSON.stringify(amount));

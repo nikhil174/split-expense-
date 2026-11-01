@@ -105,8 +105,10 @@ export class SettlementError extends Error {
 export function validateSettlement({ debts, fromMemberId, toMemberId, amountCents, actorId, actorIsAdmin = false }) {
   if (!fromMemberId || !toMemberId) throw new SettlementError("Choose who is paying and who is being paid.");
   if (fromMemberId === toMemberId) throw new SettlementError("A member cannot pay themselves.");
-  if (!actorIsAdmin && fromMemberId !== actorId) {
-    throw new SettlementError("You can only record a payment made by your own account.", 403);
+  // Members record payments they made, or payments made to them (the
+  // second kind waits for a group admin's approval); admins record any.
+  if (!actorIsAdmin && fromMemberId !== actorId && toMemberId !== actorId) {
+    throw new SettlementError("You can only record a payment you made or one made to you.", 403);
   }
   if (!Number.isSafeInteger(amountCents) || amountCents <= 0) throw new SettlementError("Enter a valid payment amount.");
   const due = outstandingDebt(debts, fromMemberId, toMemberId);

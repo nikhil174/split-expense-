@@ -63,8 +63,10 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
         haptic([10, 40, 14]);
         const remaining = debt.amountCents - cents;
         glitterBurst({ strong: remaining === 0 && res.status === "confirmed" });
-        // Most payments wait for the person who received them to confirm.
-        if (res.status === "pending") toast.success(`Sent ${inr(cents)} to ${debt.toMemberId === meId ? "you" : debt.toName} to confirm.`, { description: `It counts once ${debt.toName} confirms they received it.` });
+        // Most payments wait for the person who received them to confirm;
+        // "they paid me" waits for a group admin.
+        if (res.status === "pending" && debt.toMemberId === meId) toast.success(`Sent to the group's admins: ${debt.fromName} paid you ${inr(cents)}.`, { description: "It counts once an admin approves it." });
+        else if (res.status === "pending") toast.success(`Sent ${inr(cents)} to ${debt.toMemberId === meId ? "you" : debt.toName} to confirm.`, { description: `It counts once ${debt.toName} confirms they received it.` });
         else toast.success(`Recorded ${inr(cents)} from ${debt.fromName} to ${debt.toName}.`, { description: remaining ? `${inr(remaining)} is still owed.` : "All settled between them ✓" });
         onOpenChange(false);
       },
@@ -88,7 +90,7 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                   <div className="flex flex-col items-center py-8 text-center">
                     <div className="mb-3 grid size-14 place-items-center rounded-full bg-positive-soft text-positive"><PartyPopper className="size-7" /></div>
                     <p className="title-2">Nothing to Pay</p>
-                    <p className="subhead mt-1.5 max-w-xs text-muted-foreground">If someone owes you, they record the payment from their own account.</p>
+                    <p className="subhead mt-1.5 max-w-xs text-muted-foreground">Nobody owes anything here right now.</p>
                   </div>
                 ) : sections.map(sec => (
                   <div key={sec.title}>
@@ -124,7 +126,10 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                   <PersonAvatar id={debt.toMemberId} name={debt.toName} size="lg" />
                 </div>
                 <p className="title-2 text-center">{debt.fromMemberId === meId ? "You" : debt.fromName} {debt.fromMemberId === meId ? "pay" : "pays"} {debt.toMemberId === meId ? "you" : debt.toName}</p>
-                <p className="subhead mt-1 text-center text-muted-foreground">{debt.fromMemberId === meId ? "You owe" : debt.fromName + " owes"} <span className="tabular text-foreground">{inr(debt.owedCents)}</span> in total{debt.owedCents > debt.amountCents ? <> · <span className="tabular">{inr(debt.owedCents - debt.amountCents)}</span> already waiting for {debt.toMemberId === meId ? "you" : debt.toName} to confirm</> : null}</p>
+                <p className="subhead mt-1 text-center text-muted-foreground">{debt.fromMemberId === meId ? "You owe" : debt.fromName + " owes"} <span className="tabular text-foreground">{inr(debt.owedCents)}</span> in total{debt.owedCents > debt.amountCents ? <> · <span className="tabular">{inr(debt.owedCents - debt.amountCents)}</span> already waiting for approval</> : null}</p>
+                {debt.toMemberId === meId && !mine.data?.isAdmin && (
+                  <p className="mx-auto mt-3 max-w-sm rounded-[14px] bg-tint-soft px-3.5 py-2.5 text-center text-[13px] leading-5 text-tint" data-testid="paid-me-note">You're recording that {debt.fromName} paid you. A group admin approves it, then it's settled.</p>
+                )}
 
                 <label htmlFor="settle-amount" className="sr-only">Amount paid</label>
                 <div className={cn("mt-6 flex h-[84px] items-center justify-center rounded-[24px] border bg-white px-5 shadow-[0_1px_2px_rgb(16_40_32/5%)] transition-[border-color,box-shadow] focus-within:ring-[3px]", over ? "border-negative/50 ring-[3px] ring-negative/15" : "border-[#141716]/[0.08] focus-within:border-primary/50 focus-within:ring-primary/15")}>
@@ -147,7 +152,7 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                     : <span className="grid size-14 shrink-0 place-items-center rounded-[10px] bg-[#141716]/[0.04] text-muted-foreground"><ImageIcon className="size-5" /></span>}
                   <span className="min-w-0 flex-1">
                     <span className="block text-[14.5px] font-medium">{proof ? "Screenshot attached" : "Attach a screenshot"}</span>
-                    <span className="block text-[12.5px] text-muted-foreground">Optional. Helps {debt.toMemberId === meId ? "you" : debt.toName} approve it.</span>
+                    <span className="block text-[12.5px] text-muted-foreground">Optional. Helps {debt.toMemberId === meId ? (mine.data?.isAdmin ? "you keep a record" : "the admin approve it") : debt.toName + " approve it"}.</span>
                   </span>
                   {proof
                     ? <button type="button" onClick={() => setProof(null)} className="shrink-0 cursor-pointer rounded-full bg-[#141716]/[0.05] px-3 py-1.5 text-[13px] font-medium">Remove</button>
@@ -159,7 +164,7 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                 </p>
                 <div className="safe-bottom sticky bottom-0 -mx-4 mt-4 bg-[#fbfbf9]/90 px-4 pt-3 backdrop-blur-xl">
                   <LoadingButton type="submit" size="xl" className="w-full" disabled={!cents || over} loading={pay.isPending} loadingText="Recording payment…">
-                    {cents && !over ? `Record ${inr(cents)} payment` : "Record payment"}
+                    {debt.toMemberId === meId && !mine.data?.isAdmin ? (cents && !over ? `Send ${inr(cents)} for admin approval` : "Send for admin approval") : cents && !over ? `Record ${inr(cents)} payment` : "Record payment"}
                   </LoadingButton>
                 </div>
               </m.form>
