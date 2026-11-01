@@ -26,13 +26,17 @@ self.addEventListener("fetch", event => {
 self.addEventListener("push", event => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { title: event.data?.text() }; }
-  event.waitUntil(self.registration.showNotification(data.title || "Split It", {
-    body: data.body || "",
-    icon: "/icons/icon-192.png",
-    badge: "/icons/badge-96.png",
-    tag: data.tag ? data.tag + ":" + (data.link || "") : undefined,
-    data: { link: data.link || "#/" },
-  }));
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(data.title || "Split It", {
+      body: data.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/badge-96.png",
+      tag: data.tag ? data.tag + ":" + (data.link || "") : undefined,
+      data: { link: data.link || "#/" },
+    }),
+    // Tell any open app window to refresh what it shows, straight away.
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(tabs => tabs.forEach(t => t.postMessage({ type: "split-it:refresh" }))),
+  ]));
 });
 
 // Tapping it opens (or focuses) the app on the right screen.

@@ -37,7 +37,17 @@ export function useSavePaymentMethod() {
   });
 }
 // My notifications; checked every 45 s and when the app comes back to the front.
-export const useNotifications = () => useQuery({ queryKey: keys.notifications, queryFn: () => get<{ items: AppNotification[]; unread: number }>("/api/notifications"), refetchInterval: 45_000 });
+export const useNotifications = () => useQuery({ queryKey: keys.notifications, queryFn: () => get<{ items: AppNotification[]; unread: number }>("/api/notifications"), refetchInterval: 30_000 });
+
+// Refreshes whatever is on screen after someone else changed something: open
+// group screens, balances, payments waiting, invitations. Only queries in use
+// are fetched again.
+export function refreshVisible(qc: QueryClient) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ["group"] }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.people }),
+    qc.invalidateQueries({ queryKey: keys.pending }), qc.invalidateQueries({ queryKey: keys.invitations }), qc.invalidateQueries({ queryKey: keys.friends }),
+  ]);
+}
 export function useMarkNotificationsRead() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: () => post("/api/notifications/read"), onSuccess: () => qc.invalidateQueries({ queryKey: keys.notifications }) });
