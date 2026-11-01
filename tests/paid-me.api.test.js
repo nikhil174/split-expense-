@@ -54,9 +54,19 @@ test("an admin can reject it; the lender can cancel it; a lender who is an admin
   const a = await w.post("Bea", "/settlements", { fromMemberId: ids.Cy, toMemberId: ids.Bea, amount: "20" });
   assert.equal((await w.post("admin", `/settlements/${a.data.id}/reject`)).status, 200);
   assert.equal((await w.inbox("Bea"))[0].title, "Alex Admin didn't approve the ₹20.00 from Cy");
+  assert.equal((await w.inbox("Cy"))[0].title, "Alex Admin didn't approve your payment of ₹20.00 to Bea", "the payer is told too");
   assert.equal(await w.owes(), 4500);
   const b = await w.post("Bea", "/settlements", { fromMemberId: ids.Cy, toMemberId: ids.Bea, amount: "20" });
   assert.equal((await w.post("Bea", `/settlements/${b.data.id}/cancel`)).status, 200, "the lender cancels their own request");
+  assert.equal((await w.inbox("Cy"))[0].title, "Bea cancelled the payment of ₹20.00 recorded for you");
+  // The payer cancels it: the lender is told.
+  const b2 = await w.post("Bea", "/settlements", { fromMemberId: ids.Cy, toMemberId: ids.Bea, amount: "20" });
+  assert.equal((await w.post("Cy", `/settlements/${b2.data.id}/cancel`)).status, 200);
+  assert.equal((await w.inbox("Bea"))[0].title, "Cy cancelled the ₹20.00 you recorded from them");
+  // An admin cancels it: both are told.
+  const b3 = await w.post("Bea", "/settlements", { fromMemberId: ids.Cy, toMemberId: ids.Bea, amount: "20" });
+  assert.equal((await w.post("admin", `/settlements/${b3.data.id}/cancel`)).status, 200);
+  assert.deepEqual([(await w.inbox("Bea"))[0].title, (await w.inbox("Cy"))[0].title], ["Alex Admin cancelled the ₹20.00 recorded from Cy", "Alex Admin cancelled the payment of ₹20.00 recorded for you"]);
   // Bea becomes an admin: now her "they paid me" counts at once.
   await w.post("admin", `/members/${ids.Bea}/make-admin`);
   const c = await w.post("Bea", "/settlements", { fromMemberId: ids.Cy, toMemberId: ids.Bea, amount: "45" });

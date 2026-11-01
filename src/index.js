@@ -1540,14 +1540,21 @@ async function api(req, env, url, outbox = []) {
           db.prepare("DELETE FROM appx_settlements WHERE id=? AND status='pending'").bind(sid),
         ]);
         if (!needsAdmin) await tell(pay.toId, "payment_cancelled", `${u.id === pay.fromId ? nm(pay.fromId) : u.name} cancelled a payment of ${inrText(pay.cents)}`, "You don't need to confirm it any more.");
-        else await tell(pay.fromId, "payment_cancelled", `${u.name} cancelled the payment of ${inrText(pay.cents)} recorded for you`, "It doesn't count.");
+        else {
+          // "They paid me" cancelled: whoever didn't cancel it (lender and/or payer) hears about it.
+          await tell(pay.toId, "payment_cancelled", u.id === pay.fromId ? `${u.name} cancelled the ${inrText(pay.cents)} you recorded from them` : `${u.name} cancelled the ${inrText(pay.cents)} recorded from ${nm(pay.fromId)}`, "It doesn't count.");
+          await tell(pay.fromId, "payment_cancelled", `${u.name} cancelled the payment of ${inrText(pay.cents)} recorded for you`, "It doesn't count.");
+        }
         return json({ ok: true, cancelled: true });
       }
       if (needsAdmin && !isAdmin) return fail("A group admin approves this payment.", 403);
       if (!isAdmin && pay.toId !== u.id) return fail("Only the person who received this payment can confirm or reject it.", 403);
       if (action === "reject") {
         await db.prepare("UPDATE appx_settlements SET status='rejected',decided_by=?,decided_at=? WHERE id=? AND status='pending'").bind(u.id, now, sid).run();
-        if (needsAdmin) await tell(pay.toId, "payment_rejected", `${u.name} didn't approve the ${inrText(pay.cents)} from ${nm(pay.fromId)}`, "It doesn't count. Check with them and record it again if needed.");
+        if (needsAdmin) {
+          await tell(pay.toId, "payment_rejected", `${u.name} didn't approve the ${inrText(pay.cents)} from ${nm(pay.fromId)}`, "It doesn't count. Check with them and record it again if needed.");
+          await tell(pay.fromId, "payment_rejected", `${u.name} didn't approve your payment of ${inrText(pay.cents)} to ${nm(pay.toId)}`, "It doesn't count. If you did pay, check with them and the admins.");
+        }
         else await tell(pay.fromId, "payment_rejected", `${u.name} said they didn't receive your ${inrText(pay.cents)}`, "It doesn't count. Check with them and record it again if needed.");
         return json({ ok: true, status: "rejected" });
       }
