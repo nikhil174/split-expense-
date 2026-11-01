@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
@@ -21,7 +22,7 @@ import { AwaitingBadge, ProofDialog, proofSrc } from "./Awaiting";
 import { PairSheet } from "./PairDetail";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
-import { useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
+import { keys, useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
 import type { Expense, Settlement } from "@/lib/api";
 import { inr, shortDate } from "@/lib/money";
 import { goBack, navigate, type GroupTab } from "@/lib/route";
@@ -41,6 +42,13 @@ export function BackButton({ label, onClick }: { label: string; onClick: () => v
 
 export function GroupScreen({ groupId, tab, expenseId }: { groupId: string; tab: GroupTab; expenseId?: string }) {
   const group = useGroup(groupId);
+  // While the group is on screen, pick up other people's changes (expenses,
+  // payments, approvals) every 20 seconds, even ones that don't notify me.
+  const qc = useQueryClient();
+  React.useEffect(() => {
+    const t = window.setInterval(() => { if (document.visibilityState === "visible") { qc.invalidateQueries({ queryKey: ["group", groupId] }); qc.invalidateQueries({ queryKey: keys.pending }); } }, 20_000);
+    return () => window.clearInterval(t);
+  }, [groupId, qc]);
   const mine = useMine(groupId);
   const [adding, setAdding] = React.useState(false);
   // The expense stays set while the edit sheet animates closed.

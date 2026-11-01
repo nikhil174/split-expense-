@@ -20,7 +20,7 @@ import { SiteAdminScreen } from "@/features/admin/SiteAdminScreen";
 import { JoinScreen } from "@/features/invites/JoinScreen";
 import { FriendsScreen } from "@/features/friends/FriendsScreen";
 import { ResetPasswordScreen, VerifyEmailScreen } from "@/features/auth/EmailLinks";
-import { keys, useMe, useNotifications } from "@/hooks/queries";
+import { keys, refreshVisible, useMe, useNotifications } from "@/hooks/queries";
 import { ApiError, post, type User } from "@/lib/api";
 import { navigate, useRoute } from "@/lib/route";
 import { cn } from "@/lib/utils";
@@ -163,7 +163,22 @@ function Shell({ user }: { user: User }) {
 // Bell next to the profile circle, with how many notifications are unread.
 function NotificationBell({ active }: { active: boolean }) {
   const q = useNotifications();
+  const qc = useQueryClient();
   const unread = q.data?.unread || 0;
+  // Something new happened (someone added an expense, paid, approved…):
+  // refresh what's on screen without waiting for the user to move around.
+  const newest = q.data?.items[0]?.id;
+  const seen = React.useRef<string | undefined>(undefined);
+  React.useEffect(() => {
+    if (newest && seen.current && newest !== seen.current) refreshVisible(qc);
+    if (newest) seen.current = newest;
+  }, [newest, qc]);
+  // A phone notification arrived while the app is open: refresh at once.
+  React.useEffect(() => {
+    const onMessage = (e: MessageEvent) => { if (e.data?.type === "split-it:refresh") { refreshVisible(qc); qc.invalidateQueries({ queryKey: keys.notifications }); } };
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
+  }, [qc]);
   return (
     <button type="button" onClick={() => navigate({ name: "notifications" })} aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
       className={cn("relative grid size-8 shrink-0 cursor-pointer place-items-center rounded-full transition-transform active:scale-90 min-[400px]:size-9", active ? "bg-[#141716] text-white" : "bg-[#141716]/[0.05] text-foreground")}>
