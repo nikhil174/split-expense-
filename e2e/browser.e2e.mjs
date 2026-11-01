@@ -513,6 +513,26 @@ try {
   await signIn(admin, USER.admin);
   await signIn(cy, USER.cy);
   step("sign out lands on the sign-in screen, stays there after reload, and signing back in works (new username too)");
+  // Share as Excel: pick a person (Insights → People), get a workbook with a
+  // Summary sheet and one sheet per other member.
+  await bea.goto(BASE + "/#/"); await bea.reload();
+  await openGroup(bea);
+  await bea.getByRole("tab", { name: "Insights", exact: true }).click();
+  await bea.locator("section", { hasText: "People" }).last().getByRole("button", { name: /Bea E2E/ }).click();
+  const download = bea.waitForEvent("download");
+  await bea.getByRole("button", { name: "Share your statement as Excel" }).click();
+  const file = await download;
+  assert.match(file.suggestedFilename(), /^Split It - Bea E2E - E2E Trip \w+\.xlsx$/);
+  const xlsxPath = (SHOTS || "/tmp") + "/statement-bea.xlsx";
+  await file.saveAs(xlsxPath);
+  const parts = require("fflate").unzipSync(new Uint8Array(require("fs").readFileSync(xlsxPath)));
+  const text = name => new TextDecoder().decode(parts[name]);
+  assert.match(text("xl/workbook.xml"), /<sheet name="Summary".*<sheet name="Cyrus E2E".*<sheet name="Dee E2E".*<sheet name="E2E Admin"/s);
+  assert.match(text("xl/worksheets/sheet1.xml"), /Cumulative share.*Dinner/s);
+  assert.match(text("xl/worksheets/sheet2.xml"), /Bea E2E and Cyrus E2E.*Paid back \(confirmed\)/s);
+  await bea.keyboard.press("Escape");
+  step("Share as Excel: a person's statement with a Summary sheet and one sheet per member, payments marked paid back or not");
+
   // Group settings: the ⚙ on Home's group list, only for the group's admins.
   await admin.goto(BASE + "/#/"); await admin.reload();
   await admin.getByRole("button", { name: "Settings for " + GROUP }).click();

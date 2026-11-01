@@ -1,8 +1,9 @@
 import * as React from "react";
-import { ChevronLeft, ChevronRight, ReceiptText } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileSpreadsheet, ReceiptText } from "lucide-react";
+import { toast } from "sonner";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DateBadge, EmptyState, List, PersonAvatar, SectionTitle, pressableRow } from "@/components/app/bits";
+import { DateBadge, EmptyState, List, LoadingButton, PersonAvatar, SectionTitle, pressableRow } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
 import { PairDetail } from "./PairDetail";
 import { ExpandableExpense } from "./ExpenseBreakdown";
@@ -45,6 +46,7 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
             </div>
           ) : !d ? <div className="space-y-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full rounded-2xl" />)}</div> : (
             <>
+              <ShareExcelButton groupId={groupId} memberId={d.member.id} name={d.member.isMe ? "your" : name + "'s"} />
               <div className="grid grid-cols-3 gap-2">
                 {[["Paid", d.paidCents, ""], ["Their share", d.shareCents, ""], [b >= 0 ? "Gets back" : "Owes", Math.abs(b), b > 0 ? "text-positive" : b < 0 ? "text-negative" : ""]].map(([t, c, cls]) => (
                   <div key={t as string} className="panel px-3 py-3 text-center">
@@ -131,5 +133,26 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
         </div>
       </DrawerContent>
     </Drawer>
+  );
+}
+
+// "Share as Excel": this person's statement as a workbook (Summary sheet plus
+// one sheet per other member), shared to WhatsApp, Drive, mail… or
+// downloaded where the phone can't share files. Built in the browser.
+export function ShareExcelButton({ groupId, memberId, name }: { groupId: string; memberId: string; name: string }) {
+  const [busy, setBusy] = React.useState(false);
+  const share = async () => {
+    setBusy(true);
+    try {
+      const { shareStatement } = await import("./statementExcel");
+      const how = await shareStatement(groupId, memberId);
+      if (how === "downloaded") toast.success("Excel file downloaded.");
+    } catch (e) { toast.error((e as Error).message || "Couldn't make the Excel file."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <LoadingButton type="button" variant="secondary" className="w-full rounded-full" loading={busy} loadingText="Making the Excel file…" onClick={share} aria-label={`Share ${name} statement as Excel`}>
+      <FileSpreadsheet className="size-4" />Share {name} statement (Excel)
+    </LoadingButton>
   );
 }
