@@ -6,6 +6,8 @@ import { useHistory } from "@/hooks/queries";
 import type { HistoryEntry, HistorySnapshot } from "@/lib/api";
 import { inr, shortDate } from "@/lib/money";
 
+const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
+
 // What changed in an edit, in words: "₹90 → ₹120", "Cab → Cab to airport",
 // "paid by Bea → Cy", "split between 2 → 3 people (Bea, Cy, Alex)".
 function changes(b: HistorySnapshot, a: HistorySnapshot) {
@@ -16,7 +18,7 @@ function changes(b: HistorySnapshot, a: HistorySnapshot) {
   const key = (s?: HistorySnapshot["splits"]) => (s || []).map(x => x.memberId + ":" + x.amountCents).sort().join();
   if (key(b.splits) !== key(a.splits)) {
     const names = (s?: HistorySnapshot["splits"]) => (s || []).map(x => x.name).join(", ");
-    out.push((b.splits?.length === a.splits?.length ? "shares changed" : `split between ${b.splits?.length} → ${a.splits?.length} people`) + ` (${names(a.splits)})`);
+    out.push((b.splits?.length === a.splits?.length ? "shares changed" : `split between ${b.splits?.length} → ${people(a.splits?.length || 0)}`) + ` (${names(a.splits)})`);
   }
   return out.length ? out : ["no visible change"];
 }
@@ -27,7 +29,7 @@ function line(h: HistoryEntry, withName: boolean): { title: string; detail?: str
     const b = h.before!;
     return { title: `${h.actorName} cancelled a payment`, detail: `${b.fromName} → ${b.toName} ${inr(b.amountCents)}${b.createdByName && b.createdByName !== b.fromName ? ` · recorded by ${b.createdByName}` : ""}` };
   }
-  if (h.action === "created") return { title: `${h.actorName} added ${withName ? what(h.after) : "it"}`, detail: h.after ? `paid by ${h.after.paidByName}, split between ${h.after.splits?.length} people` : undefined };
+  if (h.action === "created") return { title: `${h.actorName} added ${withName ? what(h.after) : "it"}`, detail: h.after ? `paid by ${h.after.paidByName}, split between ${people(h.after.splits?.length || 0)}` : undefined };
   if (h.action === "deleted") return { title: `${h.actorName} deleted ${what(h.before)}`, detail: h.before ? `paid by ${h.before.paidByName}` : undefined };
   return { title: `${h.actorName} edited ${withName ? what(h.before) : "it"}`, detail: h.before && h.after ? changes(h.before, h.after).join(" · ") : undefined };
 }

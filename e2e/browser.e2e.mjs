@@ -210,7 +210,9 @@ try {
   const changes = bea.getByTestId("expense-history");
   await changes.getByText("Edited 2 times").waitFor();
   assert.equal(await changes.getByTestId("history-entry").count(), 3, "added + two edits");
-  await changes.getByText(/split between 2 → 1 people/).waitFor();
+  await changes.getByText(/split between 2 → 1 person/).waitFor();
+  await changes.scrollIntoViewIfNeeded();
+  await shot(bea, "bea-expense-history");
   step("edit expense: prefilled; unticking a person removes them from the split; re-adding works; its edit history shows");
   // The group's History (from Payments) lists the edits.
   await bea.getByRole("tab", { name: "Payments", exact: true }).click();
