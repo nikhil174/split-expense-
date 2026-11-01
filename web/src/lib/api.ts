@@ -53,6 +53,16 @@ export type JoinInfo = { groupId: string; groupName: string; memberCount: number
 export type GroupDetail = { group: { id: string; name: string; hasPin: boolean }; members: Member[]; waiting: Member[]; me: Identity & { isAdmin: boolean; role: Role } };
 export type Invitation = { groupId: string; groupName: string; invitedBy: string; memberCount: number; hasPin: boolean };
 export type Split = { memberId: string; name: string; amountCents: number };
+// One entry in a group's history (GET /api/groups/:id/history).
+export type HistorySnapshot = {
+  description?: string; amountCents: number; paidBy?: string; paidByName?: string;
+  splits?: { memberId: string; name: string; amountCents: number }[];
+  fromMemberId?: string; fromName?: string; toMemberId?: string; toName?: string; createdBy?: string; createdByName?: string; createdAt?: number;
+};
+export type HistoryEntry = {
+  id: string; entity: "expense" | "payment"; entityId: string; action: "created" | "edited" | "deleted" | "cancelled";
+  actorId: string; actorName: string; createdAt: number; before: HistorySnapshot | null; after: HistorySnapshot | null;
+};
 export type Expense = {
   id: string; description: string; amountCents: number; createdAt: number; paidBy: string; paidByName: string;
   createdBy: string; createdByName: string; splitCount: number; splits: Split[];

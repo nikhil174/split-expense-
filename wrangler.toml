@@ -23,3 +23,9 @@ binding = "split-expense"
 database_name = "split_expense_db"
 database_id = "5820131f-8799-405f-b91d-fcc4cbe0fb53"
 migrations_dir = "migrations"
+
+# Daily housekeeping at 03:17 UTC (08:47 IST): removes expired sessions,
+# group unlocks, rate-limit counters, used/expired email links and old read
+# notifications. See cleanup() in src/index.js.
+[triggers]
+crons = ["17 3 * * *"]

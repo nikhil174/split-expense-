@@ -205,7 +205,26 @@ try {
   await bea.getByRole("button", { name: "Save changes · ₹100.00" }).click();
   await toast(bea, "“Dinner” updated");
   assert.match((await bea.getByRole("row", { name: /Dinner/ }).first().innerText()).replace(/\s+/g, " "), /you lent ₹50\.00/i);
-  step("edit expense: prefilled; unticking a person removes them from the split; re-adding works");
+  // The opened expense shows its edit history.
+  if (await dinner.getAttribute("aria-expanded") !== "true") await dinner.click();
+  const changes = bea.getByTestId("expense-history");
+  await changes.getByText("Edited 2 times").waitFor();
+  assert.equal(await changes.getByTestId("history-entry").count(), 3, "added + two edits");
+  await changes.getByText(/split between 2 → 1 person/).waitFor();
+  await changes.scrollIntoViewIfNeeded();
+  await shot(bea, "bea-expense-history");
+  step("edit expense: prefilled; unticking a person removes them from the split; re-adding works; its edit history shows");
+  // The group's History (from Payments) lists the edits.
+  await bea.getByRole("tab", { name: "Payments", exact: true }).click();
+  await bea.getByTestId("open-history").click();
+  const hist = bea.getByTestId("group-history");
+  await hist.getByText("Bea E2E edited “Dinner” ₹100.00").first().waitFor();
+  assert.equal(await hist.getByTestId("history-entry").count(), 2, "two edits; additions aren't repeated here");
+  await shot(bea, "bea-history");
+  await bea.keyboard.press("Escape");
+  await hist.waitFor({ state: "detached" });
+  await bea.getByRole("tab", { name: "Expenses", exact: true }).click();
+  step("group History lists edits (and deletions / cancelled payments)");
 
   await cy.goto(BASE + "/#/");
   await cy.reload();

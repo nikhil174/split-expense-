@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   get, post, type Balance, type Dashboard,
   type Debt, type Expense, type GroupDetail, type Friends, type GroupSummary, type Invitation, type Me, type MemberSummary, type AppNotification, type GroupPaymentMethod, type Mine, type PaymentMethod, type PeopleBalances, type PendingPayment, type PersonView, type Settlement,
+  type HistoryEntry,
 } from "@/lib/api";
 
 export const keys = {
@@ -62,6 +63,10 @@ const groupQuery = <T,>(id: string, part: string, path: string) => ({
 });
 export const useGroup = (id: string) => useQuery(groupQuery<GroupDetail>(id, "detail", ""));
 export const useExpenses = (id: string) => useQuery({ ...groupQuery<{ expenses: Expense[] }>(id, "expenses", "/expenses"), select: d => d.expenses });
+export const useHistory = (id: string, expenseId?: string, enabled = true) => useQuery({
+  ...groupQuery<{ history: HistoryEntry[] }>(id, expenseId ? "history:" + expenseId : "history", expenseId ? "/history?expense=" + encodeURIComponent(expenseId) : "/history"),
+  select: d => d.history, enabled,
+});
 export const useBalances = (id: string) => useQuery({ ...groupQuery<{ balances: Balance[] }>(id, "balances", "/balances"), select: d => d.balances });
 export const useSettlements = (id: string) => useQuery({ ...groupQuery<{ settlements: Settlement[] }>(id, "settlements", "/settlements"), select: d => d.settlements });
 export const useMine = (id: string) => useQuery(groupQuery<Mine>(id, "mine", "/settlements/mine"));

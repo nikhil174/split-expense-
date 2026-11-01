@@ -55,7 +55,7 @@ erDiagram
   appx_users ||--o{ appx_notifications : receives
   appx_users ||--o{ appx_push_subscriptions : "devices"
   appx_users ||--o{ appx_friendships : "phase 2"
-  appx_groups ||--o{ appx_invites : "phase 2 links"
+  appx_groups ||--o{ appx_history : "changes log"
 
   appx_users {
     text id PK "permanent; old member ids kept"
@@ -93,6 +93,15 @@ stateDiagram-v2
 ```
 
 `removed` rows are never deleted, so history keeps showing the person's name. Only `active` members can open the group, appear in pickers or be chosen in a split.
+
+### History, integrity and housekeeping (migration `0018`)
+
+- **`appx_history`** is a permanent log: expenses added, edited (before and after) and deleted, and payments cancelled (a cancelled pending payment is still removed from `appx_settlements`, so balance queries are unchanged, but its details are kept here). It is written in the same batch as the change. Members read it via `GET /api/groups/:id/history` (`?expense=<id>` for one expense): the app shows it inside an opened expense ("Edited 2 times") and in Payments → History. Deleting a group deletes its history.
+- **Account guards.** Triggers refuse a person id that has no account in `appx_group_members.member_id`, `appx_expenses.paid_by`, `appx_splits.member_id` and `appx_settlements.from_member_id/to_member_id` (on insert and when those columns change). Existing rows were not rebuilt or checked: rebuilding tables on live data to add foreign keys was judged riskier than the gain.
+- **Names.** A trigger copies a changed `appx_users.display_name` into every `appx_group_members.name`.
+- **Old tables dropped.** `appx_access_requests`, `appx_sessions`, `appx_admin_sessions` and `appx_invites` (the sign-in before accounts) were removed; 0013 had copied their people into `appx_users`.
+- **Daily cleanup.** A cron (`17 3 * * *` UTC, `wrangler.toml`) runs `cleanup()`: expired sessions and group unlocks, rate-limit counters older than a day, used or expired email links, and read notifications older than 90 days. Money and history are never touched.
+- **Migration numbers.** `0003` and `0004` were each used twice early on. They are left as they are (Wrangler tracks applied migrations by file name, so renaming would run them again); a test refuses any new duplicate.
 
 ## 4. Authentication
 
@@ -203,7 +212,7 @@ How existing people get in:
 
 ## 7. Phase 2: invite links, QR codes and friends (built)
 
-As built: the code lives in `appx_groups.invite_code` and is visible to everyone in the group (joining still needs the group PIN and an admin), so there is no separate `appx_invites` use; members suggest friends with status `suggested`.
+As built: the code lives in `appx_groups.invite_code` and is visible to everyone in the group (joining still needs the group PIN and an admin), so `appx_invites` was never used (and was dropped in 0018); members suggest friends with status `suggested`.
 
 **Invite links and QR codes**
 

@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Pencil, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet, Paperclip } from "lucide-react";
+import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Pencil, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet, Paperclip, History } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +22,7 @@ import { AwaitingBadge, ProofDialog, proofSrc } from "./Awaiting";
 import { PairSheet } from "./PairDetail";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
+import { ExpenseHistory, GroupHistorySheet } from "./History";
 import { keys, useBalances, useDashboard, useDebts, useDeleteExpense, useExpenses, useGroup, useMine, useSettlements } from "@/hooks/queries";
 import type { Expense, Settlement } from "@/lib/api";
 import { inr, shortDate } from "@/lib/money";
@@ -223,6 +224,7 @@ function ExpenseRow({ x, meId, groupId, open, onToggle, onEdit }: { x: Expense; 
                       ))}</tbody>
                     </table>
                   </div>
+                  <ExpenseHistory groupId={groupId} expenseId={x.id} />
                   {(x.canEdit || x.canDelete) && (
                     <div className="grid grid-cols-2 gap-2">
                       {x.canEdit && <button type="button" className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[#141716]/[0.08] bg-white py-2.5 text-[14px] font-medium transition-transform active:scale-[0.98]" onClick={e => { e.stopPropagation(); onEdit(); }}><Pencil className="size-4" />Edit</button>}
@@ -334,6 +336,7 @@ function BalancesTab({ groupId }: { groupId: string }) {
 function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
   const payments = useSettlements(groupId);
   const [proof, setProof] = React.useState<Settlement | null>(null);
+  const [history, setHistory] = React.useState(false);
   const who = (id: string, name: string) => (id === meId ? "You" : name);
   // All payments in the group, only yours (you paid or were paid), or only between other people.
   const [filter, setFilter] = React.useState<"all" | "mine" | "others">("all");
@@ -380,6 +383,8 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
           </table>
         )}
       </div>
+    <button type="button" onClick={() => setHistory(true)} className="mt-3 flex w-full cursor-pointer items-center justify-center gap-1.5 py-2 text-[13.5px] font-medium text-tint" data-testid="open-history"><History className="size-4" />History: edits, deletions, cancelled payments</button>
+    <GroupHistorySheet groupId={groupId} open={history} onOpenChange={setHistory} />
     <ProofDialog src={proof ? proofSrc(groupId, proof.id) : null} title={proof ? `${proof.fromName}'s payment` : ""} onClose={() => setProof(null)} />
     </div>
     </div>
