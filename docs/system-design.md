@@ -1,5 +1,7 @@
 # Split It: accounts, groups for everyone, friends and Google sign-in
 
+> For the whole system see the [high-level design](design/HLD.md) and the [low-level design](design/LLD.md). This document covers the move to accounts, groups and admins.
+
 > **Update (passwords, group PINs, Google):** accounts now use a **password** (8+ characters with letters and numbers; people from before keep their 4-digit PIN as their password). Each **group has a 4-digit PIN**, needed to join it and to open it, remembered for 1 day per device (`0015_group_pins.sql`). **Sign in with Google** is built (§8), off until `GOOGLE_CLIENT_ID` is set. The site owner can clear a group's PIN but **cannot reset anyone's password**. Where this document says "PIN" for accounts, read "password".
 
 System design for turning Split It from "one administrator, members per group" into an app anyone can sign up for, create groups in and invite friends to. It is delivered in three pull requests, each usable on its own:
@@ -109,7 +111,7 @@ Membership status:
 ```mermaid
 stateDiagram-v2
   [*] --> invited: admin invites (username/email)
-  [*] --> pending: phase 2: link/QR join request
+  [*] --> pending: phase 2, link or QR join request
   invited --> active: person accepts
   invited --> removed: person declines / admin cancels
   pending --> active: admin approves
