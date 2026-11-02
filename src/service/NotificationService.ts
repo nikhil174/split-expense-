@@ -2,12 +2,12 @@
 import type { AppNotification } from "../../shared/api-types.ts";
 import { NOTIFICATION_KEEP_MS } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
+import { textField } from "../domain/text.ts";
 import { ApiError } from "../http/ApiError.ts";
 import { pushEnabled, validSubscription } from "../integration/push.ts";
 import type { NotificationRepository } from "../repository/NotificationRepository.ts";
 import type { PushSubscriptionRepository } from "../repository/PushSubscriptionRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
-import { textField } from "../security/passwords.ts";
 
 export class NotificationService {
   private readonly env: AppEnv;

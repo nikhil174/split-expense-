@@ -2,8 +2,8 @@
 // keeps only its hash, with the account and an expiry.
 import type { User } from "../../shared/api-types.ts";
 import { SESSION_COOKIE, SESSION_MS } from "../config/constants.ts";
-import { json } from "../http/responses.ts";
 import { setCookie, type RequestContext } from "../http/RequestContext.ts";
+import { json } from "../http/responses.ts";
 import type { SessionRepository } from "../repository/SessionRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import { newId, sha256Hex } from "./crypto.ts";

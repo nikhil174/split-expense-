@@ -1,7 +1,7 @@
 // Balances and summaries: /api/balances (Home) and a group's balances,
 // dashboard, member summary, pair views and statement.
-import { json } from "../http/responses.ts";
 import type { Router } from "../http/Router.ts";
+import { json } from "../http/responses.ts";
 import type { Authed, InGroup } from "./context.ts";
 
 export class InsightsController {

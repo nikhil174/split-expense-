@@ -1,17 +1,10 @@
 // appx_groups and appx_group_members: groups and who is in them.
-import { FORMER_MEMBER } from "../config/constants.ts";
 import type { GroupMember, MemberStatus, Role } from "./types.ts";
 
 // A member who is in the group now (may be chosen for expenses and payments).
 // People who left or were removed keep their appx_group_members row (status
 // 'removed') so history still shows their name. Expects the row aliased `m`.
 const ACTIVE_MEMBER_SQL = "(m.status='active')";
-
-// id → name for a group's members (anyone not found is a former member).
-export function nameLookup(members: { id: string; name: string }[]): (memberId: string) => string {
-  const names = new Map(members.map(m => [m.id, m.name]));
-  return memberId => names.get(memberId) || FORMER_MEMBER;
-}
 
 export class GroupRepository {
   private readonly db: D1Database;

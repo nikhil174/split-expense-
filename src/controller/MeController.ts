@@ -1,8 +1,8 @@
 // /api/me/*: the signed-in person's own account.
 import { RATE_LIMITS } from "../config/constants.ts";
 import { ApiError } from "../http/ApiError.ts";
-import { json } from "../http/responses.ts";
 import type { Router } from "../http/Router.ts";
+import { json } from "../http/responses.ts";
 import { verifyGoogleToken } from "../security/GoogleTokenVerifier.ts";
 import { userOut } from "../security/SessionManager.ts";
 import type { Authed } from "./context.ts";

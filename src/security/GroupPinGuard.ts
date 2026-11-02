@@ -1,11 +1,11 @@
 // Group PINs: needed to join a group and to open it; opening is remembered
 // for a day on that signed-in device (session).
 import { GROUP_PIN_TRIES, GROUP_UNLOCK_MS, PIN_RE } from "../config/constants.ts";
+import { textField } from "../domain/text.ts";
 import { ApiError } from "../http/ApiError.ts";
 import type { SessionRepository } from "../repository/SessionRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import type { PasswordHasher } from "./PasswordHasher.ts";
-import { textField } from "./passwords.ts";
 import type { RateLimiter } from "./RateLimiter.ts";
 
 export class GroupPinGuard {

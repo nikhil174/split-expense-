@@ -1,11 +1,8 @@
 // appx_users: accounts.
+import { cleanName, isEmailLogin, normEmail, normUsername } from "../domain/text.ts";
 import type { UserRow } from "./types.ts";
 
 const LOGIN_COLS = "id,username,display_name,email,pin_hash,pin_failures,pin_locked_until,legacy,google_sub";
-
-export const normUsername = (v: unknown): string => String(v ?? "").trim().replace(/^@/, "").toLowerCase();
-export const normEmail = (v: unknown): string => String(v ?? "").trim().toLowerCase();
-export const cleanName = (value: unknown): string => String(value ?? "").trim().replace(/\s+/g, " ");
 
 export class UserRepository {
   private readonly db: D1Database;
@@ -15,7 +12,7 @@ export class UserRepository {
   async findByLogin(login: unknown): Promise<UserRow | null> {
     const v = String(login ?? "").trim();
     if (!v) return null;
-    if (v.includes("@") && !v.startsWith("@")) return this.db.prepare(`SELECT ${LOGIN_COLS} FROM appx_users WHERE email=?`).bind(normEmail(v)).first<UserRow>();
+    if (isEmailLogin(v)) return this.db.prepare(`SELECT ${LOGIN_COLS} FROM appx_users WHERE email=?`).bind(normEmail(v)).first<UserRow>();
     return this.db.prepare(`SELECT ${LOGIN_COLS} FROM appx_users WHERE username=?`).bind(normUsername(v)).first<UserRow>();
   }
   // Accounts from before usernames: found by a group's name and their name in it.

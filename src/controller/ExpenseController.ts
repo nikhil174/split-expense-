@@ -1,7 +1,7 @@
 // /api/groups/:id/expenses and the group's history.
 import { RATE_LIMITS } from "../config/constants.ts";
-import { json } from "../http/responses.ts";
 import type { Router } from "../http/Router.ts";
+import { json } from "../http/responses.ts";
 import type { InGroup } from "./context.ts";
 
 export class ExpenseController {

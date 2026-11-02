@@ -4,11 +4,11 @@
 // declared type.
 import type { GroupPaymentMethod, PaymentMethod } from "../../shared/api-types.ts";
 import { QR_MAX_BYTES, UPI_RE } from "../config/constants.ts";
+import { textField } from "../domain/text.ts";
 import { ApiError, notFound } from "../http/ApiError.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { PaymentMethodRepository } from "../repository/PaymentMethodRepository.ts";
 import type { CurrentUser, PaymentMethodRow } from "../repository/types.ts";
-import { textField } from "../security/passwords.ts";
 import type { GroupScope } from "./GroupService.ts";
 
 // A data: URL image (PNG, JPEG or WebP, at most 300 KB): its real type and data.

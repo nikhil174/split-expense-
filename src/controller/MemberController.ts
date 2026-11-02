@@ -1,7 +1,7 @@
 // /api/groups/:id/members/*: inviting people and managing who is in a group.
 import { RATE_LIMITS } from "../config/constants.ts";
-import { json } from "../http/responses.ts";
 import type { Router } from "../http/Router.ts";
+import { json } from "../http/responses.ts";
 import type { MemberAction } from "../service/MembershipService.ts";
 import type { InGroup } from "./context.ts";
 

@@ -1,8 +1,8 @@
 // Writing in-app notifications. Each one is an INSERT statement to put in the
 // same batch as the change it describes, and is also queued (the request's
 // outbox) to be pushed to the person's phones after the response.
-import type { ShareRow } from "../domain/split.ts";
 import { inrText } from "../domain/money.ts";
+import type { ShareRow } from "../domain/split.ts";
 import type { PushNote } from "../integration/push.ts";
 import type { NewNotification, NotificationRepository } from "../repository/NotificationRepository.ts";
 

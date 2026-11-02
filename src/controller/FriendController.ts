@@ -1,7 +1,7 @@
 // /api/friends/*.
 import { RATE_LIMITS } from "../config/constants.ts";
-import { json } from "../http/responses.ts";
 import type { Router } from "../http/Router.ts";
+import { json } from "../http/responses.ts";
 import type { Authed } from "./context.ts";
 
 export class FriendController {

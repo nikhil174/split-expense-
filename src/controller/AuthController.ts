@@ -1,10 +1,10 @@
 // /api/auth/*, /api/me, /api/logout: everything before (and including)
 // signing in. These work signed out.
 import { RATE_LIMITS } from "../config/constants.ts";
-import { emailEnabled } from "../integration/email.ts";
 import { ApiError } from "../http/ApiError.ts";
-import { json } from "../http/responses.ts";
 import type { Router } from "../http/Router.ts";
+import { json } from "../http/responses.ts";
+import { emailEnabled } from "../integration/email.ts";
 import { verifyGoogleToken } from "../security/GoogleTokenVerifier.ts";
 import { userOut } from "../security/SessionManager.ts";
 import type { Web } from "./context.ts";

@@ -2,11 +2,12 @@
 // another account of theirs.
 import { EMAIL_RE, USERNAME_RE } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
-import { emailEnabled } from "../integration/email.ts";
+import { cleanName, normEmail, normUsername } from "../domain/text.ts";
 import { ApiError, conflict, notFound } from "../http/ApiError.ts";
+import { emailEnabled } from "../integration/email.ts";
 import type { AccountMergeRepository } from "../repository/AccountMergeRepository.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
-import { cleanName, normEmail, normUsername, type UserRepository } from "../repository/UserRepository.ts";
+import type { UserRepository } from "../repository/UserRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import type { AccountPasswordGuard } from "../security/AccountPasswordGuard.ts";
 import type { GoogleIdentity } from "../security/GoogleTokenVerifier.ts";

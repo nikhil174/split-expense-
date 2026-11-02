@@ -1,7 +1,7 @@
 // Payments: /api/payments/pending and /api/groups/:id/settlements/*.
 import { IMAGE_BODY_BYTES, RATE_LIMITS } from "../config/constants.ts";
-import { imageResponse, json } from "../http/responses.ts";
 import type { Router } from "../http/Router.ts";
+import { imageResponse, json } from "../http/responses.ts";
 import type { Authed, InGroup } from "./context.ts";
 
 export class SettlementController {

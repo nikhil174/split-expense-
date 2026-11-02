@@ -3,11 +3,12 @@
 // the statement behind "Share as Excel". All come from the same pairwise
 // ledger, so the screens always agree.
 import type { Balance, Dashboard, MemberSummary, PeopleBalances, PersonView } from "../../shared/api-types.ts";
+import { nameLookup } from "../domain/members.ts";
 import { rupees } from "../domain/money.ts";
 import { computeBalances, computePairwiseDebts, pairwiseActivity } from "../domain/settlement.ts";
 import { notFound } from "../http/ApiError.ts";
 import type { ExpenseRepository } from "../repository/ExpenseRepository.ts";
-import { nameLookup, type GroupRepository } from "../repository/GroupRepository.ts";
+import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { SettlementRepository } from "../repository/SettlementRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import type { GroupScope } from "./GroupService.ts";

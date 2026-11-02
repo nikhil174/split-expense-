@@ -4,8 +4,8 @@
 // and its claims: issued by Google, for our client id (GOOGLE_CLIENT_ID),
 // not expired, with a verified email. No client secret is involved.
 import type { AppEnv } from "../config/env.ts";
+import { cleanName, normEmail } from "../domain/text.ts";
 import { ApiError } from "../http/ApiError.ts";
-import { cleanName, normEmail } from "../repository/UserRepository.ts";
 
 const GOOGLE_CERTS = "https://www.googleapis.com/oauth2/v3/certs";
 type GoogleKey = { kid: string; n: string; e: string };

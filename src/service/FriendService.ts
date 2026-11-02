@@ -1,11 +1,11 @@
 // Friends: ask by username or email; the other person accepts. Only exact
 // matches: there is no browsing of people.
 import type { Friends } from "../../shared/api-types.ts";
+import { loginKind, textField } from "../domain/text.ts";
 import { ApiError, conflict, notFound } from "../http/ApiError.ts";
 import { pairOf, type FriendshipRepository } from "../repository/FriendshipRepository.ts";
 import type { UserRepository } from "../repository/UserRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
-import { textField } from "../security/passwords.ts";
 import type { Notifier } from "./Notifier.ts";
 
 export class FriendService {
@@ -32,7 +32,7 @@ export class FriendService {
   async request(u: CurrentUser, b: any) {
     const login = textField(b?.login).trim();
     const who = b?.userId ? await this.users.findForFriendRequest(textField(b.userId)) : login ? await this.users.findByLogin(login) : null;
-    if (!who) throw new ApiError(login ? `No one on Split It has the ${login.includes("@") && !login.startsWith("@") ? "email" : "username"} “${login}”.` : "Enter a username or email.", login ? 404 : 400);
+    if (!who) throw new ApiError(login ? `No one on Split It has the ${loginKind(login)} “${login}”.` : "Enter a username or email.", login ? 404 : 400);
     if (who.id === u.id) throw conflict("That's you.");
     const [a, bb] = pairOf(u.id, who.id);
     const row = await this.friendships.find(a, bb);

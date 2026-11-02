@@ -3,8 +3,8 @@
 // renaming, deleting.
 import { RATE_LIMITS } from "../config/constants.ts";
 import { notFound } from "../http/ApiError.ts";
-import { json } from "../http/responses.ts";
 import type { Router } from "../http/Router.ts";
+import { json } from "../http/responses.ts";
 import type { Authed, InGroup } from "./context.ts";
 
 export class GroupController {

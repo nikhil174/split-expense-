@@ -1,11 +1,11 @@
 // /api/site-admin/*: the site owner's console. To everyone but the site
 // owner it doesn't exist (404); the owner opens it with the admin key.
 import { RATE_LIMITS } from "../config/constants.ts";
+import { cleanName } from "../domain/text.ts";
+import { textField } from "../domain/text.ts";
 import { ApiError, tooMany } from "../http/ApiError.ts";
-import { json } from "../http/responses.ts";
 import { Router } from "../http/Router.ts";
-import { cleanName } from "../repository/UserRepository.ts";
-import { textField } from "../security/passwords.ts";
+import { json } from "../http/responses.ts";
 import { hidden } from "../service/SiteAdminService.ts";
 import type { Authed } from "./context.ts";
 

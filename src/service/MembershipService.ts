@@ -1,5 +1,6 @@
 // Who is in a group: inviting people, members suggesting friends, admins
 // approving, removing, and making admins.
+import { loginKind, textField } from "../domain/text.ts";
 import { ApiError, conflict, forbidden, needGroupAdmin, notFound } from "../http/ApiError.ts";
 import type { FriendshipRepository } from "../repository/FriendshipRepository.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
@@ -25,10 +26,10 @@ export class MembershipService {
   // approves, and only then is the friend invited.
   async invite(s: GroupScope, rawLogin: unknown) {
     const u = s.user, gid = s.gid;
-    const login = typeof rawLogin === "string" ? rawLogin.trim() : "";
+    const login = textField(rawLogin).trim();
     if (!login) throw new ApiError("Enter a username or email.");
     const who = await this.users.findByLogin(login);
-    if (!who) throw notFound(`No one on Split It has the ${login.includes("@") && !login.startsWith("@") ? "email" : "username"} “${login}”. Check it, or ask them to create an account first.`);
+    if (!who) throw notFound(`No one on Split It has the ${loginKind(login)} “${login}”. Check it, or ask them to create an account first.`);
     const g = (await this.groups.name(gid))!;
     const row = await this.groups.membership(gid, who.id);
     if (row?.status === "active") throw conflict(`${who.display_name} is already in this group.`);

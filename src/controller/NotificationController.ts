@@ -1,6 +1,6 @@
 // /api/notifications and /api/push/* (phone notifications).
-import { json } from "../http/responses.ts";
 import type { Router } from "../http/Router.ts";
+import { json } from "../http/responses.ts";
 import type { Authed } from "./context.ts";
 
 export class NotificationController {

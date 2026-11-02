@@ -2,16 +2,16 @@
 // PIN, renaming, leaving and deleting.
 import type { FriendState, GroupDetail, GroupSummary, Identity, Invitation } from "../../shared/api-types.ts";
 import { PIN_RE } from "../config/constants.ts";
+import { cleanName } from "../domain/text.ts";
+import { textField } from "../domain/text.ts";
 import { ApiError, conflict, needGroupAdmin, notFound } from "../http/ApiError.ts";
 import type { FriendshipRepository } from "../repository/FriendshipRepository.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { SessionRepository } from "../repository/SessionRepository.ts";
-import { cleanName } from "../repository/UserRepository.ts";
 import type { CurrentUser, Role } from "../repository/types.ts";
-import { newId, newUrlToken } from "../security/crypto.ts";
 import type { GroupPinGuard } from "../security/GroupPinGuard.ts";
 import type { PasswordHasher } from "../security/PasswordHasher.ts";
-import { textField } from "../security/passwords.ts";
+import { newId, newUrlToken } from "../security/crypto.ts";
 import type { Notifier } from "./Notifier.ts";
 
 // A group as seen by one of its members (see GroupAccess).

@@ -5,8 +5,8 @@ import type { AppEnv } from "../config/env.ts";
 import { ApiError } from "../http/ApiError.ts";
 import type { UserRepository } from "../repository/UserRepository.ts";
 import type { UserRow } from "../repository/types.ts";
-import { secretEquals } from "./crypto.ts";
 import type { PasswordHasher } from "./PasswordHasher.ts";
+import { secretEquals } from "./crypto.ts";
 import { goodPassword, PASSWORD_HINT, passwordOf } from "./passwords.ts";
 
 type PasswordRow = Pick<UserRow, "id" | "pin_hash" | "pin_failures" | "pin_locked_until">;

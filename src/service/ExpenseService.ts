@@ -2,15 +2,16 @@
 // history and told to everyone in them), listing, and the group's totals.
 import type { Expense, HistoryEntry } from "../../shared/api-types.ts";
 import { MAX_SPLIT_MEMBERS } from "../config/constants.ts";
+import { nameLookup } from "../domain/members.ts";
 import { parseAmountToCents, rupees } from "../domain/money.ts";
 import { allocateEqualSplit, allocateManualSplit, type ShareRow } from "../domain/split.ts";
+import { cleanName } from "../domain/text.ts";
+import { textField } from "../domain/text.ts";
 import { ApiError, forbidden, notFound } from "../http/ApiError.ts";
 import type { ExpenseRepository } from "../repository/ExpenseRepository.ts";
-import { nameLookup, type GroupRepository } from "../repository/GroupRepository.ts";
+import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { HistoryRepository } from "../repository/HistoryRepository.ts";
-import { cleanName } from "../repository/UserRepository.ts";
 import { newId } from "../security/crypto.ts";
-import { textField } from "../security/passwords.ts";
 import type { GroupScope } from "./GroupService.ts";
 import type { Notifier } from "./Notifier.ts";
 

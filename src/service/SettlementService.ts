@@ -3,17 +3,18 @@
 // ("they paid me") needs a group admin's approval instead.
 import type { Debt as ApiDebt, Debts, Mine, PendingPayment, Settlement } from "../../shared/api-types.ts";
 import { FORMER_MEMBER } from "../config/constants.ts";
+import { nameLookup } from "../domain/members.ts";
 import { inrText, parseAmountToCents, rupees } from "../domain/money.ts";
 import { computePairwiseDebts, debtsForMember, outstandingDebt, SettlementError, validateSettlement, type Debt } from "../domain/settlement.ts";
+import { textField } from "../domain/text.ts";
 import { ApiError, conflict, forbidden, notFound } from "../http/ApiError.ts";
-import { changesOf } from "../repository/db.ts";
 import type { ExpenseRepository } from "../repository/ExpenseRepository.ts";
-import { nameLookup, type GroupRepository } from "../repository/GroupRepository.ts";
+import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { HistoryRepository } from "../repository/HistoryRepository.ts";
 import type { SettlementRepository } from "../repository/SettlementRepository.ts";
+import { changesOf } from "../repository/db.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import { newId } from "../security/crypto.ts";
-import { textField } from "../security/passwords.ts";
 import type { GroupScope } from "./GroupService.ts";
 import type { Notifier } from "./Notifier.ts";
 import { parseImage } from "./PaymentMethodService.ts";

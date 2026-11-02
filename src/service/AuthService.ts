@@ -2,17 +2,18 @@
 // email, or group and name for old accounts), Google, and email links.
 import { EMAIL_RE, USERNAME_RE } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
-import { emailEnabled } from "../integration/email.ts";
+import { cleanName, normEmail, normUsername } from "../domain/text.ts";
 import { ApiError, conflict, notFound, tooMany } from "../http/ApiError.ts";
-import { changesOf } from "../repository/db.ts";
-import type { SessionRepository } from "../repository/SessionRepository.ts";
+import { emailEnabled } from "../integration/email.ts";
 import type { EmailTokenRepository } from "../repository/EmailTokenRepository.ts";
-import { cleanName, normEmail, normUsername, type UserRepository } from "../repository/UserRepository.ts";
+import type { SessionRepository } from "../repository/SessionRepository.ts";
+import type { UserRepository } from "../repository/UserRepository.ts";
+import { changesOf } from "../repository/db.ts";
 import type { UserRow } from "../repository/types.ts";
 import type { AccountPasswordGuard } from "../security/AccountPasswordGuard.ts";
-import { newId } from "../security/crypto.ts";
 import type { GoogleIdentity } from "../security/GoogleTokenVerifier.ts";
 import type { PasswordHasher } from "../security/PasswordHasher.ts";
+import { newId } from "../security/crypto.ts";
 import { goodPassword, PASSWORD_HINT, passwordOf } from "../security/passwords.ts";
 import type { EmailLinkService } from "./EmailLinkService.ts";
 
