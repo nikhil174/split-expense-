@@ -5,6 +5,8 @@
 //  2. one sheet per other member: what's between the two of them, expense by
 //     expense, and each payment with whether it was paid back (confirmed),
 //     is waiting for approval, or was rejected, with a running balance.
+//     Waivers ("no need to pay": the lender let them off) are listed as
+//     "Let off" and totalled apart from money paid back.
 import { get, type Statement, type StatementItem as Item } from "@/lib/api";
 import { buildXlsx, type Cell, type Sheet } from "@/lib/xlsx";
 
@@ -41,8 +43,10 @@ export function statementWorkbook(s: Statement): { file: Uint8Array; fileName: s
   const sheets: Sheet[] = [{ name: "Summary", widths: [22, 34, 18, 14, 16, 18], rows: summary, freezeRow: 4 }];
 
   for (const p of s.pairs) {
-    const status = (i: Item) => i.type === "expense" ? "Counted" : i.status === "pending" ? "Waiting for approval (not counted yet)" : i.status === "rejected" ? "Rejected (not counted)" : "Paid back (confirmed)";
-    const paidBack = p.items.filter(i => i.type === "payment" && (i.status === "counted" || i.status === "confirmed")).reduce((a, i) => a + (i.amountCents || 0), 0);
+    const waiver = (i: Item) => i.kind === "waiver";
+    const status = (i: Item) => i.type === "expense" ? "Counted" : i.status === "pending" ? "Waiting for approval (not counted yet)" : i.status === "rejected" ? "Rejected (not counted)" : waiver(i) ? "Let off (approved)" : "Paid back (confirmed)";
+    const counted = (letOff: boolean) => p.items.filter(i => i.type === "payment" && waiver(i) === letOff && (i.status === "counted" || i.status === "confirmed")).reduce((a, i) => a + (i.amountCents || 0), 0);
+    const paidBack = counted(false), letOff = counted(true);
     const rows: Cell[][] = [
       [{ v: `${P} and ${p.name}`, s: "title" }],
       [{ v: `${s.group.name} · positive means ${p.name} owes ${P}, negative means ${P} owes ${p.name}`, s: "muted" }],
@@ -50,11 +54,13 @@ export function statementWorkbook(s: Statement): { file: Uint8Array; fileName: s
       [head("Date"), head("What"), head("Paid by"), head("Cost"), head(`${P}'s side`), head("Running balance"), head("Status")],
       ...p.items.map(i => i.type === "expense"
         ? [when(i.createdAt), i.description, i.paidByName, money(i.totalCents || 0), money(i.effectCents), money(i.runningCents), status(i)]
+        : waiver(i) ? [when(i.createdAt), `Let off: ${i.toName} let ${i.fromName} off (no need to pay)`, "", money(i.amountCents || 0), money(i.effectCents), money(i.runningCents), status(i)]
         : [when(i.createdAt), `Payment: ${i.fromName} → ${i.toName}`, i.fromName, money(i.amountCents || 0), money(i.effectCents), money(i.runningCents), status(i)]),
       ...(p.items.length ? [] : [[{ v: "Nothing between them yet.", s: "muted" } as Cell]]),
       [],
       [bold("Result"), bold(p.netCents > 0 ? `${p.name} owes ${P} ${inrText(p.netCents)}` : p.netCents < 0 ? `${P} owes ${p.name} ${inrText(p.netCents)}` : "Settled up")],
       ["Paid back so far (confirmed)", "", "", money(paidBack)],
+      ...(letOff ? [["Let off (no need to pay)", "", "", money(letOff)]] : []),
       ["Settled?", p.netCents === 0 ? "Yes" : "Not yet"],
     ];
     sheets.push({ name: p.name, widths: [22, 34, 18, 14, 16, 18, 34], rows, freezeRow: 4 });

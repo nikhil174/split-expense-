@@ -6,6 +6,7 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { List, LoadingButton, PersonAvatar, SectionTitle, haptic, pressableRow } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
 import { PayByUpi } from "./UpiPayments";
+import { WaiveDebt } from "./WaiveDebt";
 import { shrinkScreenshot } from "@/lib/image";
 import { glitterBurst } from "@/components/app/glitter";
 import { useDebts, useMine, useRecordPayment } from "@/hooks/queries";
@@ -166,6 +167,11 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                   <LoadingButton type="submit" size="xl" className="w-full" disabled={!cents || over} loading={pay.isPending} loadingText="Recording payment…">
                     {debt.toMemberId === meId && !mine.data?.isAdmin ? (cents && !over ? `Send ${inr(cents)} for admin approval` : "Send for admin approval") : cents && !over ? `Record ${inr(cents)} payment` : "Record payment"}
                   </LoadingButton>
+                  {/* Someone owes me: I can let them off what's entered (or all of it) instead. */}
+                  {debt.toMemberId === meId && !pay.isPending && (
+                    <WaiveDebt groupId={groupId} fromMemberId={debt.fromMemberId} fromName={debt.fromName} cents={cents && !over ? cents : debt.amountCents}
+                      isAdmin={!!mine.data?.isAdmin} onDone={() => onOpenChange(false)} />
+                  )}
                 </div>
               </m.form>
             )}
