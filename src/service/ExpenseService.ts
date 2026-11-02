@@ -13,7 +13,7 @@ import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { HistoryRepository } from "../repository/HistoryRepository.ts";
 import type { Transaction } from "../repository/Transaction.ts";
 import { newId } from "../security/crypto.ts";
-import type { GroupScope } from "./GroupService.ts";
+import type { GroupScope } from "./GroupScope.ts";
 import type { Notifier } from "./Notifier.ts";
 
 export type ExpenseInput = { desc: string; cents: number; paidBy: string; splitRows: ShareRow[] };

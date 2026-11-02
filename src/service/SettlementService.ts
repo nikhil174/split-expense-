@@ -16,7 +16,7 @@ import type { Transaction } from "../repository/Transaction.ts";
 import { changesOf } from "../repository/db.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import { newId } from "../security/crypto.ts";
-import type { GroupScope } from "./GroupService.ts";
+import type { GroupScope } from "./GroupScope.ts";
 import { parseImage } from "./PaymentMethodService.ts";
 import type { PaymentNotifications } from "./PaymentNotifications.ts";
 

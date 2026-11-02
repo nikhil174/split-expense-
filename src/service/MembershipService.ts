@@ -6,7 +6,7 @@ import type { FriendshipRepository } from "../repository/FriendshipRepository.ts
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { Transaction } from "../repository/Transaction.ts";
 import type { UserRepository } from "../repository/UserRepository.ts";
-import type { GroupScope } from "./GroupService.ts";
+import type { GroupScope } from "./GroupScope.ts";
 import type { Notifier } from "./Notifier.ts";
 
 export type MemberAction = "approve" | "reject" | "remove" | "cancel-invite" | "make-admin" | "make-member";

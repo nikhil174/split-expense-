@@ -11,7 +11,7 @@ import type { ExpenseRepository } from "../repository/ExpenseRepository.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { SettlementRepository } from "../repository/SettlementRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
-import type { GroupScope } from "./GroupService.ts";
+import type { GroupScope } from "./GroupScope.ts";
 
 const sumFor = (mid: string) => <T extends { amountCents: number }>(rows: T[], key: keyof T) => rows.filter(r => r[key] === mid).reduce((t, r) => t + r.amountCents, 0);
 

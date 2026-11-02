@@ -9,7 +9,7 @@ import { ApiError, notFound } from "../http/ApiError.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { PaymentMethodRepository } from "../repository/PaymentMethodRepository.ts";
 import type { CurrentUser, PaymentMethodRow } from "../repository/types.ts";
-import type { GroupScope } from "./GroupService.ts";
+import type { GroupScope } from "./GroupScope.ts";
 
 // A data: URL image (PNG, JPEG or WebP, at most 300 KB): its real type and data.
 export function parseImage(value: unknown, what = "QR code"): { mime: string; base64: string } | { error: string } {

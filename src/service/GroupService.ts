@@ -1,34 +1,26 @@
-// Groups: creating them, invitations and invite links, joining, the group's
-// PIN, renaming, leaving and deleting.
-import type { FriendState, GroupDetail, GroupSummary, Identity, Invitation } from "../../shared/api-types.ts";
+// Groups themselves: creating them, my list, a group's details and
+// members, renaming, leaving and deleting.
+import type { FriendState, GroupDetail, GroupSummary, Identity } from "../../shared/api-types.ts";
 import { PIN_RE } from "../config/constants.ts";
-import { cleanName } from "../domain/text.ts";
-import { textField } from "../domain/text.ts";
-import { ApiError, conflict, needGroupAdmin, notFound } from "../http/ApiError.ts";
+import { cleanName, textField } from "../domain/text.ts";
+import { ApiError, conflict, needGroupAdmin } from "../http/ApiError.ts";
 import type { FriendshipRepository } from "../repository/FriendshipRepository.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
-import type { SessionRepository } from "../repository/SessionRepository.ts";
 import type { Transaction } from "../repository/Transaction.ts";
-import type { CurrentUser, Role } from "../repository/types.ts";
+import type { CurrentUser } from "../repository/types.ts";
 import type { GroupPinGuard } from "../security/GroupPinGuard.ts";
 import type { PasswordHasher } from "../security/PasswordHasher.ts";
 import { newId, newUrlToken } from "../security/crypto.ts";
-import type { Notifier } from "./Notifier.ts";
-
-// A group as seen by one of its members (see GroupAccess).
-export type GroupScope = { gid: string; user: CurrentUser; role: Role; isAdmin: boolean; name: string; pinHash: string | null };
+import type { GroupScope } from "./GroupScope.ts";
 
 export class GroupService {
   private readonly tx: Transaction;
   private readonly groups: GroupRepository;
   private readonly friendships: FriendshipRepository;
-  private readonly sessions: SessionRepository;
   private readonly hasher: PasswordHasher;
   private readonly pins: GroupPinGuard;
-  private readonly notify: Notifier;
-  constructor(deps: { tx: Transaction; groups: GroupRepository; friendships: FriendshipRepository; sessions: SessionRepository; hasher: PasswordHasher; pins: GroupPinGuard; notify: Notifier }) {
-    this.tx = deps.tx; this.groups = deps.groups; this.friendships = deps.friendships; this.sessions = deps.sessions;
-    this.hasher = deps.hasher; this.pins = deps.pins; this.notify = deps.notify;
+  constructor(deps: { tx: Transaction; groups: GroupRepository; friendships: FriendshipRepository; hasher: PasswordHasher; pins: GroupPinGuard }) {
+    this.tx = deps.tx; this.groups = deps.groups; this.friendships = deps.friendships; this.hasher = deps.hasher; this.pins = deps.pins;
   }
 
   // Anyone can create a group; they are its first admin.
@@ -48,92 +40,6 @@ export class GroupService {
   async listMine(u: CurrentUser): Promise<{ groups: GroupSummary[] }> {
     const r = await this.groups.listForUser(u.id, u.tokenHash, Date.now());
     return { groups: r.results.map(x => ({ ...x, hasPin: !!x.hasPin, unlocked: !!x.unlocked })) };
-  }
-
-  // Groups I've been invited to and haven't answered yet.
-  async invitations(u: CurrentUser): Promise<{ invitations: Invitation[] }> {
-    const r = await this.groups.invitationsFor(u.id);
-    return { invitations: r.results.map(x => ({ ...x, hasPin: !!x.hasPin })) };
-  }
-
-  // Accept an invitation (with the group's PIN, read only if it has one).
-  async acceptInvitation(u: CurrentUser, gid: string, pin: () => Promise<unknown>) {
-    const row = await this.groups.membershipWithGroup(gid, u.id);
-    if (!row || row.status !== "invited") throw notFound("This invitation is no longer open.");
-    if (row.pin_hash) await this.pins.check(u, gid, row.pin_hash, await pin());
-    const admins = await this.groups.adminIds(gid);
-    await this.tx.run([
-      this.groups.acceptInvitationStmt(gid, u.id, u.name, Date.now()),
-      this.pins.unlockStmt(u, gid),
-      ...admins.filter(a => a !== u.id).map(to => this.notify.stmt({ to, groupId: gid, kind: "member_joined", title: `${u.name} joined “${row.name}”`, body: "They accepted your invitation.", link: `#/g/${gid}`, actor: u.name })),
-    ]);
-    return { ok: true, groupId: gid };
-  }
-
-  async declineInvitation(u: CurrentUser, gid: string) {
-    const row = await this.groups.membershipWithGroup(gid, u.id);
-    if (!row || row.status !== "invited") throw notFound("This invitation is no longer open.");
-    await this.groups.declineInvitation(gid, u.id);
-    return { ok: true };
-  }
-
-  // ----- Joining with an invite link / QR -----
-  // Which group a link is for, and where I stand with it.
-  async joinLink(u: CurrentUser, code: string) {
-    const g = await this.groups.byInviteCode(code);
-    if (!g) throw notFound("This invite link doesn't work any more. Ask someone in the group for a new one.");
-    const mine = await this.groups.membership(g.id, u.id);
-    const status = mine && mine.status !== "removed" ? mine.status : null;
-    const memberCount = await this.groups.activeCount(g.id);
-    return { g, status, memberCount };
-  }
-
-  // Ask to join with a link (with the group's PIN). A group admin then
-  // approves; someone already invited joins straight away.
-  async join(u: CurrentUser, link: Awaited<ReturnType<GroupService["joinLink"]>>, rateLimited: () => Promise<boolean>, pin: () => Promise<unknown>) {
-    const { g, status } = link;
-    if (status === "active") return { ok: true, groupId: g.id, status: "active" };
-    if (status === "pending") throw conflict("You've already asked to join. A group admin will let you in.");
-    if (await rateLimited()) throw new ApiError("Too many attempts. Please wait a few minutes and try again.", 429);
-    if (g.pin_hash) await this.pins.check(u, g.id, g.pin_hash, await pin());
-    const now = Date.now();
-    if (status === "invited") {
-      await this.tx.run([this.groups.joinAsInvitedStmt(g.id, u.id, u.name, now), this.pins.unlockStmt(u, g.id)]);
-      return { ok: true, groupId: g.id, status: "active" };
-    }
-    const admins = await this.groups.adminIds(g.id);
-    await this.tx.run([
-      this.groups.askToJoinStmt(g.id, u.id, u.name),
-      this.pins.unlockStmt(u, g.id),
-      ...admins.map(to => this.notify.stmt({ to, groupId: g.id, kind: "join_request", title: `${u.name} asked to join “${g.name}”`, body: "Let them in from Members → Waiting.", link: `#/g/${g.id}`, actor: u.name })),
-    ]);
-    return { ok: true, groupId: g.id, status: "pending" };
-  }
-
-  // ----- Inside a group -----
-  // Opening a group with its PIN (remembered for a day on this device).
-  async unlock(s: GroupScope, pin: () => Promise<unknown>) {
-    if (!s.pinHash) return { ok: true };
-    await this.pins.check(s.user, s.gid, s.pinHash, await pin());
-    await this.tx.run([this.pins.unlockStmt(s.user, s.gid), this.sessions.deleteExpiredUnlocksStmt(Date.now())]);
-    return { ok: true };
-  }
-
-  // An admin sets or changes the group's PIN. Everyone else then enters the
-  // new one next time they open the group.
-  async setPin(s: GroupScope, pinValue: () => Promise<unknown>) {
-    if (!s.isAdmin) throw needGroupAdmin();
-    const pin = textField(await pinValue());
-    if (!PIN_RE.test(pin)) throw new ApiError("Choose a 4-digit PIN.");
-    const others = await this.groups.otherActiveIds(s.gid, s.user.id);
-    const u = s.user;
-    await this.tx.run([
-      this.groups.setPinStmt(s.gid, await this.hasher.hash(pin)),
-      this.sessions.deleteUnlocksForGroupStmt(s.gid),
-      this.pins.unlockStmt(u, s.gid),
-      ...others.map(to => this.notify.stmt({ to, groupId: s.gid, kind: "group_pin", title: `${u.name} ${s.pinHash ? "changed" : "set"} the PIN of “${s.name}”`, body: "Ask them for it: you'll need it to open the group.", link: `#/g/${s.gid}`, actor: u.name })),
-    ]);
-    return { ok: true };
   }
 
   // The group with its members (and, for admins, who is waiting).
@@ -156,21 +62,6 @@ export class GroupService {
       waiting: s.isAdmin ? all.filter(x => ["pending", "suggested", "invited"].includes(x.status)).map(pick) : [],
       me: { id: u.id, name: u.name, isAdmin: s.isAdmin, role: s.role },
     };
-  }
-
-  // The group's invite link / QR (#/join/<code>). Everyone in the group can
-  // see and share it; the first admin to look makes it if there is none.
-  async inviteLink(s: GroupScope) {
-    let code = (await this.groups.inviteCode(s.gid))?.invite_code || null;
-    if (!code && s.isAdmin) { code = newUrlToken(); await this.groups.setInviteCodeIfNone(s.gid, code); }
-    return { code: (await this.groups.inviteCode(s.gid))?.invite_code || null, canManage: s.isAdmin };
-  }
-  // Admins replace the link (old ones stop working) or turn it off.
-  async changeInviteLink(s: GroupScope, action: "reset" | "off") {
-    if (!s.isAdmin) throw needGroupAdmin();
-    const code = action === "reset" ? newUrlToken() : null;
-    await this.groups.setInviteCode(s.gid, code);
-    return { code, canManage: true };
   }
 
   async leave(s: GroupScope) {
