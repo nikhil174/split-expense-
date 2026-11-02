@@ -16,6 +16,8 @@
 //   splitEdges:  [{ payerId, memberId, amountCents }]         split shares
 //   settlements: [{ fromMemberId, toMemberId, amountCents }]  repayments
 
+import type { PaymentKind } from "./payments.ts";
+
 export type PaidTotal = { memberId: string; amountCents: number };
 export type SplitEdge = { payerId: string; memberId: string; amountCents: number };
 export type Repayment = { fromMemberId: string; toMemberId: string; amountCents: number };
@@ -127,10 +129,10 @@ export function validateSettlement({ debts, fromMemberId, toMemberId, amountCent
 }
 
 export type ShareActivityRow = { expenseId: string; description: string; paidBy: string; memberId: string; amountCents: number; totalCents: number; createdAt: number };
-export type PaymentActivityRow = { id: string; fromMemberId: string; toMemberId: string; amountCents: number; createdAt: number };
+export type PaymentActivityRow = { id: string; fromMemberId: string; toMemberId: string; amountCents: number; createdAt: number; kind?: PaymentKind };
 export type ActivityItem =
   | { type: "expense"; id: string; description: string; paidBy: string; totalCents: number; shareCents: number; effectCents: number; createdAt: number; runningCents?: number }
-  | { type: "payment"; id: string; fromMemberId: string; toMemberId: string; amountCents: number; effectCents: number; createdAt: number; runningCents?: number };
+  | { type: "payment"; id: string; fromMemberId: string; toMemberId: string; amountCents: number; effectCents: number; createdAt: number; kind?: PaymentKind; runningCents?: number };
 
 // Person-to-person drill-down between `me` and `other`, in the same direct
 // attribution model. Positive amounts mean `other` owes `me` more.
@@ -152,8 +154,10 @@ export function pairwiseActivity({ shares = [], settlements = [], me, other }: {
   }
   for (const s of settlements) {
     const cents = assertCents(s.amountCents);
-    if (s.fromMemberId === me && s.toMemberId === other) items.push({ type: "payment", id: s.id, fromMemberId: me, toMemberId: other, amountCents: cents, effectCents: cents, createdAt: s.createdAt });
-    else if (s.fromMemberId === other && s.toMemberId === me) items.push({ type: "payment", id: s.id, fromMemberId: other, toMemberId: me, amountCents: cents, effectCents: -cents, createdAt: s.createdAt });
+    // kind: "payment", or "waiver" when the lender let the debtor off.
+    const kind = s.kind === undefined ? {} : { kind: s.kind };
+    if (s.fromMemberId === me && s.toMemberId === other) items.push({ type: "payment", id: s.id, fromMemberId: me, toMemberId: other, amountCents: cents, effectCents: cents, createdAt: s.createdAt, ...kind });
+    else if (s.fromMemberId === other && s.toMemberId === me) items.push({ type: "payment", id: s.id, fromMemberId: other, toMemberId: me, amountCents: cents, effectCents: -cents, createdAt: s.createdAt, ...kind });
   }
   items.sort((a, b) => a.createdAt - b.createdAt || String(a.id).localeCompare(String(b.id)));
   let running = 0;

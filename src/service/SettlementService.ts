@@ -6,7 +6,7 @@ import type { Clock } from "../config/Clock.ts";
 import type { Untrusted } from "../domain/input.ts";
 import { nameLookup } from "../domain/members.ts";
 import { parseAmountToCents, rupees } from "../domain/money.ts";
-import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, needsAdminApproval, PaymentStatus, type PaymentActor } from "../domain/payments.ts";
+import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, needsAdminApproval, PaymentKind, PaymentStatus, type PaymentActor } from "../domain/payments.ts";
 import { computePairwiseDebts, debtsForMember, outstandingDebt, SettlementError, validateSettlement, type Debt } from "../domain/settlement.ts";
 import { textField } from "../domain/text.ts";
 import { ApiError, conflict, forbidden, notFound } from "../http/ApiError.ts";
@@ -123,7 +123,7 @@ export class SettlementService {
     // a payment to someone who left (who can't confirm it any more).
     const status = initialStatus(to, actorIn(s), byId.get(to)!.active);
     const settlementId = newId(), now = this.clock.now();
-    const result = await this.settlements.insertIfOwed({ id: settlementId, gid, from, to, cents, createdBy: u.id, now, status });
+    const result = await this.settlements.insertIfOwed({ id: settlementId, gid, from, to, cents, createdBy: u.id, now, status, kind: PaymentKind.Payment });
     if (changesOf(result) !== 1) throw conflict("The outstanding amount changed. Refresh and try again.");
     if (proof) await this.settlements.insertProof(settlementId, proof.mime, proof.base64, now);
     const notes = this.paymentNotes.recorded(
@@ -185,7 +185,7 @@ export class SettlementService {
     const rows = r.results.map(x => {
       const needsAdmin = !!x.needsAdmin;
       const decide = awaitsDecisionBy(x, { id: u.id, isAdmin: !!x.iAmAdmin });
-      return { id: x.id, groupId: x.groupId, groupName: x.groupName, fromMemberId: x.fromMemberId, fromName: x.fromName, toMemberId: x.toMemberId, toName: x.toName, amountCents: x.amountCents, createdAt: x.createdAt, hasProof: !!x.hasProof, needsAdmin, incoming: decide };
+      return { id: x.id, groupId: x.groupId, groupName: x.groupName, fromMemberId: x.fromMemberId, fromName: x.fromName, toMemberId: x.toMemberId, toName: x.toName, amountCents: x.amountCents, kind: x.kind, createdAt: x.createdAt, hasProof: !!x.hasProof, needsAdmin, incoming: decide };
     });
     return { toConfirm: rows.filter(x => x.incoming), waiting: rows.filter(x => !x.incoming && (x.fromMemberId === u.id || x.toMemberId === u.id)) };
   }

@@ -149,7 +149,7 @@ export class InsightsService {
       // Payments not counted yet (or never): listed, but they don't move the balance.
       for (const r of pays.results) {
         if (r.status === PaymentStatus.Confirmed || !((r.fromMemberId === mid && r.toMemberId === o.id) || (r.fromMemberId === o.id && r.toMemberId === mid))) continue;
-        items.push({ type: "payment", id: r.id, fromMemberId: r.fromMemberId, toMemberId: r.toMemberId, amountCents: Number(r.amountCents), effectCents: 0, createdAt: r.createdAt, status: r.status });
+        items.push({ type: "payment", id: r.id, fromMemberId: r.fromMemberId, toMemberId: r.toMemberId, amountCents: Number(r.amountCents), effectCents: 0, createdAt: r.createdAt, kind: r.kind, status: r.status });
       }
       items.sort((a, b) => a.createdAt - b.createdAt || String(a.id).localeCompare(String(b.id)));
       let running = 0;
