@@ -2,6 +2,8 @@
 
 Split It is a free, ad-free web app (installable on phones) for sharing trip and group expenses: who paid, who owes whom, and settling up by UPI. This document describes the system as a whole. The low-level design ([LLD.md](LLD.md)) covers its code: modules, classes, API and schema.
 
+All diagrams are on the [Split It design board in Miro](https://miro.com/app/board/uXjVESjyb2E=/). Each section links to its frame.
+
 ## 1. Scope
 
 **Users.** Friends who travel or live together a few times a year, on phones. A person has one account and can be in any number of groups; groups don't see each other.
@@ -34,26 +36,7 @@ Split It is a free, ad-free web app (installable on phones) for sharing trip and
 
 One Cloudflare Worker serves both the API (`/api/*`) and the React app (everything else) from the same origin, so the login cookie needs no cross-site handling.
 
-```mermaid
-flowchart LR
-  subgraph Phone["Phone / browser"]
-    App["React app (PWA)<br/>TanStack Query cache"]
-    SW["Service worker<br/>app shell, push"]
-  end
-  subgraph CF["Cloudflare"]
-    W["Worker<br/>API + static assets"]
-    D1[("D1 database<br/>SQLite")]
-    Cron["Cron trigger<br/>daily 03:17 UTC"]
-  end
-  App -- "HTTPS /api/* (session cookie)" --> W
-  App -- "HTML, JS, CSS" --> W
-  W --> D1
-  Cron --> W
-  W -- "email links" --> Brevo["Brevo<br/>(email)"]
-  W -- "Web Push (VAPID)" --> Push["Push services<br/>FCM / Apple / Mozilla"]
-  Push --> SW
-  W -- "verify sign-in token" --> Google["Google keys (JWKS)"]
-```
+**Diagram:** [Architecture](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111810287) (Miro board)
 
 | Component | Technology | Responsibility |
 |---|---|---|
@@ -70,21 +53,7 @@ flowchart LR
 
 ## 4. Data
 
-```mermaid
-erDiagram
-  USER ||--o{ SESSION : "signed in on"
-  USER ||--o{ MEMBERSHIP : "is in"
-  GROUP ||--o{ MEMBERSHIP : has
-  GROUP ||--o{ EXPENSE : has
-  EXPENSE ||--|{ SPLIT : "shared as"
-  GROUP ||--o{ PAYMENT : has
-  PAYMENT ||--o| SCREENSHOT : "may carry"
-  GROUP ||--o{ HISTORY : logs
-  USER ||--o| UPI : "gets paid by"
-  USER ||--o{ NOTIFICATION : receives
-  USER ||--o{ PHONE : "pushes to"
-  USER }o--o{ USER : "friends with"
-```
+**Diagram:** [Data model](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111810288) (Miro board)
 
 - **A person's id never changes.** Expenses, splits, payments and history all refer to it, and a trigger refuses ids that have no account.
 - **Balances are never stored.** They are computed from expenses, splits and confirmed payments on every read, so they can't drift. Payments waiting for confirmation or rejected don't count.
@@ -97,41 +66,13 @@ erDiagram
 
 **Opening a group.** Every group request checks that the person is an active member (404 otherwise) and that this device has opened the group with its PIN in the last day (423 otherwise). The app then asks for the PIN.
 
-```mermaid
-sequenceDiagram
-  participant P as Phone
-  participant W as Worker
-  participant DB as D1
-  P->>W: GET /api/groups/:id/expenses
-  W->>DB: session → account, membership, group PIN, unlocked on this device?
-  alt not unlocked
-    W-->>P: 423 group_locked
-    P->>W: POST /api/groups/:id/unlock {pin}
-    W->>DB: check PIN (5 wrong per 15 min), remember for a day
-    W-->>P: 200
-    P->>W: GET /api/groups/:id/expenses (again)
-  end
-  W-->>P: 200 expenses
-```
+**Diagram:** [Opening a locked group](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111810289) (Miro board)
 
 **Adding an expense.** The server validates the amount (paise), the payer and the split, then writes the expense, its splits, a notification for everyone in it, and a history entry in one atomic batch. Pushes go out after the response.
 
 **Settling up.**
 
-```mermaid
-sequenceDiagram
-  participant B as Bea (owes)
-  participant C as Cy (owed)
-  participant A as An admin
-  participant W as Worker
-  B->>W: record "I paid Cy ₹500"
-  W->>W: fits what Bea owes, minus payments already waiting?
-  W-->>C: notification: confirm it
-  C->>W: confirm
-  W->>W: still fits? (expenses may have changed)
-  W-->>B: notification: confirmed, it counts
-  Note over C,A: "They paid me": Cy records it, an admin confirms it instead
-```
+**Diagram:** [Settling up](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111810290) (Miro board)
 
 A payment is written only if the amount still fits what is owed, checked inside the SQL INSERT itself. Two payments recorded at the same moment can therefore never overpay a debt. Confirming re-checks the amount, because expenses may have changed since.
 

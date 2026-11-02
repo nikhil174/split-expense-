@@ -2,6 +2,8 @@
 
 How the system in [HLD.md](HLD.md) is built: code structure, request handling, every module's responsibility, the API, the schema, state machines and algorithms.
 
+All diagrams are on the [Split It design board in Miro](https://miro.com/app/board/uXjVESjyb2E=/). Each section links to its frame.
+
 ## 1. Conventions
 
 - **Money** is integer paise (`*Cents`, `amount_cents`). Rupees appear only as input strings and display values.
@@ -32,22 +34,11 @@ tests/                unit, API, migration, golden master; e2e/ browser test
 
 **Dependency rule:** each layer uses only the layers below it. Nothing imports controllers except `app/`.
 
-```mermaid
-flowchart TB
-  index["index.ts"] --> app["app/<br/>pipeline + Container"]
-  app --> controller["controller/"]
-  controller --> service["service/"]
-  service --> repository["repository/"]
-  service --> security["security/"]
-  service --> domain["domain/"]
-  service --> integration["integration/"]
-  security --> repository
-  repository --> D1[("D1")]
-  controller & service & security & repository --> config["config/ + http/"]
-  service --> shared["shared/api-types.ts"]
-```
+**Diagram:** [Layers and the dependency rule](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977054) (Miro board)
 
 ## 3. Request pipeline
+
+**Diagram:** [Request pipeline](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977055) (Miro board)
 
 `index.ts` handles `OPTIONS` (CORS preflight) and refuses cross-site writes (an `Origin` that isn't this site gets 403). It builds a `RequestContext` and calls `handleApi`, which runs these stages in order. The first stage that answers wins.
 
@@ -80,31 +71,7 @@ type InGroup = Authed & { scope: GroupScope };   // gid, user, role, isAdmin, na
 
 `Container` is built per request, because the environment (secrets, feature switches) is read per request. It creates each object once and passes in what it depends on through its constructor. No class creates its own dependencies.
 
-```mermaid
-classDiagram
-  class Transaction { <<interface>> run(statements) }
-  class Clock { <<interface>> now() }
-  D1Transaction ..|> Transaction
-  SettlementService --> SettlementRepository
-  SettlementService --> ExpenseRepository
-  SettlementService --> GroupRepository
-  SettlementService --> HistoryRepository
-  SettlementService --> PaymentNotifications
-  SettlementService --> Transaction
-  SettlementService --> Clock
-  PaymentNotifications --> Notifier
-  PaymentNotifications --> Transaction
-  Notifier --> NotificationRepository
-  GroupAccessService --> GroupPinGuard
-  GroupPinGuard --> PasswordHasher
-  GroupPinGuard --> RateLimiter
-  RateLimiter --> RateLimitRepository
-  AccountPasswordGuard --> UserRepository
-  AccountPasswordGuard --> PasswordHasher
-  AuthService --> AccountPasswordGuard
-  AuthService --> EmailLinkService
-  SessionManager --> SessionRepository
-```
+**Diagram:** [Dependency injection](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977056) (Miro board)
 
 ## 5. Modules
 
@@ -300,33 +267,9 @@ All bodies are JSON. "Signed in" routes need the `split_user` cookie. "In group"
 
 ## 8. State machines
 
-```mermaid
-stateDiagram-v2
-  direction LR
-  state "Membership" as M {
-    [*] --> invited: admin invites
-    [*] --> pending: asks to join (link / QR)
-    [*] --> suggested: member suggests a friend
-    suggested --> invited: admin approves
-    invited --> active: accepts (with PIN)
-    pending --> active: admin lets in
-    suggested --> removed: admin rejects
-    invited --> removed: declines / admin cancels
-    pending --> removed: admin rejects
-    active --> removed: leaves / admin removes
-    removed --> invited: invited again
-  }
-```
+**Diagram:** [Membership states](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977057) (Miro board)
 
-```mermaid
-stateDiagram-v2
-  direction LR
-  [*] --> pending: recorded
-  [*] --> confirmed: an admin records money they received, or a payment to someone who left
-  pending --> confirmed: receiver confirms (admin, if "they paid me"), and it still fits what is owed
-  pending --> rejected: receiver / admin rejects
-  pending --> [*]: cancelled (deleted; kept in history)
-```
+**Diagram:** [Payment states](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977058) (Miro board)
 
 **Friendships:** none → `pending` (someone asks) → `accepted` (the other person accepts, or asks back). Declining, cancelling or removing deletes the row.
 
@@ -371,28 +314,7 @@ Balances in a group always sum to zero. The same ledger feeds every screen, so t
 
 **Recording "they paid me".**
 
-```mermaid
-sequenceDiagram
-  participant C as SettlementController
-  participant S as SettlementService
-  participant P as domain/payments
-  participant R as SettlementRepository
-  participant N as PaymentNotifications
-  participant T as Transaction
-  C->>C: rate limit (settlement), read body (≤ 512 KB)
-  C->>S: record(scope, body)
-  S->>S: parse screenshot, members, amount
-  S->>P: mayRecord(from, to, actor)
-  S->>S: validateSettlement (owed? not more?), pending already waiting?
-  S->>P: initialStatus(to, actor, receiverActive) → pending
-  S->>R: insertIfOwed(…) (conditional INSERT)
-  R-->>S: 1 row (else 409)
-  S->>R: insertProof (if any)
-  S->>N: recorded(…) → statements for admins and the payer
-  S->>T: run(notes)
-  S-->>C: { ok, id, status }
-  Note over C: after the response: push the outbox to phones
-```
+**Diagram:** [Recording a payment (they paid me)](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977059) (Miro board)
 
 **Editing an expense:** rate limit → find the expense (404) → payer or admin (403) → read and parse the body → old splits → one transaction: history entry (before and after), notifications (including people removed from the split), update, delete the old splits, insert the new splits.
 
