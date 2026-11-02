@@ -5,6 +5,7 @@ import type { Debt as ApiDebt, Debts, Mine, PendingPayment, Settlement } from ".
 import { FORMER_MEMBER } from "../config/constants.ts";
 import { nameLookup } from "../domain/members.ts";
 import { inrText, parseAmountToCents, rupees } from "../domain/money.ts";
+import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, needsAdminApproval, PaymentStatus, type PaymentActor } from "../domain/payments.ts";
 import { computePairwiseDebts, debtsForMember, outstandingDebt, SettlementError, validateSettlement, type Debt } from "../domain/settlement.ts";
 import { textField } from "../domain/text.ts";
 import { ApiError, conflict, forbidden, notFound } from "../http/ApiError.ts";
@@ -16,6 +17,9 @@ import { changesOf } from "../repository/db.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import { newId } from "../security/crypto.ts";
 import type { GroupScope } from "./GroupService.ts";
+
+// The person acting in a group, as the payment rules see them.
+const actorIn = (s: GroupScope): PaymentActor => ({ id: s.user.id, isAdmin: s.isAdmin });
 import type { Notifier } from "./Notifier.ts";
 import { parseImage } from "./PaymentMethodService.ts";
 
@@ -32,14 +36,14 @@ export class SettlementService {
 
   // The group's payments, newest first, with what I may do with each.
   async list(s: GroupScope): Promise<{ settlements: Settlement[] }> {
-    const u = s.user, isAdmin = s.isAdmin;
+    const actor = actorIn(s);
     const r = await this.settlements.list(s.gid);
     return { settlements: r.results.map(x => ({
       ...x, amount: rupees(x.amountCents),
       // needsAdmin: recorded by the receiver ("they paid me"); an admin decides it.
-      needsAdmin: x.createdBy === x.toMemberId,
-      canDecide: x.status === "pending" && (x.createdBy === x.toMemberId ? isAdmin : isAdmin || x.toMemberId === u.id),
-      canCancel: x.status === "pending" && (isAdmin || x.fromMemberId === u.id || x.createdBy === u.id),
+      needsAdmin: needsAdminApproval(x),
+      canDecide: canDecide(x, actor),
+      canCancel: canCancel(x, actor),
       hasProof: !!x.hasProof,
     })) };
   }
@@ -56,7 +60,7 @@ export class SettlementService {
     // active member. The admin may record any payment (including to or from
     // a removed member, so such debts can still be cleared).
     // (Members can also record "they paid me"; an admin approves it.)
-    const canRecord = (d: Debt) => isAdmin || (d.fromMemberId === u.id && activeIds.has(d.toMemberId)) || d.toMemberId === u.id;
+    const canRecord = (d: Debt) => mayRecordDebt(d, actorIn(s), id => activeIds.has(id));
     const waiting = new Map((await this.settlements.pendingTotals(s.gid)).results.map(x => [x.f + ">" + x.t, Number(x.c)]));
     // waitingCents: already sent and waiting for the receiver to confirm, so
     // at most amountCents - waitingCents more can be recorded.
@@ -89,7 +93,7 @@ export class SettlementService {
     if (from === to) throw new ApiError("A member cannot pay themselves.");
     // Members record a payment they made (the receiver confirms it), or one
     // made to them ("they paid me": a group admin approves it).
-    if (!isAdmin && from !== u.id && to !== u.id) throw forbidden("You can only record a payment you made or one made to you.");
+    if (!mayRecord(from, to, actorIn(s))) throw forbidden("You can only record a payment you made or one made to you.");
     let cents: number;
     try { cents = parseAmountToCents(b?.amount); } catch (error) { throw new ApiError((error as Error).message); }
     const members = await this.groups.members(gid);
@@ -114,7 +118,7 @@ export class SettlementService {
     // approve it, unless the receiver is an admin. An admin may also record
     // a payment to someone who left (who can't confirm it any more).
     const byReceiver = to === u.id;
-    const status = (byReceiver && isAdmin) || (isAdmin && !byId.get(to)!.active) ? "confirmed" : "pending";
+    const status = initialStatus(to, actorIn(s), byId.get(to)!.active);
     const settlementId = newId(), now = Date.now();
     const result = await this.settlements.insertIfOwed({ id: settlementId, gid, from, to, cents, createdBy: u.id, now, status });
     if (changesOf(result) !== 1) throw conflict("The outstanding amount changed. Refresh and try again.");
@@ -122,18 +126,19 @@ export class SettlementService {
     // Tell the receiver (to confirm it) and, if someone else recorded it, the payer.
     // "They paid me" waiting for approval goes to the group's admins.
     const nm = (x: string) => byId.get(x)?.name || FORMER_MEMBER, notes: D1PreparedStatement[] = [];
-    if (byReceiver && status === "pending") {
+    if (byReceiver && status === PaymentStatus.Pending) {
       for (const a of members.filter(x => x.role === "admin" && x.active && x.id !== u.id)) {
         notes.push(this.notify.stmt({ to: a.id, groupId: gid, kind: "payment_admin_approval", actor: u.name, title: `${u.name} says ${nm(from)} paid them ${inrText(cents)}`, body: "Approve it if it's right; it counts once an admin approves.", link: `#/g/${gid}` }));
       }
     }
-    if (to !== u.id) notes.push(this.notify.stmt({ to, groupId: gid, kind: status === "pending" ? "payment_pending" : "payment_recorded", actor: u.name,
-      title: status === "pending" ? `${nm(from)} says they paid you ${inrText(cents)}` : `${u.name} recorded ${inrText(cents)} from ${nm(from)} to you`,
+    const pending = status === PaymentStatus.Pending;
+    if (to !== u.id) notes.push(this.notify.stmt({ to, groupId: gid, kind: pending ? "payment_pending" : "payment_recorded", actor: u.name,
+      title: pending ? `${nm(from)} says they paid you ${inrText(cents)}` : `${u.name} recorded ${inrText(cents)} from ${nm(from)} to you`,
       // Pending: the group, where the approve card is on top; otherwise what's between you two.
-      body: status === "pending" ? (proof ? "They attached a screenshot. Confirm it once you've received it." : "Confirm it once you've received it.") : "It counts in your balance now.", link: status === "pending" ? `#/g/${gid}` : `#/g/${gid}/p/${from}` }));
+      body: pending ? (proof ? "They attached a screenshot. Confirm it once you've received it." : "Confirm it once you've received it.") : "It counts in your balance now.", link: pending ? `#/g/${gid}` : `#/g/${gid}/p/${from}` }));
     if (from !== u.id) notes.push(this.notify.stmt({ to: from, groupId: gid, kind: "payment_recorded", actor: u.name,
       title: `${u.name} recorded your payment of ${inrText(cents)} to ${to === u.id ? "them" : nm(to)}`,
-      body: status === "pending" ? (byReceiver ? "It counts once a group admin approves it." : `It counts once ${nm(to)} confirms it.`) : "It counts in your balance now.", link: `#/g/${gid}/p/${to}` }));
+      body: pending ? (byReceiver ? "It counts once a group admin approves it." : `It counts once ${nm(to)} confirms it.`) : "It counts in your balance now.", link: `#/g/${gid}/p/${to}` }));
     if (notes.length) await this.db.batch(notes);
     return { ok: true, id: settlementId, amountCents: cents, status };
   }
@@ -148,18 +153,19 @@ export class SettlementService {
   // The receiver (or an admin) confirms or rejects a pending payment; the
   // payer, whoever recorded it, or an admin can cancel it while it's pending.
   async decide(s: GroupScope, sid: string, action: "confirm" | "reject" | "cancel") {
-    const u = s.user, gid = s.gid, isAdmin = s.isAdmin;
+    const u = s.user, gid = s.gid, actor = actorIn(s);
     const pay = await this.settlements.find(sid, gid);
     if (!pay) throw notFound("Payment not found.");
-    if (pay.status !== "pending") throw conflict(`This payment was already ${pay.status}.`);
+    const facts = { fromMemberId: pay.fromId, toMemberId: pay.toId, createdBy: pay.createdBy, status: pay.status };
+    if (pay.status !== PaymentStatus.Pending) throw conflict(`This payment was already ${pay.status}.`);
     const now = Date.now();
     const nm = nameLookup(await this.groups.members(gid));
     // Each side is taken to what's between them and the other person.
     const tell = (to: string, kind: string, title: string, body: string) => to === u.id ? Promise.resolve() : this.db.batch([this.notify.stmt({ to, groupId: gid, kind, title, body, link: `#/g/${gid}/p/${to === pay.fromId ? pay.toId : pay.fromId}`, actor: u.name })]);
     // "They paid me", recorded by the receiver: a group admin decides it.
-    const needsAdmin = pay.createdBy === pay.toId;
+    const needsAdmin = needsAdminApproval(facts);
     if (action === "cancel") {
-      if (!isAdmin && pay.fromId !== u.id && pay.createdBy !== u.id) throw forbidden("Only the person who recorded it, the payer or a group admin can cancel this payment.");
+      if (!mayCancel(facts, actor)) throw forbidden("Only the person who recorded it, the payer or a group admin can cancel this payment.");
       await this.db.batch([
         this.history.insertStmt({ gid, entity: "payment", entityId: sid, action: "cancelled", actor: u.id, before: { fromMemberId: pay.fromId, toMemberId: pay.toId, amountCents: pay.cents, createdBy: pay.createdBy, createdAt: pay.createdAt } }),
         this.settlements.deleteProofStmt(sid),
@@ -173,8 +179,8 @@ export class SettlementService {
       }
       return { ok: true, cancelled: true };
     }
-    if (needsAdmin && !isAdmin) throw forbidden("A group admin approves this payment.");
-    if (!isAdmin && pay.toId !== u.id) throw forbidden("Only the person who received this payment can confirm or reject it.");
+    const refusal = decisionRefusal(facts, actor);
+    if (refusal) throw forbidden(refusal);
     if (action === "reject") {
       await this.settlements.reject(sid, u.id, now);
       if (needsAdmin) {
@@ -182,7 +188,7 @@ export class SettlementService {
         await tell(pay.fromId, "payment_rejected", `${u.name} didn't approve your payment of ${inrText(pay.cents)} to ${nm(pay.toId)}`, "It doesn't count. If you did pay, check with them and the admins.");
       }
       else await tell(pay.fromId, "payment_rejected", `${u.name} said they didn't receive your ${inrText(pay.cents)}`, "It doesn't count. Check with them and record it again if needed.");
-      return { ok: true, status: "rejected" };
+      return { ok: true, status: PaymentStatus.Rejected };
     }
     // Confirm only while it still fits what is owed (expenses may have changed).
     const result = await this.settlements.confirmIfOwed(sid, u.id, now, gid, pay.fromId, pay.toId);
@@ -191,7 +197,7 @@ export class SettlementService {
       await tell(pay.toId, "payment_confirmed", `${u.name} approved the ${inrText(pay.cents)} from ${nm(pay.fromId)}`, "It counts in your balance now.");
       await tell(pay.fromId, "payment_confirmed", `Your payment of ${inrText(pay.cents)} to ${nm(pay.toId)} is approved`, "It counts in your balance now.");
     } else await tell(pay.fromId, "payment_confirmed", `${u.name} confirmed your payment of ${inrText(pay.cents)}`, "It counts in your balance now.");
-    return { ok: true, status: "confirmed" };
+    return { ok: true, status: PaymentStatus.Confirmed };
   }
 
   // Payments waiting on me (to confirm) or on someone else (that I sent),
@@ -201,7 +207,7 @@ export class SettlementService {
     const r = await this.settlements.pendingFor(u.id);
     const rows = r.results.map(x => {
       const needsAdmin = !!x.needsAdmin;
-      const decide = needsAdmin ? !!x.iAmAdmin && x.createdBy !== u.id : x.toMemberId === u.id;
+      const decide = awaitsDecisionBy(x, { id: u.id, isAdmin: !!x.iAmAdmin });
       return { id: x.id, groupId: x.groupId, groupName: x.groupName, fromMemberId: x.fromMemberId, fromName: x.fromName, toMemberId: x.toMemberId, toName: x.toName, amountCents: x.amountCents, createdAt: x.createdAt, hasProof: !!x.hasProof, needsAdmin, incoming: decide };
     });
     return { toConfirm: rows.filter(x => x.incoming), waiting: rows.filter(x => !x.incoming && (x.fromMemberId === u.id || x.toMemberId === u.id)) };
