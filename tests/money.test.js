@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseAmountToCents, MAX_AMOUNT_CENTS } from "../src/money.js";
+import { parseAmountToCents, MAX_AMOUNT_CENTS } from "../src/domain/money.ts";
 
 test("parses rupee amounts into exact integer paise", () => {
   const cases = [["10", 1000], ["10.5", 1050], ["10.50", 1050], ["0.01", 1], [" 7 ", 700], [1000, 100000],

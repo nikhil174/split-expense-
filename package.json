@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:web": "vite",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.api.json && vite build",
     "deploy": "wrangler deploy",
     "db:migrate:remote": "wrangler d1 migrations apply split_expense_db --remote",
     "test": "node --test",
     "test:e2e": "node e2e/browser.e2e.mjs",
-    "build:web": "vite build"
+    "build:web": "vite build",
+    "golden:record": "node tests/golden/record.js",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.api.json",
+    "cf-typegen": "wrangler types worker-configuration.d.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -43,6 +46,6 @@
     "vaul": "^1.1.2"
   },
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.18"
   }
 }

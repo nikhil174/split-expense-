@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { allocateEqualSplit, membersInGroup, expensesInGroup } from "../src/split-logic.js";
+import { allocateEqualSplit, membersInGroup, expensesInGroup } from "../src/domain/split.ts";
 
 const users = Array.from({ length: 10 }, (_, i) => ({ id: `user-${i + 1}`, name: `User ${i + 1}` }));
 const groupMembers = [
@@ -100,7 +100,7 @@ for (let i = 1; i <= 10; i++) {
 }
 
 
-import { allocateManualSplit } from "../src/split-logic.js";
+import { allocateManualSplit } from "../src/domain/split.ts";
 
 const manualAllowed = ["nikhil", "vicky", "jagan", "anvitha"];
 

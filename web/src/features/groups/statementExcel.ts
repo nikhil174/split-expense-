@@ -5,21 +5,10 @@
 //  2. one sheet per other member: what's between the two of them, expense by
 //     expense, and each payment with whether it was paid back (confirmed),
 //     is waiting for approval, or was rejected, with a running balance.
-import { get } from "@/lib/api";
+import { get, type Statement, type StatementItem as Item } from "@/lib/api";
 import { buildXlsx, type Cell, type Sheet } from "@/lib/xlsx";
 
-type Item = {
-  type: "expense" | "payment"; id: string; createdAt: number; description?: string; paidByName?: string; totalCents?: number; shareCents?: number;
-  fromName?: string; toName?: string; amountCents?: number; effectCents: number; runningCents: number; status: "counted" | "confirmed" | "pending" | "rejected";
-};
-export type Statement = {
-  group: { id: string; name: string };
-  person: { id: string; name: string; username: string | null };
-  generatedAt: number;
-  totals: { paidCents: number; shareCents: number; balanceCents: number };
-  expenses: { id: string; createdAt: number; description: string; totalCents: number; paidByName: string; shareCents: number; cumulativeShareCents: number; splitCount: number }[];
-  pairs: { id: string; name: string; active: boolean; netCents: number; items: Item[] }[];
-};
+export type { Statement };
 
 const rs = (cents: number) => Math.round(cents) / 100;
 const money = (cents: number): Cell => ({ v: rs(cents), s: "money" });

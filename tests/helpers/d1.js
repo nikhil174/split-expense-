@@ -3,7 +3,7 @@
 // and foreign keys are enforced as they are in Cloudflare D1.
 import { readdir, readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
-import worker from "../../src/index.js";
+import worker from "../../src/index.ts";
 
 const MIGRATIONS_DIR = new URL("../../migrations/", import.meta.url);
 
