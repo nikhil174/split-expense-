@@ -35,6 +35,7 @@ import { MembershipService } from "../service/MembershipService.ts";
 import { NotificationService } from "../service/NotificationService.ts";
 import { Notifier } from "../service/Notifier.ts";
 import { PaymentMethodService } from "../service/PaymentMethodService.ts";
+import { PaymentNotifications } from "../service/PaymentNotifications.ts";
 import { SettlementService } from "../service/SettlementService.ts";
 import { SiteAdminService } from "../service/SiteAdminService.ts";
 
@@ -86,7 +87,7 @@ export class Container {
     this.groups = new GroupService({ tx, groups, friendships, sessions, hasher, pins, notify });
     this.members = new MembershipService({ tx, groups, users, friendships, notify });
     this.expenses = new ExpenseService({ tx, expenses, groups, history, notify });
-    this.settlements = new SettlementService({ tx, settlements, expenses, groups, history, notify });
+    this.settlements = new SettlementService({ tx, settlements, expenses, groups, history, paymentNotes: new PaymentNotifications(notify, tx) });
     this.insights = new InsightsService({ groups, expenses, settlements });
     this.paymentMethods = new PaymentMethodService({ methods: new PaymentMethodRepository(db), groups });
     this.friends = new FriendService({ tx, friendships, users, notify });
