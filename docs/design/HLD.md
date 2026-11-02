@@ -15,7 +15,7 @@ All diagrams are on the [Split It design board in Miro](https://miro.com/app/boa
 | Accounts | Sign up with name, username and password (email optional); sign in with username, email or Google; forgot password by email link; profile; merge an old second account |
 | Groups | Anyone creates a group and becomes its admin; 4-digit group PIN to join and to open (remembered for a day per device); invite by username or email, by invite link, or by QR; members suggest friends and admins approve; several admins per group |
 | Expenses | Equal or exact splits in paise; edit and delete by the payer or an admin; full edit history |
-| Settling up | Each person sees whom they owe and who owes them; UPI ID and QR per person; payments count only once confirmed (by the receiver, or by an admin for "they paid me"); payment screenshots |
+| Settling up | Each person sees whom they owe and who owes them; UPI ID and QR per person; payments count only once confirmed (by the receiver, or by an admin for "they paid me"); payment screenshots; "no need to pay": a lender lets someone off what they still owe, an admin approves it, and the whole group is told |
 | Insights | Per-person summaries, pair histories, group totals; Excel statement per person |
 | Notifications | In-app bell and phone push for anything that affects you |
 | Site owner | A hidden Admin tab, unlocked with the admin key: counts, accounts and groups in summary, clearing a forgotten group PIN. No access to anyone's expenses or passwords |
@@ -30,7 +30,7 @@ All diagrams are on the [Split It design board in Miro](https://miro.com/app/boa
 | Security and privacy | Passwords and PINs hashed with PBKDF2 and a server-side pepper; HttpOnly session cookies; rate limits and lockouts; every request validated on the server; groups isolated; the site owner can't see expenses |
 | Free to run | Cloudflare's free tier: one Worker, one D1 database, static assets on Cloudflare's CDN |
 | Fast on phones | Edge Worker close to users; app shell cached by a service worker; data cached on the phone and refreshed in the background |
-| Safe changes | 726 automated tests including a golden master of the whole API; a browser test; migrations versioned and applied by the deploy command |
+| Safe changes | 739 automated tests including a golden master of the whole API; a browser test; migrations versioned and applied by the deploy command |
 
 ## 3. Architecture
 
@@ -75,6 +75,8 @@ One Cloudflare Worker serves both the API (`/api/*`) and the React app (everythi
 **Diagram:** [Settling up](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111810290) (Miro board)
 
 A payment is written only if the amount still fits what is owed, checked inside the SQL INSERT itself. Two payments recorded at the same moment can therefore never overpay a debt. Confirming re-checks the amount, because expenses may have changed since.
+
+**Letting someone off ("no need to pay").** The lender can waive all or part of what someone still owes them. It is stored as a payment of kind `waiver` from the debtor to the lender, recorded by the lender, so the same overpay guard and ledger apply. A group admin approves it (at once when the lender is an admin; never the debtor themselves), and then every member of the group is notified.
 
 **Notifications.** A change and its notifications are written together. After the response, the Worker encrypts each notification for every phone the person enabled and sends it to that phone's push service. Phones that no longer exist (404/410) are forgotten.
 
@@ -122,7 +124,7 @@ A payment is written only if the amount still fits what is owed, checked inside 
 |---|---|
 | Unit | Money parsing, splits, debts, payment rules, text normalization, router, notifications, password lockout (with fakes and a fake clock) |
 | API | Every route against the real Worker with an in-memory SQLite database and all migrations |
-| Golden master | 416 scripted requests whose every response, email, push and final database row must match a recording |
+| Golden master | 456 scripted requests whose every response, email, push and final database row must match a recording |
 | Migration | All migrations on an empty database and on data from older versions |
 | Browser | Playwright on a phone-sized screen against a local Worker |
 | CI | GitHub Actions: type-check the app and the Worker, build, run all tests |
