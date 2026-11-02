@@ -2,6 +2,7 @@
 // produces besides the response (notifications to push to phones).
 import { MAX_BODY_BYTES } from "../config/constants.ts";
 import { databaseOf, type AppEnv } from "../config/env.ts";
+import type { Untrusted } from "../domain/input.ts";
 import type { PushNote } from "../integration/push.ts";
 import { sha256Hex } from "../security/crypto.ts";
 import { ApiError } from "./ApiError.ts";
@@ -28,7 +29,7 @@ export class RequestContext {
 
   // The JSON body, read only when a handler needs it (so the size limit
   // applies only then); null when empty or not JSON.
-  async body(maxBytes = MAX_BODY_BYTES): Promise<any> {
+  async body(maxBytes = MAX_BODY_BYTES): Promise<Untrusted<string>> {
     if (Number(this.req.headers.get("content-length") || 0) > maxBytes) throw new ApiError("Request body is too large.", 413);
     const text = await this.req.text();
     if (new TextEncoder().encode(text).length > maxBytes) throw new ApiError("Request body is too large.", 413);

@@ -2,6 +2,7 @@
 // another account of theirs.
 import { EMAIL_RE, USERNAME_RE } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
+import type { Untrusted } from "../domain/input.ts";
 import { cleanName, normEmail, normUsername } from "../domain/text.ts";
 import { ApiError, conflict, notFound } from "../http/ApiError.ts";
 import { emailEnabled } from "../integration/email.ts";
@@ -32,7 +33,7 @@ export class AccountService {
   }
 
   // Change my name, username and/or email (each only when given).
-  async updateProfile(u: CurrentUser, b: any, origin: string): Promise<void> {
+  async updateProfile(u: CurrentUser, b: Untrusted<"username" | "email" | "name">, origin: string): Promise<void> {
     if (b?.username !== undefined) {
       const username = normUsername(b.username);
       if (!USERNAME_RE.test(username)) throw new ApiError(USERNAME_HINT);
@@ -91,7 +92,7 @@ export class AccountService {
   }
 
   // Change my password (the current one is needed, if there is one).
-  async changePassword(u: CurrentUser, b: any): Promise<void> {
+  async changePassword(u: CurrentUser, b: Untrusted<"newPassword" | "newPin" | "currentPassword" | "currentPin">): Promise<void> {
     const newPin = passwordOf(b, "newPassword");
     if (!goodPassword(newPin)) throw new ApiError(PASSWORD_HINT);
     const row = (await this.users.passwordRow(u.id))!;
@@ -105,7 +106,7 @@ export class AccountService {
   // "I had another account": prove it with that account's username (or its
   // group and name) and password, then everything of it moves into this one.
   // Returns the other account's name.
-  async linkOtherAccount(u: CurrentUser, b: any): Promise<string> {
+  async linkOtherAccount(u: CurrentUser, b: Untrusted<"login" | "group" | "name" | "password" | "pin">): Promise<string> {
     const other = b?.login ? await this.users.findByLogin(b.login) : await this.users.findLegacy(b?.group, b?.name);
     if (other === "ambiguous") throw conflict("More than one account matches. Use that account's username instead.");
     if (!other) throw notFound("No account found. Check the username, or the group and name.");

@@ -2,6 +2,7 @@
 // history and told to everyone in them), listing, and the group's totals.
 import type { Expense, HistoryEntry } from "../../shared/api-types.ts";
 import { MAX_SPLIT_MEMBERS } from "../config/constants.ts";
+import type { Untrusted } from "../domain/input.ts";
 import { nameLookup } from "../domain/members.ts";
 import { parseAmountToCents, rupees } from "../domain/money.ts";
 import { allocateEqualSplit, allocateManualSplit, type ShareRow } from "../domain/split.ts";
@@ -16,6 +17,9 @@ import { newId } from "../security/crypto.ts";
 import type { GroupScope } from "./GroupScope.ts";
 import type { Notifier } from "./Notifier.ts";
 
+// An add/edit request: equal split among memberIds, or exact amounts per
+// person (splitMode "manual", allocations [{ memberId, amount }]).
+export type ExpenseRequest = Untrusted<"description" | "amount" | "paidBy" | "splitMode" | "memberIds" | "allocations">;
 export type ExpenseInput = { desc: string; cents: number; paidBy: string; splitRows: ShareRow[] };
 
 // What an expense looked like, for the history log.
@@ -33,7 +37,7 @@ export class ExpenseService {
 
   // Validates an add/edit expense request body against the group's active
   // members.
-  async parse(gid: string, b: any): Promise<ExpenseInput> {
+  async parse(gid: string, b: ExpenseRequest): Promise<ExpenseInput> {
     const desc = cleanName(b?.description);
     if (!desc || desc.length > 160) throw new ApiError("Enter a description of up to 160 characters.");
     let cents: number;
@@ -47,7 +51,7 @@ export class ExpenseService {
       if (!Array.isArray(b?.allocations) || b.allocations.length === 0) throw new ApiError("Enter at least one manual amount.");
       if (b.allocations.length > MAX_SPLIT_MEMBERS) throw new ApiError("Too many split members.");
       try {
-        const allocations = b.allocations.map((item: any) => ({ memberId: textField(item?.memberId), amountCents: parseAmountToCents(item?.amount, { allowZero: true }) }));
+        const allocations = b.allocations.map((item: Untrusted<"memberId" | "amount">) => ({ memberId: textField(item?.memberId), amountCents: parseAmountToCents(item?.amount, { allowZero: true }) }));
         splitRows = allocateManualSplit(cents, allocations, [...active]);
       } catch (error) { throw new ApiError((error as Error).message); }
     } else if (splitMode === "equal") {
@@ -66,7 +70,7 @@ export class ExpenseService {
     return { desc, cents, paidBy, splitRows };
   }
 
-  async add(s: GroupScope, b: any) {
+  async add(s: GroupScope, b: ExpenseRequest) {
     const { desc, cents, paidBy, splitRows } = await this.parse(s.gid, b);
     const eid = newId();
     const nameOf = nameLookup(await this.groups.members(s.gid));
@@ -81,7 +85,7 @@ export class ExpenseService {
 
   // Edit replaces the description, amount, payer and whole split; the same
   // people who may delete an expense (its payer or an admin) may edit it.
-  async edit(s: GroupScope, eid: string, body: () => Promise<any>) {
+  async edit(s: GroupScope, eid: string, body: () => Promise<ExpenseRequest>) {
     const e = await this.expenses.find(eid, s.gid);
     if (!e) throw notFound("Expense not found.");
     if (!s.isAdmin && e.paid_by !== s.user.id) throw forbidden("Only the person who paid for this expense or a group admin can edit it.");

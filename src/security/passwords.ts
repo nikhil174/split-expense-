@@ -1,4 +1,5 @@
 // The password policy and reading passwords from request bodies.
+import type { Untrusted } from "../domain/input.ts";
 import { textField } from "../domain/text.ts";
 
 // New passwords: 8–128 characters with at least one letter and one number.
@@ -7,4 +8,4 @@ export const goodPassword = (p: unknown): p is string => typeof p === "string" &
 
 // A password field from a request body ("password", "newPassword",
 // "currentPassword"), also accepting the older PIN names ("pin", "newPin"…).
-export const passwordOf = (b: any, key = "password"): string => textField(b?.[key] ?? b?.[key.replace("assword", "in")]).slice(0, 200);
+export const passwordOf = (b: Untrusted<string>, key = "password"): string => textField(b?.[key] ?? b?.[key.replace("assword", "in")]).slice(0, 200);

@@ -2,9 +2,10 @@
 // balances and dashboard, one member's summary, two members' history, and
 // the statement behind "Share as Excel". All come from the same pairwise
 // ledger, so the screens always agree.
-import type { Balance, Dashboard, MemberSummary, PeopleBalances, PersonView } from "../../shared/api-types.ts";
+import type { Balance, Dashboard, MemberSummary, PeopleBalances, PersonView, Statement, StatementItem } from "../../shared/api-types.ts";
 import { nameLookup } from "../domain/members.ts";
 import { rupees } from "../domain/money.ts";
+import { PaymentStatus } from "../domain/payments.ts";
 import { computeBalances, computePairwiseDebts, pairwiseActivity } from "../domain/settlement.ts";
 import { notFound } from "../http/ApiError.ts";
 import type { ExpenseRepository } from "../repository/ExpenseRepository.ts";
@@ -12,6 +13,9 @@ import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { SettlementRepository } from "../repository/SettlementRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import type { GroupScope } from "./GroupScope.ts";
+
+// A statement line before names are added (its running balance comes last).
+type PairRow = Omit<StatementItem, "paidByName" | "fromName" | "toName" | "runningCents"> & { runningCents?: number };
 
 const sumFor = (mid: string) => <T extends { amountCents: number }>(rows: T[], key: keyof T) => rows.filter(r => r[key] === mid).reduce((t, r) => t + r.amountCents, 0);
 
@@ -119,7 +123,7 @@ export class InsightsService {
   // running balance. Payments not counted (waiting for approval, rejected)
   // are listed with their status. Anyone in the group may export it, like
   // the person summary and pair views.
-  async statement(s: GroupScope, mid: string) {
+  async statement(s: GroupScope, mid: string): Promise<Statement> {
     const gid = s.gid;
     const members = await this.groups.members(gid);
     const who = members.find(x => x.id === mid);
@@ -128,23 +132,27 @@ export class InsightsService {
     const [expRows, shares, pays, ledger] = await Promise.all([
       this.expenses.memberExpensesOldestFirst(gid, mid), this.expenses.memberShares(gid, mid), this.settlements.memberPaymentsOldestFirst(gid, mid), this.expenses.ledger(gid),
     ]);
-    const expenses = expRows.results.map(x => ({ id: x.id, createdAt: x.createdAt, description: x.description, totalCents: Number(x.totalCents), paidBy: x.paidBy, paidByName: nameOf(x.paidBy), shareCents: Number(x.shareCents), splitCount: Number(x.splitCount) } as Record<string, any>));
     let cumulative = 0;
-    for (const x of expenses) { cumulative += x.shareCents; x.cumulativeShareCents = cumulative; }
+    const expenses = expRows.results.map(x => {
+      const shareCents = Number(x.shareCents);
+      cumulative += shareCents;
+      return { id: x.id, createdAt: x.createdAt, description: x.description, totalCents: Number(x.totalCents), paidBy: x.paidBy, paidByName: nameOf(x.paidBy), shareCents, splitCount: Number(x.splitCount), cumulativeShareCents: cumulative };
+    });
     const others = members.filter(x => x.id !== mid && (x.active || shares.results.some(r => r.paidBy === x.id || r.memberId === x.id) || pays.results.some(r => r.fromMemberId === x.id || r.toMemberId === x.id)));
     const pairs = others.map(o => {
-      const counted = pays.results.filter(r => r.status === "confirmed");
-      const activity = pairwiseActivity({ shares: shares.results as any, settlements: counted as any, me: mid, other: o.id });
-      const items: Record<string, any>[] = activity.items.slice().reverse().map(it => ({ ...it, status: "counted" }));
+      const counted = pays.results.filter(r => r.status === PaymentStatus.Confirmed);
+      const activity = pairwiseActivity({ shares: shares.results, settlements: counted, me: mid, other: o.id });
+      const items: PairRow[] = activity.items.slice().reverse().map(it => ({ ...it, status: "counted" }));
       // Payments not counted yet (or never): listed, but they don't move the balance.
       for (const r of pays.results) {
-        if (r.status === "confirmed" || !((r.fromMemberId === mid && r.toMemberId === o.id) || (r.fromMemberId === o.id && r.toMemberId === mid))) continue;
+        if (r.status === PaymentStatus.Confirmed || !((r.fromMemberId === mid && r.toMemberId === o.id) || (r.fromMemberId === o.id && r.toMemberId === mid))) continue;
         items.push({ type: "payment", id: r.id, fromMemberId: r.fromMemberId, toMemberId: r.toMemberId, amountCents: Number(r.amountCents), effectCents: 0, createdAt: r.createdAt, status: r.status });
       }
       items.sort((a, b) => a.createdAt - b.createdAt || String(a.id).localeCompare(String(b.id)));
       let running = 0;
       for (const it of items) { running += it.effectCents; it.runningCents = running; }
-      return { id: o.id, name: o.name, active: o.active, netCents: activity.netCents, items: items.map(it => ({ ...it, paidByName: it.paidBy ? nameOf(it.paidBy) : undefined, fromName: it.fromMemberId ? nameOf(it.fromMemberId) : undefined, toName: it.toMemberId ? nameOf(it.toMemberId) : undefined })) };
+      const named = (it: PairRow): StatementItem => ({ ...it, runningCents: it.runningCents!, paidByName: it.paidBy ? nameOf(it.paidBy) : undefined, fromName: it.fromMemberId ? nameOf(it.fromMemberId) : undefined, toName: it.toMemberId ? nameOf(it.toMemberId) : undefined });
+      return { id: o.id, name: o.name, active: o.active, netCents: activity.netCents, items: items.map(named) };
     });
     const sum = sumFor(mid);
     return {

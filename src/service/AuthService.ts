@@ -2,6 +2,7 @@
 // email, or group and name for old accounts), Google, and email links.
 import { EMAIL_RE, USERNAME_RE } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
+import type { Untrusted } from "../domain/input.ts";
 import { cleanName, normEmail, normUsername } from "../domain/text.ts";
 import { ApiError, conflict, notFound, tooMany } from "../http/ApiError.ts";
 import { emailEnabled } from "../integration/email.ts";
@@ -11,7 +12,7 @@ import type { Transaction } from "../repository/Transaction.ts";
 import type { UserRepository } from "../repository/UserRepository.ts";
 import { changesOf } from "../repository/db.ts";
 import type { UserRow } from "../repository/types.ts";
-import type { AccountPasswordGuard } from "../security/AccountPasswordGuard.ts";
+import type { AccountPasswordGuard, SignInRequest } from "../security/AccountPasswordGuard.ts";
 import type { GoogleIdentity } from "../security/GoogleTokenVerifier.ts";
 import type { PasswordHasher } from "../security/PasswordHasher.ts";
 import { newId } from "../security/crypto.ts";
@@ -37,7 +38,7 @@ export class AuthService {
 
   // Create an account: name, username (unique), optional email, password.
   // Returns the new account's id.
-  async signUp(b: any, origin: string): Promise<string> {
+  async signUp(b: Untrusted<"name" | "username" | "email" | "password" | "pin">, origin: string): Promise<string> {
     const name = cleanName(b?.name), username = normUsername(b?.username), email = b?.email ? normEmail(b.email) : null, pin = passwordOf(b);
     if (name.length < 2 || name.length > 60) throw new ApiError("Enter your name (2–60 characters).");
     if (!USERNAME_RE.test(username)) throw new ApiError(USERNAME_HINT);
@@ -68,7 +69,7 @@ export class AuthService {
   }
 
   // Sign in with username or email + password. Returns the account.
-  async signIn(b: any): Promise<UserRow> {
+  async signIn(b: SignInRequest & Untrusted<"login">): Promise<UserRow> {
     const user = await this.users.findByLogin(b?.login);
     if (!user) throw notFound("No account with that username or email. Check it, or create an account.");
     await this.passwords.checkSignIn(user, b);
@@ -77,7 +78,7 @@ export class AuthService {
 
   // Accounts from before usernames: sign in with the group's name and your
   // name in it (then choose a username in your profile).
-  async legacySignIn(b: any): Promise<UserRow> {
+  async legacySignIn(b: SignInRequest & Untrusted<"group" | "name">): Promise<UserRow> {
     if (!cleanName(b?.group) || !cleanName(b?.name)) throw new ApiError("Enter the group's name and your name in it.");
     const user = await this.users.findLegacy(b?.group, b?.name);
     if (user === "ambiguous") throw conflict("More than one account matches. Sign in with your username instead, or ask a group admin for it.");
@@ -103,7 +104,7 @@ export class AuthService {
 
   // Choose a new password with a reset link: signs out every device.
   // Returns the account to sign in on this one.
-  async reset(b: any): Promise<string> {
+  async reset(b: Untrusted<"token" | "password" | "pin">): Promise<string> {
     const t = await this.emailLinks.find(b?.token, "reset");
     if (!t) throw new ApiError(LINK_GONE, 410);
     const next = passwordOf(b);

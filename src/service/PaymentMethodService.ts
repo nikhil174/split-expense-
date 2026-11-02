@@ -4,6 +4,7 @@
 // declared type.
 import type { GroupPaymentMethod, PaymentMethod } from "../../shared/api-types.ts";
 import { QR_MAX_BYTES, UPI_RE } from "../config/constants.ts";
+import type { Untrusted } from "../domain/input.ts";
 import { textField } from "../domain/text.ts";
 import { ApiError, notFound } from "../http/ApiError.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
@@ -36,7 +37,7 @@ export class PaymentMethodService {
   async mine(u: CurrentUser) { return { method: methodOut(await this.methods.upiOf(u.id)) }; }
 
   // qr: a data URL to set it, null to remove it, left out to keep the current one.
-  async save(u: CurrentUser, b: any) {
+  async save(u: CurrentUser, b: Untrusted<"upiId" | "qr">) {
     const upiId = textField(b?.upiId).trim();
     if (!UPI_RE.test(upiId)) throw new ApiError("Enter a valid UPI ID, like name@okbank.");
     let qr: { mime: string; base64: string } | null = null;

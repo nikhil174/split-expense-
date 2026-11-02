@@ -2,6 +2,7 @@
 // person who received it confirms it; one the receiver recorded themselves
 // ("they paid me") needs a group admin's approval instead.
 import type { Debt as ApiDebt, Debts, Mine, PendingPayment, Settlement } from "../../shared/api-types.ts";
+import type { Untrusted } from "../domain/input.ts";
 import { nameLookup } from "../domain/members.ts";
 import { parseAmountToCents, rupees } from "../domain/money.ts";
 import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, needsAdminApproval, PaymentStatus, type PaymentActor } from "../domain/payments.ts";
@@ -84,7 +85,7 @@ export class SettlementService {
   }
 
   // Record a payment (it may carry a screenshot of it).
-  async record(s: GroupScope, b: any) {
+  async record(s: GroupScope, b: Untrusted<"fromMemberId" | "toMemberId" | "amount" | "proof">) {
     const u = s.user, gid = s.gid, isAdmin = s.isAdmin;
     const proof = b?.proof ? parseImage(b.proof, "screenshot") : null;
     if (proof && "error" in proof) throw new ApiError(proof.error);

@@ -2,6 +2,7 @@
 import type { AppNotification } from "../../shared/api-types.ts";
 import { NOTIFICATION_KEEP_MS } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
+import type { Untrusted } from "../domain/input.ts";
 import { textField } from "../domain/text.ts";
 import { ApiError } from "../http/ApiError.ts";
 import { pushEnabled, validSubscription } from "../integration/push.ts";
@@ -44,7 +45,7 @@ export class NotificationService {
     return { ok: true };
   }
 
-  async unsubscribe(u: CurrentUser, b: any) {
+  async unsubscribe(u: CurrentUser, b: Untrusted<"endpoint">) {
     await this.subscriptions.delete(textField(b?.endpoint), u.id);
     return { ok: true };
   }

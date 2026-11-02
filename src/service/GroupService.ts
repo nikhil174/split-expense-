@@ -2,6 +2,7 @@
 // members, renaming, leaving and deleting.
 import type { FriendState, GroupDetail, GroupSummary, Identity } from "../../shared/api-types.ts";
 import { PIN_RE } from "../config/constants.ts";
+import type { Untrusted } from "../domain/input.ts";
 import { cleanName, textField } from "../domain/text.ts";
 import { ApiError, conflict, needGroupAdmin } from "../http/ApiError.ts";
 import type { FriendshipRepository } from "../repository/FriendshipRepository.ts";
@@ -24,13 +25,13 @@ export class GroupService {
   }
 
   // Anyone can create a group; they are its first admin.
-  async create(u: CurrentUser, b: any): Promise<{ group: Identity }> {
+  async create(u: CurrentUser, b: Untrusted<"name" | "pin">): Promise<{ group: Identity }> {
     const name = cleanName(b?.name);
     if (name.length < 2 || name.length > 80) throw new ApiError("Group name must be 2–80 characters.");
     if (!PIN_RE.test(textField(b?.pin))) throw new ApiError("Choose a 4-digit PIN for the group. Members need it to join and to open the group.");
     const gid = newId(), now = Date.now();
     await this.tx.run([
-      this.groups.insertStmt(gid, name, now, u.id, await this.hasher.hash(textField(b.pin)), newUrlToken()),
+      this.groups.insertStmt(gid, name, now, u.id, await this.hasher.hash(textField(b?.pin)), newUrlToken()),
       this.groups.addCreatorStmt(gid, u.id, u.name, now),
       this.pins.unlockStmt(u, gid),
     ]);

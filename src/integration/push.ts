@@ -26,7 +26,9 @@ const concat = (...parts: Uint8Array[]): Uint8Array => {
 
 // Only real push services: the Worker never sends to an arbitrary URL.
 const PUSH_HOSTS = /^(fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|push\.services\.mozilla\.com|[a-z0-9.-]*\.push\.apple\.com|[a-z0-9.-]*\.notify\.windows\.com)$/i;
-export function validSubscription(sub: any): { endpoint: string; p256dh: string; auth: string } | null {
+type SubscriptionInput = { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } } | null | undefined;
+export function validSubscription(input: unknown): { endpoint: string; p256dh: string; auth: string } | null {
+  const sub = input as SubscriptionInput;
   try {
     const url = new URL(String(sub?.endpoint || ""));
     if (url.protocol !== "https:" || !PUSH_HOSTS.test(url.hostname) || url.href.length > 1000) return null;

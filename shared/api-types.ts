@@ -97,3 +97,22 @@ export type ActivityItem =
 export type PersonBalance = { groupId: string; groupName: string; memberId: string; name: string; active: boolean; netCents: number; waitingOutCents: number; waitingInCents: number };
 export type PeopleBalances = { people: PersonBalance[]; owedToYouCents: number; youOweCents: number; netCents: number };
 export type PersonView = { me: Identity; other: Identity & { active: boolean }; netCents: number; items: ActivityItem[] };
+// One person's statement (GET /api/groups/:id/members/:memberId/statement),
+// behind "Share as Excel".
+export type StatementItem = {
+  type: "expense" | "payment"; id: string; createdAt: number;
+  description?: string; paidBy?: string; paidByName?: string; totalCents?: number; shareCents?: number;
+  fromMemberId?: string; fromName?: string; toMemberId?: string; toName?: string; amountCents?: number;
+  // How it moved the balance between the two (0 for payments not counted), and the balance after it.
+  effectCents: number; runningCents: number;
+  // Expenses and confirmed payments are "counted"; other payments keep their status.
+  status: "counted" | "confirmed" | "pending" | "rejected";
+};
+export type Statement = {
+  group: { id: string; name: string };
+  person: { id: string; name: string; username: string | null; active: boolean };
+  generatedAt: number;
+  totals: { paidCents: number; shareCents: number; balanceCents: number };
+  expenses: { id: string; createdAt: number; description: string; totalCents: number; paidBy: string; paidByName: string; shareCents: number; splitCount: number; cumulativeShareCents: number }[];
+  pairs: { id: string; name: string; active: boolean; netCents: number; items: StatementItem[] }[];
+};

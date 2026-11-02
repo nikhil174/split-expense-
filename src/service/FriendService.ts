@@ -1,6 +1,7 @@
 // Friends: ask by username or email; the other person accepts. Only exact
 // matches: there is no browsing of people.
 import type { Friends } from "../../shared/api-types.ts";
+import type { Untrusted } from "../domain/input.ts";
 import { loginKind, textField } from "../domain/text.ts";
 import { ApiError, conflict, notFound } from "../http/ApiError.ts";
 import { pairOf, type FriendshipRepository } from "../repository/FriendshipRepository.ts";
@@ -30,7 +31,7 @@ export class FriendService {
 
   // Ask someone (by account id, or username or email) to be friends. If they
   // had asked me, asking back accepts.
-  async request(u: CurrentUser, b: any) {
+  async request(u: CurrentUser, b: Untrusted<"login" | "userId">) {
     const login = textField(b?.login).trim();
     const who = b?.userId ? await this.users.findForFriendRequest(textField(b.userId)) : login ? await this.users.findByLogin(login) : null;
     if (!who) throw new ApiError(login ? `No one on Split It has the ${loginKind(login)} “${login}”.` : "Enter a username or email.", login ? 404 : 400);

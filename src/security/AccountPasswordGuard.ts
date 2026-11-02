@@ -2,6 +2,7 @@
 // one-time cases for accounts from before passwords.
 import { MINUTE, PIN_LOCK_MS, PIN_MAX_FAILURES } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
+import type { Untrusted } from "../domain/input.ts";
 import { ApiError } from "../http/ApiError.ts";
 import type { UserRepository } from "../repository/UserRepository.ts";
 import type { UserRow } from "../repository/types.ts";
@@ -10,6 +11,8 @@ import { secretEquals } from "./crypto.ts";
 import { goodPassword, PASSWORD_HINT, passwordOf } from "./passwords.ts";
 
 type PasswordRow = Pick<UserRow, "id" | "pin_hash" | "pin_failures" | "pin_locked_until">;
+// A sign-in's password fields (older app versions send the "pin" names).
+export type SignInRequest = Untrusted<"password" | "pin" | "newPassword" | "newPin" | "createPassword" | "createPin">;
 
 export class AccountPasswordGuard {
   private readonly env: AppEnv;
@@ -50,7 +53,7 @@ export class AccountPasswordGuard {
   // Checks a sign-in password, including the one-time cases for accounts from
   // before this version: the old administrator proves who they are with the old
   // admin PIN and then chooses a password; members without a PIN choose one.
-  async checkSignIn(user: UserRow, b: any): Promise<void> {
+  async checkSignIn(user: UserRow, b: SignInRequest): Promise<void> {
     const password = passwordOf(b);
     if (!user.pin_hash && user.id === "admin") {
       if (!this.env.ADMIN_PIN || !await secretEquals(password, String(this.env.ADMIN_PIN))) throw new ApiError("Incorrect password.", 401);
