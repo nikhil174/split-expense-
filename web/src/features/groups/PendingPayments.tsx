@@ -14,12 +14,12 @@ import { AwaitingBadge, ProofDialog, isAskedWaiver, isWaiver, proofSrc } from ".
 // what is waiting on you (confirm/reject) and what you sent (cancel).
 // Waivers ("no need to pay", the lender letting someone off) wait for an
 // admin the same way; the debtor can't cancel one. With groupId it shows only
-// that group.
-export function PendingPayments({ groupId, className }: { groupId?: string; className?: string }) {
+// that group; with withMemberId too, only what's between me and that person.
+export function PendingPayments({ groupId, withMemberId, className }: { groupId?: string; withMemberId?: string; className?: string }) {
   const q = usePendingPayments();
   const meId = useMe().data?.user?.id;
   const decide = useDecidePayment();
-  const only = (list: PendingPayment[] = []) => list.filter(x => !groupId || x.groupId === groupId);
+  const only = (list: PendingPayment[] = []) => list.filter(x => (!groupId || x.groupId === groupId) && (!withMemberId || x.fromMemberId === withMemberId || x.toMemberId === withMemberId));
   const toConfirm = only(q.data?.toConfirm), waiting = only(q.data?.waiting);
   const showGroup = !groupId;
   const busy = (id: string, action: string) => decide.isPending && decide.variables?.id === id && decide.variables.action === action;
@@ -49,7 +49,12 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                   <div className="flex items-center gap-3">
                     <PersonAvatar id={x.fromMemberId} name={x.fromName} />
                     <div className="min-w-0 flex-1">
-                      {isAskedWaiver(x) ? (
+                      {isAskedWaiver(x) && x.toMemberId !== meId ? (
+                        <>
+                          <p className="text-[15px] leading-5 font-medium">{x.fromName} asks {x.toName} to let them off <span className="tabular text-positive">{inr(x.amountCents)}</span></p>
+                          <p className="text-[12.5px] leading-[17px] text-muted-foreground">You're an admin, so you can decide for {x.toName}. Say yes and {x.fromName} won't need to pay it; everyone in the group is told.{showGroup ? " · " + x.groupName : ""}</p>
+                        </>
+                      ) : isAskedWaiver(x) ? (
                         <>
                           <p className="text-[15px] leading-5 font-medium">{x.fromName} asks you to let them off <span className="tabular text-positive">{inr(x.amountCents)}</span></p>
                           <p className="text-[12.5px] leading-[17px] text-muted-foreground">Say yes and they won't need to pay it. Everyone in the group is told.{showGroup ? " · " + x.groupName : ""}</p>
@@ -70,7 +75,7 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                           <p className="truncate text-[12.5px] text-muted-foreground">Did you receive it?{showGroup ? " · " + x.groupName : ""}</p>
                         </>
                       )}
-                      <AwaitingBadge label={x.needsAdmin ? "waiting for your approval (admin)" : isWaiver(x) ? "waiting for your answer" : "waiting for you to confirm"} className="mt-1" />
+                      <AwaitingBadge label={x.needsAdmin || x.toMemberId !== meId ? "waiting for your approval (admin)" : isWaiver(x) ? "waiting for your answer" : "waiting for you to confirm"} className="mt-1" />
                     </div>
                     {x.hasProof && (
                       <button type="button" aria-label={`View ${x.fromName}'s payment screenshot`} onClick={() => setProof(x)} className="relative size-12 shrink-0 cursor-pointer overflow-hidden rounded-[10px] bg-white ring-1 ring-[#141716]/[0.08] transition-transform active:scale-95">
@@ -110,7 +115,7 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                     </p>
                     <p className="mt-0.5 text-[12.5px] leading-[17px] text-muted-foreground">
                       {isAskedWaiver(x)
-                        ? <>Waiting for <b className="font-medium text-foreground">{x.toName}</b> to say yes or no. Until then you still owe it.</>
+                        ? <>Waiting for <b className="font-medium text-foreground">{x.toName}</b> (or a group admin) to say yes or no. Until then you still owe it.</>
                         : isWaiver(x)
                         ? <>Waiting for <b className="font-medium text-foreground">an admin</b> to approve it. Until then {x.toMemberId === meId ? `${x.fromName} still owes it` : "you still owe it"}.</>
                         : x.needsAdmin

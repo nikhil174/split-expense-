@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedMoney, DateBadge, EmptyState, Footnote, Page, PersonAvatar, SectionTitle } from "@/components/app/bits";
 import { BackButton } from "./GroupScreen";
+import { PendingPayments } from "./PendingPayments";
 import { SettleUpDrawer } from "./SettleUpDrawer";
 import { ExpenseBreakdown } from "./ExpenseBreakdown";
-import { AwaitingBadge } from "./Awaiting";
 import { useDebts, useGroup, usePerson } from "@/hooks/queries";
 import { isWaiver } from "./Awaiting";
 import { inr } from "@/lib/money";
@@ -48,12 +48,8 @@ export function PersonScreen({ groupId, memberId }: { groupId: string; memberId:
       {d && n !== 0 && (
         <div className="mt-4">
           {n < 0 && myDebt && myDebt.waitingCents < myDebt.amountCents && <Button size="xl" className="w-full" onClick={() => setSettling(myDebt)}><HandCoins className="size-5" />Pay {d.other.name}</Button>}
-          {n < 0 && myDebt && myDebt.waitingCents > 0 && (
-            <div className="mt-3 rounded-[18px] bg-[#e4c06c]/[0.12] px-4 py-3 text-center">
-              <AwaitingBadge cents={myDebt.waitingCents} />
-              <p className="subhead mt-1.5 text-muted-foreground">Waiting for approval ({d.other.name} confirms a payment you record; an admin approves one {d.other.name} recorded). It isn't counted until then.</p>
-            </div>
-          )}
+          {/* Each payment or request between us that's still waiting, saying who it waits on (and Cancel where I may). */}
+          <PendingPayments groupId={groupId} withMemberId={memberId} className="mt-3" />
           {n < 0 && !myDebt && debts.data && <p className="subhead rounded-[18px] bg-[#141716]/[0.035] px-4 py-3 text-muted-foreground">{d.other.name} is no longer an active member. Ask the admin to record this payment.</p>}
           {n > 0 && theirDebt && <Button size="xl" variant="secondary" className="w-full" onClick={() => setSettling(theirDebt)}>Record payment from {d.other.name}</Button>}
           {n > 0 && !theirDebt && debts.data && <p className="subhead rounded-[18px] bg-[#141716]/[0.035] px-4 py-3 text-center text-muted-foreground">Waiting for {d.other.name} to record their payment.</p>}

@@ -314,8 +314,10 @@ try {
   // The payment waits for Bea to confirm it; until then nothing changes.
   await toast(cy, "Sent ₹20.00 to Bea E2E to confirm");
   await cy.unroute("**/settlements");
-  await cy.getByText("₹20.00 awaiting approval").waitFor();
-  await cy.getByText(/Waiting for approval \(Bea E2E confirms/).waitFor();
+  // The person page lists it, saying who it waits on.
+  const cyWaiting20 = cy.getByTestId("waiting-payment").filter({ hasText: "You paid Bea E2E ₹20.00" });
+  await cyWaiting20.waitFor();
+  await cyWaiting20.getByText(/Waiting for Bea E2E to confirm they got the money/).waitFor();
   await cy.getByText("You owe Bea E2E ₹55.00").waitFor();
   assert.equal(await cy.locator("tbody tr").count(), 2, "a pending payment is not in the history yet");
   // Bea sees it on Home and confirms.
@@ -634,6 +636,16 @@ try {
   await shot(cy, "ask-waiver");
   await askDialog.getByTestId("waive-confirm").click();
   await toast(cy, "Asked Bea E2E to let you off ₹20.00.");
+  // Cy's page for Bea says what's waiting and on whom, with a way to withdraw it.
+  await cy.goto(BASE + `/#/g/${encodeURIComponent(gid)}/p/${encodeURIComponent(idOf("Bea E2E"))}`); await cy.reload();
+  const cyWaits = cy.getByTestId("pending-payments");
+  await cyWaits.getByText("You asked Bea E2E to let you off").waitFor();
+  await cyWaits.getByText(/or a group admin\) to say yes or no/).waitFor();
+  await cyWaits.getByRole("button", { name: /^Cancel/ }).waitFor();
+  await shot(cy, "ask-waiver-waiting");
+  // The group's admin (not part of it) is asked too.
+  await admin.goto(BASE + "/#/"); await admin.reload();
+  await admin.getByTestId("pending-payments").getByText("Cyrus E2E asks Bea E2E to let them off").waitFor();
   await bea.goto(BASE + "/#/"); await bea.reload();
   const askCard = bea.getByTestId("pending-payments");
   await askCard.getByText("Cyrus E2E asks you to let them off").waitFor();
