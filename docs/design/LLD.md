@@ -85,7 +85,7 @@ type InGroup = Authed & { scope: GroupScope };   // gid, user, role, isAdmin, na
 | `InvitationController` | `/api/invitations`, `/api/groups/:id/invitation/(accept|decline)`, `/api/join/:code`; in a group: `invite-link(/reset|/off)` |
 | `MemberController` | in a group: `members/invite`, `members/:id/(approve|reject|remove|cancel-invite|make-admin|make-member)` |
 | `ExpenseController` | in a group: `expenses` (GET/POST), `expenses/:id/edit`, `expenses/:id/delete`, `history` |
-| `SettlementController` | `/api/payments/pending`; in a group: `settlements` (GET/POST), `settlements/mine`, `debts`, `settlements/waive`, `settlements/:id/proof`, `settlements/:id/(confirm|reject|cancel)` |
+| `SettlementController` | `/api/payments/pending`; in a group: `settlements` (GET/POST), `settlements/mine`, `debts`, `settlements/waive`, `settlements/ask-waiver`, `settlements/:id/proof`, `settlements/:id/(confirm|reject|cancel)` |
 | `InsightsController` | `/api/balances`; in a group: `balances`, `dashboard`, `members/:id`, `members/:id/statement`, `with/:id`, `pair/:a/:b` |
 | `PaymentMethodController` | `/api/payment-method` (GET/POST), `/qr`, `/delete`; in a group: `payment-methods`, `members/:id/qr` |
 | `NotificationController` | `/api/notifications` (GET), `/read`; `/api/push/key`, `/subscribe`, `/unsubscribe` |
@@ -113,7 +113,7 @@ It contains no business rules.
 | `ExpenseService` | Expenses and their history | `parse`, `add`, `edit`, `delete`, `list`, `history` |
 | `SettlementService` | The payment flow | `list`, `debts`, `record`, `proof`, `decide`, `pendingForMe` |
 | `PaymentNotifications` | Who hears about a payment, and the wording | `recorded`, `confirmed`, `rejected`, `cancelled` |
-| `WaiverNotifications` | Who hears about a waiver ("no need to pay"), and the wording; an approval goes to the whole group | `requested`, `approved`, `rejected`, `cancelled` |
+| `WaiverNotifications` | Who hears about a waiver ("no need to pay"), and the wording; an approval goes to the whole group | `requested`, `asked`, `approved`, `rejected`, `cancelled` |
 | `InsightsService` | Read-only views | `home`, `balances`, `dashboard`, `member`, `pair`, `statement` |
 | `PaymentMethodService` | UPI details | `mine`, `save`, `myQr`, `remove`, `inGroup`, `memberQr` |
 | `FriendService` | Friends | `list`, `request`, `act` |
@@ -219,6 +219,7 @@ All bodies are JSON. "Signed in" routes need the `split_user` cookie. "In group"
 | `GET settlements`, `settlements/mine`, `debts` | in group | `{ settlements: Settlement[] }`; `Mine`; `Debts` |
 | `POST settlements` | in group | `{ ok, id, amountCents, status }` 201 |
 | `POST settlements/waive` `{ fromMemberId, amount? }` | in group; the lender (the person owed) | `{ ok, id, amountCents, status }` 201; amount defaults to everything still unpaid (owed less pending) |
+| `POST settlements/ask-waiver` `{ toMemberId, amount? }` | in group; the debtor asks the person they owe (who must still be in the group) | `{ ok, id, amountCents, status: "pending" }` 201; same default and limit |
 | `POST settlements/:id/(confirm|reject|cancel)` | in group (per the payment rules) | `{ ok, status }` / `{ ok, cancelled }` |
 | `GET settlements/:id/proof`, `members/:id/qr` | in group | image |
 | `GET balances`, `dashboard`, `members/:id`, `members/:id/statement`, `with/:id`, `pair/:a/:b`, `payment-methods` | in group | `{ balances }`, `Dashboard`, `MemberSummary`, `Statement`, `PersonView`, `{ people }` |
@@ -273,7 +274,7 @@ All bodies are JSON. "Signed in" routes need the `split_user` cookie. "In group"
 
 **Diagram:** [Payment states](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977058) (Miro board)
 
-**Waivers** ("no need to pay") use the same states. The lender records a waiver from the debtor to themselves, so it needs an admin, like "they paid me": `pending` → `confirmed` (an admin approves; at once when the lender is an admin) or `rejected` (an admin), or cancelled (the lender or an admin). The debtor can't decide or cancel it, even as an admin. Once confirmed it clears the debt exactly like a payment.
+**Waivers** ("no need to pay") use the same states, and either side can start one. The usual rule decides who answers. If the **lender offers** it (recorded by the receiver, like "they paid me"), a group admin approves it, at once when the lender is an admin. If the **debtor asks** for it (recorded by the payer, like a normal payment), the lender or a group admin says yes or no, and it always starts `pending`. The debtor never decides one, even as an admin. They can withdraw their own request, but not cancel the lender's offer. Once confirmed it clears the debt exactly like a payment.
 
 **Friendships:** none → `pending` (someone asks) → `accepted` (the other person accepts, or asks back). Declining, cancelling or removing deletes the row.
 
@@ -344,7 +345,7 @@ Balances in a group always sum to zero. The same ledger feeds every screen, so t
 |---|---|---|
 | Unit | `tests/*.test.js` (money, split, settlement logic, payment rules, text, router, notifications, password guard) | Pure functions, or classes with fakes (`Transaction`, `Clock`, repositories) |
 | API | `tests/*.api.test.js` | The real Worker against `node:sqlite` with all migrations (`tests/helpers/d1.js`) |
-| Golden master | `tests/golden/` | Fixed clock, ids and randomness; 456 requests; compares responses, emails, pushes and the database (`npm run golden:record` after an intended change) |
+| Golden master | `tests/golden/` | Fixed clock, ids and randomness; 475 requests; compares responses, emails, pushes and the database (`npm run golden:record` after an intended change) |
 | Migrations | `tests/migrations.test.js`, `tests/legacy-migration.test.js` | Empty database; data written by the old Worker |
 | Browser | `e2e/browser.e2e.mjs` | Playwright, Pixel 7 viewport, local `wrangler dev` |
 
