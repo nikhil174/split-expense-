@@ -587,6 +587,38 @@ try {
   await bea.getByTestId("balance-card").getByText(/settled up/i).waitFor();
   step("they paid me: the lender records the payment, a group admin approves it, and it's settled");
 
+  // "No need to pay": Bea lets Cy off what he owes her; an admin approves; the group is told.
+  await bea.evaluate(async ([gid, body]) => { const r = await fetch(`/api/groups/${gid}/expenses`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) throw new Error(await r.text()); },
+    [gid, { description: "Snacks", amount: "60", paidBy: idOf("Bea E2E"), memberIds: [idOf("Bea E2E"), idOf("Cyrus E2E")] }]);
+  await bea.reload();
+  await bea.getByRole("button", { name: "Settle up" }).click();
+  const settle2 = bea.getByRole("dialog");
+  const owedRow2 = settle2.getByRole("button", { name: /Cyrus E2E pays you/ });
+  if (await owedRow2.count()) await owedRow2.click();
+  await settle2.getByTestId("waive-open").click();
+  const waiveDialog = bea.getByRole("alertdialog");
+  await waiveDialog.getByText("Let Cyrus E2E off ₹30.00?").waitFor();
+  await waiveDialog.getByText(/once a group admin approves\. Then everyone in the group is told/).waitFor();
+  await shot(bea, "waive-confirm");
+  await waiveDialog.getByTestId("waive-confirm").click();
+  await toast(bea, "Sent to the group's admins: let Cyrus E2E off ₹30.00.");
+  // Cy sees it coming, and can't cancel Bea's offer.
+  await cy.goto(BASE + "/#/"); await cy.reload();
+  const cyWaiting = cy.getByTestId("pending-payments");
+  await cyWaiting.getByText("Bea E2E is letting you off").waitFor();
+  assert.equal(await cyWaiting.getByRole("button", { name: /^Cancel/ }).count(), 0, "the debtor can't cancel a waiver");
+  await admin.goto(BASE + "/#/"); await admin.reload();
+  const waiverCard = admin.getByTestId("pending-payments");
+  await waiverCard.getByText("Bea E2E wants to let Cyrus E2E off").waitFor();
+  await shot(admin, "waive-approve");
+  await waiverCard.getByRole("button", { name: /^Confirm ₹30\.00 from Cyrus E2E/ }).click();
+  await toast(admin, "Approved: Cyrus E2E doesn't need to pay Bea E2E ₹30.00.");
+  await bea.reload();
+  await bea.getByTestId("balance-card").getByText(/settled up/i).waitFor();
+  await cy.goto(BASE + "/#/notifications"); await cy.reload();
+  await cy.getByText("Bea E2E let you off ₹30.00").waitFor();
+  step("no need to pay: the lender lets someone off, a group admin approves, the group is told, and it's settled");
+
   // Group settings: the ⚙ on Home's group list, only for the group's admins.
   await admin.goto(BASE + "/#/"); await admin.reload();
   await admin.getByRole("button", { name: "Settings for " + GROUP }).click();
