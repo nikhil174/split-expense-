@@ -4,14 +4,23 @@
 // or, when the receiver recorded it themselves ("they paid me"), by a group
 // admin. Admins may decide or cancel any pending payment; the payer and
 // whoever recorded it may cancel it too.
+//
+// A waiver ("let them off") is the lender saying the debtor doesn't need to
+// pay. It is recorded by the lender, so like "they paid me" a group admin
+// confirms it; then it clears the debt exactly as a payment would.
 
 export const PaymentStatus = { Pending: "pending", Confirmed: "confirmed", Rejected: "rejected" } as const;
 export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
 
+export const PaymentKind = { Payment: "payment", Waiver: "waiver" } as const;
+export type PaymentKind = (typeof PaymentKind)[keyof typeof PaymentKind];
+
 // Who is looking at, or acting on, a payment.
 export type PaymentActor = { id: string; isAdmin: boolean };
 // What the rules need to know about a payment.
-export type PaymentFacts = { fromMemberId: string; toMemberId: string; createdBy: string; status?: string };
+export type PaymentFacts = { fromMemberId: string; toMemberId: string; createdBy: string; status?: string; kind?: string };
+
+const isWaiver = (p: PaymentFacts) => p.kind === PaymentKind.Waiver;
 
 // Recorded by the receiver ("they paid me"): a group admin decides it.
 export const needsAdminApproval = (p: PaymentFacts): boolean => p.createdBy === p.toMemberId;
@@ -28,13 +37,17 @@ export function canCancel(p: PaymentFacts, actor: PaymentActor): boolean {
   return isPending(p) && mayCancel(p, actor);
 }
 
+// The debtor can't cancel a waiver: it's the lender's offer.
 export function mayCancel(p: PaymentFacts, actor: PaymentActor): boolean {
-  return actor.isAdmin || p.fromMemberId === actor.id || p.createdBy === actor.id;
+  return actor.isAdmin || p.createdBy === actor.id || (!isWaiver(p) && p.fromMemberId === actor.id);
 }
+
+// Only the lender can let someone off what they owe them.
+export const mayWaive = (to: string, actor: PaymentActor): boolean => to === actor.id;
 
 // Why this person may not confirm or reject it, or null when they may.
 export function decisionRefusal(p: PaymentFacts, actor: PaymentActor): string | null {
-  if (needsAdminApproval(p) && !actor.isAdmin) return "A group admin approves this payment.";
+  if (needsAdminApproval(p) && !actor.isAdmin) return isWaiver(p) ? "A group admin approves letting them off." : "A group admin approves this payment.";
   if (!actor.isAdmin && p.toMemberId !== actor.id) return "Only the person who received this payment can confirm or reject it.";
   return null;
 }

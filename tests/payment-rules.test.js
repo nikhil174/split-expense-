@@ -2,7 +2,7 @@
 // who records, and the status a payment starts with.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, needsAdminApproval, PaymentStatus } from "../src/domain/payments.ts";
+import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, mayWaive, needsAdminApproval, PaymentKind, PaymentStatus } from "../src/domain/payments.ts";
 
 const admin = { id: "adm", isAdmin: true }, payer = { id: "bea", isAdmin: false }, receiver = { id: "cy", isAdmin: false }, other = { id: "dee", isAdmin: false };
 // Bea paid Cy, recorded by Bea (normal) or by Cy ("they paid me").
@@ -51,4 +51,20 @@ test("a new payment is confirmed only when an admin receives it or the receiver 
   assert.equal(initialStatus("adm", admin, true), PaymentStatus.Confirmed);
   assert.equal(initialStatus("gone", admin, false), PaymentStatus.Confirmed);
   assert.equal(initialStatus("cy", admin, true), PaymentStatus.Pending, "an admin recording for others still needs the receiver");
+});
+
+// Cy lets Bea off what she owes (a waiver): recorded by Cy, the lender.
+const waiver = { ...theyPaidMe, kind: PaymentKind.Waiver };
+
+test("a waiver: only the lender asks, only an admin approves, and the debtor can't cancel it", () => {
+  assert.deepEqual([admin, payer, receiver, other].map(a => mayWaive("cy", a)), [false, false, true, false], "not even an admin, for someone else's debt");
+  assert.equal(needsAdminApproval(waiver), true);
+  assert.deepEqual([admin, payer, receiver, other].map(a => canDecide(waiver, a)), [true, false, false, false]);
+  assert.deepEqual([admin, payer, receiver, other].map(a => canCancel(waiver, a)), [true, false, true, false]);
+  assert.equal(mayCancel(theyPaidMe, payer), true, "the payer can still cancel a 'they paid me' payment");
+  assert.equal(decisionRefusal(waiver, receiver), "A group admin approves letting them off.");
+  assert.equal(decisionRefusal(theyPaidMe, receiver), "A group admin approves this payment.");
+  assert.equal(decisionRefusal(waiver, admin), null);
+  assert.deepEqual([admin, payer, receiver].map(a => awaitsDecisionBy(waiver, a)), [true, false, false]);
+  assert.equal(initialStatus("cy", { id: "cy", isAdmin: true }, true), PaymentStatus.Confirmed, "an admin lender's waiver counts at once");
 });
