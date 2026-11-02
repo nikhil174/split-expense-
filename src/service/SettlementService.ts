@@ -8,7 +8,7 @@ import type { Clock } from "../config/Clock.ts";
 import type { Untrusted } from "../domain/input.ts";
 import { nameLookup } from "../domain/members.ts";
 import { parseAmountToCents, rupees } from "../domain/money.ts";
-import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, mayWaive, needsAdminApproval, PaymentKind, PaymentStatus, type PaymentActor } from "../domain/payments.ts";
+import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, mayAskWaiver, mayWaive, needsAdminApproval, PaymentKind, PaymentStatus, type PaymentActor } from "../domain/payments.ts";
 import { computePairwiseDebts, debtsForMember, outstandingDebt, SettlementError, validateSettlement, type Debt } from "../domain/settlement.ts";
 import { textField } from "../domain/text.ts";
 import { ApiError, conflict, forbidden, notFound } from "../http/ApiError.ts";
@@ -143,33 +143,62 @@ export class SettlementService {
   // The lender lets a member off what they still owe them ("no need to pay").
   // It is stored as a payment from the debtor to the lender that the lender
   // recorded, so a group admin approves it (an admin lender's counts at once)
-  // and, once confirmed, it clears the debt exactly as a payment would. The
-  // amount defaults to everything still unpaid: what is owed less what is
-  // already waiting for approval.
+  // and, once confirmed, it clears the debt exactly as a payment would.
   async waive(s: GroupScope, b: Untrusted<"fromMemberId" | "amount">) {
-    const u = s.user, gid = s.gid, actor = actorIn(s);
-    const from = textField(b?.fromMemberId), to = u.id;
+    const from = textField(b?.fromMemberId), to = s.user.id;
     if (!from) throw new ApiError("Choose who you're letting off.");
     if (from === to) throw new ApiError("You can't let yourself off.");
-    if (!mayWaive(to, actor)) throw forbidden("Only the person who is owed can let someone off.");
+    if (!mayWaive(to, actorIn(s))) throw forbidden("Only the person who is owed can let someone off.");
+    return this.createWaiver(s, from, to, b?.amount, {
+      nothingOwed: "They don't owe you anything.",
+      allPending: "Everything they owe you is already waiting for approval.",
+      tooMuch: left => `They owe you ₹${left} that isn't already waiting for approval, so you can let them off at most that.`,
+    });
+  }
+
+  // The debtor asks the lender to let them off what they still owe. It is
+  // recorded by the debtor, like a payment they made, so the lender (or a
+  // group admin, but never the debtor) decides it.
+  async askWaiver(s: GroupScope, b: Untrusted<"toMemberId" | "amount">) {
+    const from = s.user.id, to = textField(b?.toMemberId);
+    if (!to) throw new ApiError("Choose who you're asking.");
+    if (from === to) throw new ApiError("You can't ask yourself.");
+    if (!mayAskWaiver(from, actorIn(s))) throw forbidden("Only the person who owes can ask to be let off.");
+    return this.createWaiver(s, from, to, b?.amount, {
+      nothingOwed: "You don't owe them anything.",
+      allPending: "Everything you owe them is already waiting for approval.",
+      tooMuch: left => `You owe them ₹${left} that isn't already waiting for approval, so you can ask to be let off at most that.`,
+    });
+  }
+
+  // Records a waiver from `from` to `to` for the amount given, or by default
+  // everything still unpaid (what is owed less what is already waiting for
+  // approval), and tells whoever needs to know.
+  private async createWaiver(s: GroupScope, from: string, to: string, amountInput: unknown, say: { nothingOwed: string; allPending: string; tooMuch: (left: string) => string }) {
+    const u = s.user, gid = s.gid, actor = actorIn(s);
     const members = await this.groups.members(gid);
-    if (!members.some(x => x.id === from)) throw new ApiError("They must belong to this group.");
+    const lender = members.find(x => x.id === to);
+    if (!lender || !members.some(x => x.id === from)) throw new ApiError("They must belong to this group.");
+    const asked = u.id === from;
+    // Someone who left can't answer a request any more.
+    if (asked && !lender.active) throw conflict(lender.name + " is no longer in this group, so they can't let you off. Ask a group admin to record a payment instead.");
     const due = outstandingDebt(computePairwiseDebts(await this.expenses.ledger(gid)), from, to);
-    if (due === 0) throw conflict("They don't owe you anything.");
+    if (due === 0) throw conflict(say.nothingOwed);
     const left = due - await this.settlements.pendingBetween(gid, from, to);
-    if (left <= 0) throw conflict("Everything they owe you is already waiting for approval.");
+    if (left <= 0) throw conflict(say.allPending);
     let cents = left;
-    if (b?.amount !== undefined && b?.amount !== null && b?.amount !== "") {
-      try { cents = parseAmountToCents(b.amount); } catch (error) { throw new ApiError((error as Error).message); }
-      if (cents > left) throw conflict(`They owe you ₹${(left / 100).toFixed(2)} that isn't already waiting for approval, so you can let them off at most that.`);
+    if (amountInput !== undefined && amountInput !== null && amountInput !== "") {
+      try { cents = parseAmountToCents(amountInput); } catch (error) { throw new ApiError((error as Error).message); }
+      if (cents > left) throw conflict(say.tooMuch((left / 100).toFixed(2)));
     }
-    const status = initialStatus(to, actor, true);
+    // A request always waits for an answer; an offer counts at once from an admin lender.
+    const status = asked ? PaymentStatus.Pending : initialStatus(to, actor, true);
     const id = newId(), now = this.clock.now();
     const result = await this.settlements.insertIfOwed({ id, gid, from, to, cents, createdBy: u.id, now, status, kind: PaymentKind.Waiver });
     if (changesOf(result) !== 1) throw conflict("The outstanding amount changed. Refresh and try again.");
-    const note = { gid, from, to, cents }, told = { actor: u, nameOf: nameLookup(members) };
-    const notes = status === PaymentStatus.Confirmed
-      ? this.waiverNotes.approved(note, told, members.filter(x => x.active).map(x => x.id))
+    const note = { gid, from, to, cents, createdBy: u.id }, told = { actor: u, nameOf: nameLookup(members) };
+    const notes = asked ? this.waiverNotes.asked(note, told)
+      : status === PaymentStatus.Confirmed ? this.waiverNotes.approved(note, told, members.filter(x => x.active).map(x => x.id))
       : this.waiverNotes.requested(note, told, members.filter(x => x.role === "admin" && x.active).map(x => x.id));
     await this.send(notes);
     return { ok: true, id, amountCents: cents, status };
@@ -196,7 +225,7 @@ export class SettlementService {
     const told = { actor: u, nameOf: nameLookup(members) };
     const note = { gid, from: pay.fromId, to: pay.toId, cents: pay.cents, createdBy: pay.createdBy };
     if (action === "cancel") {
-      if (!mayCancel(facts, actor)) throw forbidden(waiver ? "Only the person who is owed or a group admin can cancel this." : "Only the person who recorded it, the payer or a group admin can cancel this payment.");
+      if (!mayCancel(facts, actor)) throw forbidden(waiver ? "Only whoever started it or a group admin can cancel this." : "Only the person who recorded it, the payer or a group admin can cancel this payment.");
       await this.tx.run([
         this.history.insertStmt({ gid, entity: "payment", entityId: sid, action: "cancelled", actor: u.id, before: { fromMemberId: pay.fromId, toMemberId: pay.toId, amountCents: pay.cents, createdBy: pay.createdBy, createdAt: pay.createdAt, kind: pay.kind } }),
         this.settlements.deleteProofStmt(sid),

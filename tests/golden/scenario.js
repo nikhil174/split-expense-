@@ -507,4 +507,24 @@ export async function scenario(t) {
   await c("gina summary", "GET", F + `/members/${ids.gina}`, { as: "gina" });
   await c("gina statement", "GET", F + `/members/${ids.gina}/statement`, { as: "gina" });
   for (const who of ["gina", "paro", "vicky", "jagan"]) await c(`waiver notifications ${who}`, "GET", "/api/notifications", { as: who });
+
+  // Gina asks Paro to let her off the ₹60 she still owes; Paro (or an admin) decides.
+  const A = FS + "/ask-waiver";
+  await c("ask nobody", "POST", A, { as: "gina", body: {} });
+  await c("ask self", "POST", A, { as: "gina", body: { toMemberId: ids.gina } });
+  await c("ask not owed", "POST", A, { as: "gina", body: { toMemberId: ids.jagan } });
+  await c("ask too much", "POST", A, { as: "gina", body: { toMemberId: ids.paro, amount: "100" } });
+  const a1 = (await c("ask to be let off part", "POST", A, { as: "gina", body: { toMemberId: ids.paro, amount: "10" } })).data.id;
+  await c("asked (lender decides)", "GET", "/api/payments/pending", { as: "paro" });
+  await c("asked (debtor waits)", "GET", "/api/payments/pending", { as: "gina" });
+  await c("debtor can't approve own ask", "POST", `${FS}/${a1}/confirm`, { as: "gina" });
+  await c("lender says no", "POST", `${FS}/${a1}/reject`, { as: "paro" });
+  const a2 = (await c("ask again", "POST", A, { as: "gina", body: { toMemberId: ids.paro, amount: "10" } })).data.id;
+  await c("debtor withdraws ask", "POST", `${FS}/${a2}/cancel`, { as: "gina" });
+  const a3 = (await c("ask for 20", "POST", A, { as: "gina", body: { toMemberId: ids.paro, amount: "20" } })).data.id;
+  await c("lender agrees", "POST", `${FS}/${a3}/confirm`, { as: "paro" });
+  const a4 = (await c("ask for the rest", "POST", A, { as: "gina", body: { toMemberId: ids.paro } })).data.id;
+  await c("admin grants ask", "POST", `${FS}/${a4}/confirm`, { as: "jagan" });
+  await c("flat payments after asks", "GET", FS, { as: "gina" });
+  for (const who of ["gina", "paro", "vicky"]) await c(`ask notifications ${who}`, "GET", "/api/notifications", { as: who });
 }
