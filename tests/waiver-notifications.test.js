@@ -12,7 +12,7 @@ function fakes() {
 const names = { adm: "Admin", bea: "Bea", cy: "Cy", dee: "Dee" };
 const ctx = actor => ({ actor: { id: actor, name: names[actor] }, nameOf: id => names[id] });
 // Cy lets Bea off ₹123.45.
-const w = { gid: "g", from: "bea", to: "cy", cents: 12345 };
+const w = { gid: "g", from: "bea", to: "cy", cents: 12345, createdBy: "cy" };
 const rows = f => f.sent.map(n => [n.to, n.kind, n.title, n.body, n.link]);
 
 test("asked: the admins (not the lender or the debtor, even if admins) and the debtor; one statement each", () => {
@@ -55,4 +55,37 @@ test("rejected or cancelled: the lender and the debtor, never the person acting"
     ["bea", "waiver_cancelled", "Cy is no longer letting you off ₹123.45", "You still owe it."],
   ]);
   assert.ok(f.sent.every(n => n.actor && n.groupId === "g"));
+});
+
+// Bea asks Cy to let her off ₹123.45.
+const ask = { ...w, createdBy: "bea" };
+
+test("asked: only the lender hears it, to say yes or no", () => {
+  const f = fakes();
+  f.notes.asked(ask, ctx("bea"));
+  assert.deepEqual(rows(f), [["cy", "waiver_asked", "Bea asks you to let them off ₹123.45", "Say yes and they won't need to pay it; everyone in the group is told. Or say no and they still owe it.", "#/g/g"]]);
+});
+
+test("a request granted: by the lender in the usual words, by an admin naming who decided", () => {
+  const f = fakes();
+  f.notes.approved(ask, ctx("cy"), ["adm", "bea", "cy"]);
+  f.notes.approved(ask, ctx("adm"), ["adm", "bea", "cy", "dee"]);
+  assert.deepEqual(f.sent.map(n => [n.to, n.title]), [
+    ["adm", "Cy let Bea off ₹123.45"], ["bea", "Cy let you off ₹123.45"],
+    ["bea", "Admin let you off ₹123.45 you owed Cy"], ["cy", "Admin let Bea off ₹123.45 they owed you"], ["dee", "Admin let Bea off ₹123.45 owed to Cy"],
+  ]);
+});
+
+test("a request turned down or withdrawn: worded as a request", () => {
+  const f = fakes();
+  f.notes.rejected(ask, ctx("cy"));
+  f.notes.rejected(ask, ctx("adm"));
+  f.notes.cancelled(ask, ctx("bea"));
+  f.notes.cancelled(ask, ctx("adm"));
+  assert.deepEqual(f.sent.map(n => [n.to, n.title]), [
+    ["bea", "Cy said no to letting you off ₹123.45"],
+    ["cy", "Admin said no to Bea's request to be let off ₹123.45"], ["bea", "Admin said no to letting you off ₹123.45"],
+    ["cy", "Bea withdrew their request to be let off ₹123.45"],
+    ["cy", "Admin cancelled Bea's request to be let off ₹123.45"], ["bea", "Admin cancelled your request to be let off ₹123.45"],
+  ]);
 });

@@ -8,7 +8,7 @@ import type { PendingPayment } from "@/lib/api";
 import { inr } from "@/lib/money";
 import { toast } from "sonner";
 import * as React from "react";
-import { AwaitingBadge, ProofDialog, isWaiver, proofSrc } from "./Awaiting";
+import { AwaitingBadge, ProofDialog, isAskedWaiver, isWaiver, proofSrc } from "./Awaiting";
 
 // Payments only count once the person who received them confirms. This shows
 // what is waiting on you (confirm/reject) and what you sent (cancel).
@@ -26,7 +26,7 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
   const act = (x: PendingPayment, action: "confirm" | "reject" | "cancel") => decide.mutate({ groupId: x.groupId, id: x.id, action }, {
     onSuccess: () => {
       if (isWaiver(x)) {
-        if (action === "confirm") { haptic([10, 40, 14]); toast.success(`Approved: ${x.fromName} doesn't need to pay ${x.toName} ${inr(x.amountCents)}.`, { description: "Everyone in the group has been told." }); }
+        if (action === "confirm") { haptic([10, 40, 14]); toast.success(x.toMemberId === meId ? `You let ${x.fromName} off ${inr(x.amountCents)}.` : `Approved: ${x.fromName} doesn't need to pay ${x.toName} ${inr(x.amountCents)}.`, { description: "Everyone in the group has been told." }); }
         else toast.success(`${action === "reject" ? "Not approved" : "Cancelled"}. ${x.fromName} still owes it.`);
         return;
       }
@@ -41,7 +41,7 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
     <section className={className} data-testid="pending-payments">
       {toConfirm.length > 0 && (
         <>
-          <SectionTitle>{toConfirm.every(isWaiver) ? (toConfirm.length === 1 ? "Approve letting them off" : `Approve ${toConfirm.length} let-offs`) : toConfirm.length === 1 ? "Confirm this payment" : `Confirm ${toConfirm.length} payments`}</SectionTitle>
+          <SectionTitle>{toConfirm.every(isAskedWaiver) ? (toConfirm.length === 1 ? "Asked to let them off" : `${toConfirm.length} asks to let them off`) : toConfirm.every(isWaiver) ? (toConfirm.length === 1 ? "Approve letting them off" : `Approve ${toConfirm.length} let-offs`) : toConfirm.length === 1 ? "Confirm this payment" : `Confirm ${toConfirm.length} payments`}</SectionTitle>
           <div className="panel overflow-hidden [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-hairline">
             <AnimatePresence initial={false}>
               {toConfirm.map(x => (
@@ -49,7 +49,12 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                   <div className="flex items-center gap-3">
                     <PersonAvatar id={x.fromMemberId} name={x.fromName} />
                     <div className="min-w-0 flex-1">
-                      {isWaiver(x) ? (
+                      {isAskedWaiver(x) ? (
+                        <>
+                          <p className="text-[15px] leading-5 font-medium">{x.fromName} asks you to let them off <span className="tabular text-positive">{inr(x.amountCents)}</span></p>
+                          <p className="text-[12.5px] leading-[17px] text-muted-foreground">Say yes and they won't need to pay it. Everyone in the group is told.{showGroup ? " · " + x.groupName : ""}</p>
+                        </>
+                      ) : isWaiver(x) ? (
                         <>
                           <p className="text-[15px] leading-5 font-medium">{x.toName} wants to let {x.fromName} off <span className="tabular text-positive">{inr(x.amountCents)}</span></p>
                           <p className="text-[12.5px] leading-[17px] text-muted-foreground">You're an admin: approve it and {x.fromName} won't need to pay it. Everyone in the group is told.{showGroup ? " · " + x.groupName : ""}</p>
@@ -65,7 +70,7 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                           <p className="truncate text-[12.5px] text-muted-foreground">Did you receive it?{showGroup ? " · " + x.groupName : ""}</p>
                         </>
                       )}
-                      <AwaitingBadge label={x.needsAdmin ? "waiting for your approval (admin)" : "waiting for you to confirm"} className="mt-1" />
+                      <AwaitingBadge label={x.needsAdmin ? "waiting for your approval (admin)" : isWaiver(x) ? "waiting for your answer" : "waiting for you to confirm"} className="mt-1" />
                     </div>
                     {x.hasProof && (
                       <button type="button" aria-label={`View ${x.fromName}'s payment screenshot`} onClick={() => setProof(x)} className="relative size-12 shrink-0 cursor-pointer overflow-hidden rounded-[10px] bg-white ring-1 ring-[#141716]/[0.08] transition-transform active:scale-95">
@@ -75,8 +80,8 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
                     )}
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <LoadingButton variant="secondary" className="rounded-full" aria-label={`Reject ${inr(x.amountCents)} from ${x.fromName}`} loading={busy(x.id, "reject")} loadingText="Rejecting…" disabled={decide.isPending} onClick={() => act(x, "reject")}><X />{x.needsAdmin ? "Reject" : "Not received"}</LoadingButton>
-                    <LoadingButton className="rounded-full" aria-label={`Confirm ${inr(x.amountCents)} from ${x.fromName}`} loading={busy(x.id, "confirm")} loadingText="Confirming…" disabled={decide.isPending} onClick={() => act(x, "confirm")}><Check />{x.needsAdmin ? "Approve" : "Confirm"}</LoadingButton>
+                    <LoadingButton variant="secondary" className="rounded-full" aria-label={`Reject ${inr(x.amountCents)} from ${x.fromName}`} loading={busy(x.id, "reject")} loadingText="Rejecting…" disabled={decide.isPending} onClick={() => act(x, "reject")}><X />{x.needsAdmin ? "Reject" : isWaiver(x) ? "Say no" : "Not received"}</LoadingButton>
+                    <LoadingButton className="rounded-full" aria-label={`Confirm ${inr(x.amountCents)} from ${x.fromName}`} loading={busy(x.id, "confirm")} loadingText="Confirming…" disabled={decide.isPending} onClick={() => act(x, "confirm")}><Check />{x.needsAdmin ? "Approve" : isWaiver(x) ? "Let off" : "Confirm"}</LoadingButton>
                   </div>
                 </m.div>
               ))}
@@ -90,27 +95,30 @@ export function PendingPayments({ groupId, className }: { groupId?: string; clas
           <div className="panel overflow-hidden [&>*:not(:last-child)]:border-b [&>*:not(:last-child)]:border-hairline">
             {waiting.map(x => {
               const iRecordedIt = x.needsAdmin && x.toMemberId === meId;
-              // The debtor can't cancel the lender's offer to let them off.
-              const canCancel = !isWaiver(x) || x.toMemberId === meId;
+              // The debtor can withdraw their own request, but not cancel the lender's offer.
+              const canCancel = !isWaiver(x) || x.toMemberId === meId || isAskedWaiver(x);
               return (
                 <div key={x.id} className="flex items-center gap-3 px-4 py-3" data-testid="waiting-payment">
                   <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#141716]/[0.05] text-muted-foreground"><Hourglass className="size-[18px]" /></span>
                   <div className="min-w-0 flex-1">
                     <p className="text-[15px] leading-5 font-medium">
-                      {isWaiver(x) ? (x.toMemberId === meId ? <>You're letting {x.fromName} off <span className="tabular">{inr(x.amountCents)}</span></> : <>{x.toName} is letting you off <span className="tabular">{inr(x.amountCents)}</span></>)
+                      {isAskedWaiver(x) ? <>You asked {x.toName} to let you off <span className="tabular">{inr(x.amountCents)}</span></>
+                        : isWaiver(x) ? (x.toMemberId === meId ? <>You're letting {x.fromName} off <span className="tabular">{inr(x.amountCents)}</span></> : <>{x.toName} is letting you off <span className="tabular">{inr(x.amountCents)}</span></>)
                         : iRecordedIt ? <>You recorded: {x.fromName} paid you <span className="tabular">{inr(x.amountCents)}</span></>
                         : x.needsAdmin ? <>{x.toName} recorded that you paid them <span className="tabular">{inr(x.amountCents)}</span></>
                         : <>You paid {x.toName} <span className="tabular">{inr(x.amountCents)}</span></>}
                     </p>
                     <p className="mt-0.5 text-[12.5px] leading-[17px] text-muted-foreground">
-                      {isWaiver(x)
+                      {isAskedWaiver(x)
+                        ? <>Waiting for <b className="font-medium text-foreground">{x.toName}</b> to say yes or no. Until then you still owe it.</>
+                        : isWaiver(x)
                         ? <>Waiting for <b className="font-medium text-foreground">an admin</b> to approve it. Until then {x.toMemberId === meId ? `${x.fromName} still owes it` : "you still owe it"}.</>
                         : x.needsAdmin
                         ? <>Waiting for <b className="font-medium text-foreground">an admin</b> to approve it. It isn't counted until then.</>
                         : <>Waiting for <b className="font-medium text-foreground">{x.toName}</b> to confirm they got the money. It isn't counted until then.</>}
                       {showGroup ? " · " + x.groupName : ""}
                     </p>
-                    <AwaitingBadge label={x.needsAdmin ? "waiting for admin approval" : `waiting for ${x.toName} to confirm`} className="mt-1" />
+                    <AwaitingBadge label={x.needsAdmin ? "waiting for admin approval" : isWaiver(x) ? `waiting for ${x.toName} to answer` : `waiting for ${x.toName} to confirm`} className="mt-1" />
                   </div>
                   {canCancel && <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" aria-label={iRecordedIt ? `Cancel ${inr(x.amountCents)} from ${x.fromName}` : `Cancel ${inr(x.amountCents)} to ${x.toName}`} disabled={decide.isPending} onClick={() => act(x, "cancel")}>Cancel</Button>}
                 </div>

@@ -2,7 +2,7 @@
 // who records, and the status a payment starts with.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, mayWaive, needsAdminApproval, PaymentKind, PaymentStatus } from "../src/domain/payments.ts";
+import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayAskWaiver, mayRecordDebt, mayWaive, needsAdminApproval, PaymentKind, PaymentStatus } from "../src/domain/payments.ts";
 
 const admin = { id: "adm", isAdmin: true }, payer = { id: "bea", isAdmin: false }, receiver = { id: "cy", isAdmin: false }, other = { id: "dee", isAdmin: false };
 // Bea paid Cy, recorded by Bea (normal) or by Cy ("they paid me").
@@ -72,4 +72,18 @@ test("a waiver: only the lender asks, only an admin approves, and the debtor can
   assert.deepEqual([canDecide(waiver, adminDebtor), canCancel(waiver, adminDebtor), awaitsDecisionBy(waiver, adminDebtor)], [false, false, false]);
   assert.equal(decisionRefusal(waiver, adminDebtor), "Another group admin approves letting you off.");
   assert.deepEqual([canDecide(theyPaidMe, adminDebtor), canCancel(theyPaidMe, adminDebtor)], [true, true], "unchanged for payments");
+});
+
+// Bea asks Cy to let her off (a waiver Bea recorded).
+const asked = { ...normal, kind: PaymentKind.Waiver };
+
+test("asking to be let off: the lender or an admin decides; the debtor can only withdraw it", () => {
+  assert.deepEqual([admin, payer, receiver, other].map(a => mayAskWaiver("bea", a)), [false, true, false, false]);
+  assert.equal(needsAdminApproval(asked), false);
+  assert.deepEqual([admin, payer, receiver, other].map(a => canDecide(asked, a)), [true, false, true, false]);
+  assert.deepEqual([admin, payer, receiver, other].map(a => canCancel(asked, a)), [true, true, false, false]);
+  assert.deepEqual([admin, payer, receiver].map(a => awaitsDecisionBy(asked, a)), [false, false, true]);
+  assert.equal(decisionRefusal(asked, payer), "The person you owe, or a group admin, decides this.");
+  assert.equal(decisionRefusal(asked, { id: "bea", isAdmin: true }), "The person you owe, or a group admin, decides this.", "not even as an admin");
+  assert.equal(decisionRefusal(asked, other), "Only the person who is owed, or a group admin, can decide this.");
 });

@@ -16,6 +16,8 @@ export function AwaitingBadge({ cents, label = "awaiting approval", className }:
 
 // A waiver: the lender let the debtor off ("no need to pay"), not money paid.
 export const isWaiver = (p: { kind?: string }) => p.kind === "waiver";
+// A waiver the debtor asked for (the lender decides), not one the lender offered.
+export const isAskedWaiver = (p: { kind?: string; needsAdmin: boolean }) => isWaiver(p) && !p.needsAdmin;
 
 export const proofSrc = (groupId: string, settlementId: string) => `/api/groups/${encodeURIComponent(groupId)}/settlements/${encodeURIComponent(settlementId)}/proof`;
 

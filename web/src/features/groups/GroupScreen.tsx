@@ -18,7 +18,7 @@ import { MembersSheet } from "./MembersSheet";
 import { PendingPayments } from "./PendingPayments";
 import { MemberSheet, ShareExcelIcon } from "./MemberSheet";
 import { UpiPeople } from "./UpiPayments";
-import { AwaitingBadge, ProofDialog, isWaiver, proofSrc } from "./Awaiting";
+import { AwaitingBadge, ProofDialog, isAskedWaiver, isWaiver, proofSrc } from "./Awaiting";
 import { PairSheet } from "./PairDetail";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
 import { SettleUpDrawer } from "./SettleUpDrawer";
@@ -341,6 +341,14 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
   // All payments in the group, only yours (you paid or were paid), or only between other people.
   const [filter, setFilter] = React.useState<"all" | "mine" | "others">("all");
   const isMine = (s: Settlement) => s.fromMemberId === meId || s.toMemberId === meId;
+  const you = (id: string, name: string) => (id === meId ? "you" : name);
+  // "Cy paid Bea", "Bea let Cy off", or (still waiting) "Cy asked Bea to let them off".
+  const paymentTitle = (s: Settlement) => !isWaiver(s) ? `${who(s.fromMemberId, s.fromName)} paid ${you(s.toMemberId, s.toName)}`
+    : isAskedWaiver(s) && s.status !== "confirmed" ? `${who(s.fromMemberId, s.fromName)} asked ${you(s.toMemberId, s.toName)} to let ${s.fromMemberId === meId ? "you" : "them"} off`
+    : `${who(s.toMemberId, s.toName)} let ${you(s.fromMemberId, s.fromName)} off`;
+  const paymentWaitingLabel = (s: Settlement) => s.needsAdmin ? "waiting for admin approval"
+    : isWaiver(s) ? `waiting for ${you(s.toMemberId, s.toName)} to answer`
+    : s.toMemberId === meId ? "waiting for you to confirm" : `waiting for ${s.toName} to confirm`;
   const shown = payments.data?.filter(s => filter === "all" || (filter === "mine") === isMine(s));
   return (
     <div className="space-y-7">
@@ -367,12 +375,12 @@ function PaymentsTab({ groupId, meId }: { groupId: string; meId?: string }) {
                 <tr key={s.id} className={tr}>
                   <td className="py-3 pr-1 pl-4"><DateBadge ts={s.createdAt} /></td>
                   <td className="w-full max-w-0 px-2 py-3">
-                    <span className={cn("block truncate text-[15px] font-medium", s.status === "rejected" && "text-muted-foreground line-through")}>{isWaiver(s)
-                      ? <>{who(s.toMemberId, s.toName)} let {s.fromMemberId === meId ? "you" : s.fromName} off<span className="ml-1.5 rounded-full bg-tint-soft px-1.5 py-px align-[1px] text-[11px] font-medium text-tint">No need to pay</span></>
-                      : <>{who(s.fromMemberId, s.fromName)} paid {s.toMemberId === meId ? "you" : s.toName}</>}</span>
-                    <span className="block truncate text-[12.5px] text-muted-foreground">
-                      {s.status === "pending" ? <AwaitingBadge label={s.needsAdmin ? "waiting for admin approval" : s.toMemberId === meId ? "waiting for you to confirm" : `waiting for ${s.toName} to confirm`} /> : s.status === "rejected" ? <span className="font-medium text-negative">{s.needsAdmin ? "Not approved by an admin" : `Rejected by ${s.toMemberId === meId ? "you" : s.toName}`}</span> : new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}
-                      {!isWaiver(s) && s.recordedByName && s.recordedByName !== s.fromName ? " · recorded by " + s.recordedByName : ""}
+                    {/* Wraps instead of cutting off, so long names and labels show in full. */}
+                    <span className={cn("block text-[15px] leading-5 font-medium break-words", s.status === "rejected" && "text-muted-foreground line-through")}>{paymentTitle(s)}</span>
+                    <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px] leading-[17px] text-muted-foreground">
+                      {isWaiver(s) && <span className="rounded-full bg-tint-soft px-1.5 py-px text-[11px] font-medium text-tint">No need to pay</span>}
+                      {s.status === "pending" ? <AwaitingBadge label={paymentWaitingLabel(s)} /> : s.status === "rejected" ? <span className="font-medium text-negative">{s.needsAdmin ? "Not approved by an admin" : isWaiver(s) ? "Declined" : `Rejected by ${s.toMemberId === meId ? "you" : s.toName}`}</span> : <span>{new Date(s.createdAt).toLocaleTimeString("en-IN", { timeStyle: "short" })}</span>}
+                      {!isWaiver(s) && s.recordedByName && s.recordedByName !== s.fromName ? <span>recorded by {s.recordedByName}</span> : null}
                     </span>
                   </td>
                   <td className={cn("tabular py-3 pr-4 pl-2 text-right text-[15px] font-medium whitespace-nowrap", s.status !== "confirmed" && "text-muted-foreground")}>

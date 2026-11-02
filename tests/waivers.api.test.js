@@ -47,7 +47,7 @@ test("the lender lets someone off what's left; an admin approves; the whole grou
   assert.deepEqual([refused.status, refused.data.error], [403, "A group admin approves letting them off."]);
   assert.equal((await w.post("Cy", `/settlements/${r.data.id}/confirm`)).status, 403);
   const cancel = await w.post("Cy", `/settlements/${r.data.id}/cancel`);
-  assert.deepEqual([cancel.status, cancel.data.error], [403, "Only the person who is owed or a group admin can cancel this."]);
+  assert.deepEqual([cancel.status, cancel.data.error], [403, "Only whoever started it or a group admin can cancel this."]);
   assert.equal((await w.post("admin", `/settlements/${r.data.id}/confirm`)).status, 200);
   assert.equal(await w.owes("Cy"), 0, "cleared");
   assert.equal(await w.owes("Dee"), 3000, "Dee still owes hers");
@@ -178,4 +178,76 @@ test("a debtor who is a group admin can't approve or cancel being let off; anoth
   assert.equal(await w.owes("Cy"), 3000);
   assert.equal((await w.post("admin", `/settlements/${r.data.id}/confirm`)).status, 200);
   assert.equal(await w.owes("Cy"), 0);
+});
+
+test("the debtor asks to be let off: the lender says yes, and the whole group is told", async t => {
+  const w = await world(t);
+  const { ids } = w;
+  const ask = (who, body) => w.post(who, "/settlements/ask-waiver", body);
+  const r = await ask("Cy", { toMemberId: ids.Bea });
+  assert.deepEqual([r.status, r.data.status, r.data.amountCents], [201, "pending", 3000], "defaults to everything still unpaid");
+  assert.equal(await w.owes("Cy"), 3000, "doesn't count until Bea says yes");
+  // Bea decides it (like a payment to her); admins aren't bothered with it.
+  assert.deepEqual((await w.inbox("Bea")).map(n => [n.kind, n.title]), [["waiver_asked", "Cy asks you to let them off ₹30.00"]]);
+  assert.equal((await w.inbox("admin")).length, 0);
+  assert.deepEqual((await w.pending("Bea")).toConfirm.map(x => [x.fromName, x.kind, x.needsAdmin]), [["Cy", "waiver", false]]);
+  assert.deepEqual((await w.pending("Cy")).waiting.map(x => x.kind), ["waiver"]);
+  const bea = await w.row("Bea", r.data.id), cy = await w.row("Cy", r.data.id), dee = await w.row("Dee", r.data.id), admin = await w.row("admin", r.data.id);
+  assert.deepEqual([bea.canDecide, cy.canDecide, cy.canCancel, dee.canDecide, admin.canDecide], [true, false, true, false, true]);
+  const own = await w.post("Cy", `/settlements/${r.data.id}/confirm`);
+  assert.deepEqual([own.status, own.data.error], [403, "The person you owe, or a group admin, decides this."]);
+  const other = await w.post("Dee", `/settlements/${r.data.id}/confirm`);
+  assert.deepEqual([other.status, other.data.error], [403, "Only the person who is owed, or a group admin, can decide this."]);
+  assert.equal((await w.post("Bea", `/settlements/${r.data.id}/confirm`)).status, 200);
+  assert.equal(await w.owes("Cy"), 0);
+  assert.equal((await w.inbox("Cy"))[0].title, "Bea let you off ₹30.00");
+  assert.equal((await w.inbox("Dee"))[0].title, "Bea let Cy off ₹30.00");
+  assert.equal((await w.inbox("admin"))[0].title, "Bea let Cy off ₹30.00");
+  assert.equal((await w.inbox("Bea")).filter(n => n.kind === "waiver_approved").length, 0, "not told about her own decision");
+});
+
+test("asking: the lender says no, the debtor withdraws, or an admin decides for the lender", async t => {
+  const w = await world(t);
+  const { ids } = w;
+  const ask = (who, body) => w.post(who, "/settlements/ask-waiver", body);
+  const a = await ask("Cy", { toMemberId: ids.Bea, amount: "10" });
+  assert.equal((await w.post("Bea", `/settlements/${a.data.id}/reject`)).status, 200);
+  assert.deepEqual([(await w.inbox("Cy"))[0].kind, (await w.inbox("Cy"))[0].title], ["waiver_rejected", "Bea said no to letting you off ₹10.00"]);
+  assert.equal((await w.inbox("Dee")).length, 0);
+  const b = await ask("Cy", { toMemberId: ids.Bea, amount: "10" });
+  assert.equal((await w.post("Cy", `/settlements/${b.data.id}/cancel`)).status, 200, "the debtor withdraws their own request");
+  assert.equal((await w.inbox("Bea"))[0].title, "Cy withdrew their request to be let off ₹10.00");
+  const c = await ask("Cy", { toMemberId: ids.Bea, amount: "10" });
+  assert.equal((await w.post("admin", `/settlements/${c.data.id}/confirm`)).status, 200);
+  assert.deepEqual([(await w.inbox("Cy"))[0].title, (await w.inbox("Bea"))[0].title, (await w.inbox("Dee"))[0].title],
+    ["Alex Admin let you off ₹10.00 you owed Bea", "Alex Admin let Cy off ₹10.00 they owed you", "Alex Admin let Cy off ₹10.00 owed to Bea"]);
+  assert.equal(await w.owes("Cy"), 2000);
+  // Only what I owe, to someone in the group who can still answer.
+  const cases = [
+    [{}, 400, "Choose who you're asking."],
+    [{ toMemberId: ids.Cy }, 400, "You can't ask yourself."],
+    [{ toMemberId: ids.Dee }, 409, "You don't owe them anything."],
+    [{ toMemberId: "someone-else" }, 400, "They must belong to this group."],
+    [{ toMemberId: ids.Bea, amount: "25" }, 409, "You owe them ₹20.00 that isn't already waiting for approval, so you can ask to be let off at most that."],
+    [{ toMemberId: ids.Bea, amount: "abc" }, 400, null],
+  ];
+  for (const [body, status, error] of cases) {
+    const r = await ask("Cy", body);
+    assert.equal(r.status, status, JSON.stringify(body));
+    if (error) assert.equal(r.data.error, error);
+  }
+  // A request never counts on its own, even from an admin debtor.
+  assert.equal((await w.post("admin", `/members/${ids.Cy}/make-admin`)).status, 200);
+  const d = await ask("Cy", { toMemberId: ids.Bea });
+  assert.deepEqual([d.status, d.data.status], [201, "pending"]);
+  assert.equal((await w.post("Cy", `/settlements/${d.data.id}/confirm`)).status, 403);
+});
+
+test("you can't ask someone who left the group to let you off", async t => {
+  const w = await world(t);
+  const { ids } = w;
+  assert.equal((await w.post("admin", `/members/${ids.Bea}/remove`)).status, 200);
+  const r = await w.post("Cy", "/settlements/ask-waiver", { toMemberId: ids.Bea });
+  assert.equal(r.status, 409);
+  assert.match(r.data.error, /no longer in this group/);
 });

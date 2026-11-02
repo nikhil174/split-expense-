@@ -22,6 +22,7 @@ const ICON: Record<string, { icon: React.ReactNode; tone: string }> = {
   payment_cancelled: { icon: <X />, tone: "bg-[#141716]/[0.05] text-muted-foreground" },
   // "No need to pay": a lender letting someone off what they owe.
   waiver_admin_approval: { icon: <HeartHandshake />, tone: "bg-[#e4c06c]/25 text-[#8a6416]" },
+  waiver_asked: { icon: <HeartHandshake />, tone: "bg-[#e4c06c]/25 text-[#8a6416]" },
   waiver_pending: { icon: <HeartHandshake />, tone: "bg-[#e4c06c]/25 text-[#8a6416]" },
   waiver_approved: { icon: <HeartHandshake />, tone: "bg-positive-soft text-positive" },
   waiver_rejected: { icon: <X />, tone: "bg-negative-soft text-negative" },

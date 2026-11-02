@@ -167,10 +167,12 @@ export function SettleUpDrawer({ groupId, open, onOpenChange, initial }: {
                   <LoadingButton type="submit" size="xl" className="w-full" disabled={!cents || over} loading={pay.isPending} loadingText="Recording payment…">
                     {debt.toMemberId === meId && !mine.data?.isAdmin ? (cents && !over ? `Send ${inr(cents)} for admin approval` : "Send for admin approval") : cents && !over ? `Record ${inr(cents)} payment` : "Record payment"}
                   </LoadingButton>
-                  {/* Someone owes me: I can let them off what's entered (or all of it) instead. */}
-                  {debt.toMemberId === meId && !pay.isPending && (
-                    <WaiveDebt groupId={groupId} fromMemberId={debt.fromMemberId} fromName={debt.fromName} cents={cents && !over ? cents : debt.amountCents}
-                      isAdmin={!!mine.data?.isAdmin} onDone={() => onOpenChange(false)} />
+                  {/* Instead of paying: let them off (they owe me), or ask to be let off (I owe them),
+                      for what's entered or all of it. Someone who left can't answer a request. */}
+                  {!pay.isPending && (debt.toMemberId === meId || (debt.fromMemberId === meId && debt.counterpartyActive)) && (
+                    <WaiveDebt groupId={groupId} mode={debt.toMemberId === meId ? "offer" : "ask"}
+                      otherId={debt.toMemberId === meId ? debt.fromMemberId : debt.toMemberId} otherName={debt.toMemberId === meId ? debt.fromName : debt.toName}
+                      cents={cents && !over ? cents : debt.amountCents} isAdmin={!!mine.data?.isAdmin} onDone={() => onOpenChange(false)} />
                   )}
                 </div>
               </m.form>
