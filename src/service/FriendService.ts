@@ -1,6 +1,7 @@
 // Friends: ask by username or email; the other person accepts. Only exact
 // matches: there is no browsing of people.
 import type { Friends } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import type { Untrusted } from "../domain/input.ts";
 import { loginKind, textField } from "../domain/text.ts";
 import { ApiError, conflict, notFound } from "../http/ApiError.ts";
@@ -15,7 +16,9 @@ export class FriendService {
   private readonly friendships: FriendshipRepository;
   private readonly users: UserRepository;
   private readonly notify: Notifier;
-  constructor(deps: { tx: Transaction; friendships: FriendshipRepository; users: UserRepository; notify: Notifier }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; tx: Transaction; friendships: FriendshipRepository; users: UserRepository; notify: Notifier }) {
+    this.clock = deps.clock;
     this.tx = deps.tx; this.friendships = deps.friendships; this.users = deps.users; this.notify = deps.notify;
   }
 
@@ -46,7 +49,7 @@ export class FriendService {
         this.notify.stmt({ to: who.id, kind: "friend_accepted", title: `${u.name} accepted your friend request`, body: "You can now invite each other to groups.", link: "#/friends", actor: u.name })]);
       return { ok: true, status: "friends", name: who.display_name };
     }
-    await this.tx.run([this.friendships.requestStmt(a, bb, u.id, Date.now()),
+    await this.tx.run([this.friendships.requestStmt(a, bb, u.id, this.clock.now()),
       this.notify.stmt({ to: who.id, kind: "friend_request", title: `${u.name} wants to be friends`, body: "Accept it in Friends.", link: "#/friends", actor: u.name })]);
     return { ok: true, status: "requested", name: who.display_name };
   }

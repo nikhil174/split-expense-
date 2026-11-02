@@ -1,5 +1,6 @@
 // Checking account passwords: lockout after too many wrong tries, and the
 // one-time cases for accounts from before passwords.
+import type { Clock } from "../config/Clock.ts";
 import { MINUTE, PIN_LOCK_MS, PIN_MAX_FAILURES } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
 import type { Untrusted } from "../domain/input.ts";
@@ -18,14 +19,15 @@ export class AccountPasswordGuard {
   private readonly env: AppEnv;
   private readonly users: UserRepository;
   private readonly hasher: PasswordHasher;
-  constructor(env: AppEnv, users: UserRepository, hasher: PasswordHasher) { this.env = env; this.users = users; this.hasher = hasher; }
+  private readonly clock: Clock;
+  constructor(env: AppEnv, users: UserRepository, hasher: PasswordHasher, clock: Clock) { this.env = env; this.users = users; this.hasher = hasher; this.clock = clock; }
 
   // Checks a person's password against their account, counting failures and
   // locking the account for a while after too many. Throws when it's wrong;
   // returns when it is right (or was just created, for accounts from before
   // PINs, which choose a password now).
   async check(r: PasswordRow, pin: string, { create = false }: { create?: boolean } = {}): Promise<void> {
-    const now = Date.now();
+    const now = this.clock.now();
     if (r.pin_locked_until && r.pin_locked_until > now) {
       const mins = Math.ceil((r.pin_locked_until - now) / MINUTE);
       throw new ApiError(`Too many wrong passwords. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`, 429);

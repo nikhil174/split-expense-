@@ -3,6 +3,7 @@
 // the statement behind "Share as Excel". All come from the same pairwise
 // ledger, so the screens always agree.
 import type { Balance, Dashboard, MemberSummary, PeopleBalances, PersonView, Statement, StatementItem } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import { nameLookup } from "../domain/members.ts";
 import { rupees } from "../domain/money.ts";
 import { PaymentStatus } from "../domain/payments.ts";
@@ -23,7 +24,9 @@ export class InsightsService {
   private readonly groups: GroupRepository;
   private readonly expenses: ExpenseRepository;
   private readonly settlements: SettlementRepository;
-  constructor(deps: { groups: GroupRepository; expenses: ExpenseRepository; settlements: SettlementRepository }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; groups: GroupRepository; expenses: ExpenseRepository; settlements: SettlementRepository }) {
+    this.clock = deps.clock;
     this.groups = deps.groups; this.expenses = deps.expenses; this.settlements = deps.settlements;
   }
 
@@ -158,7 +161,7 @@ export class InsightsService {
     return {
       group: { id: gid, name: s.name },
       person: { id: mid, name: who.name, username: who.username, active: who.active },
-      generatedAt: Date.now(),
+      generatedAt: this.clock.now(),
       // Positive: the group owes them; negative: they owe.
       totals: { paidCents: sum(ledger.paidTotals, "memberId"), shareCents: sum(ledger.splitEdges, "memberId"), balanceCents: computeBalances(ledger).get(mid) || 0 },
       expenses,

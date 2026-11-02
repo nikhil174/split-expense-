@@ -1,6 +1,7 @@
 // Who may be inside a group, and its PIN: opening a group (the caller must
 // be in it now), the PIN asked when opening it (remembered for a day on a
 // device), and admins setting or changing that PIN.
+import type { Clock } from "../config/Clock.ts";
 import { PIN_RE } from "../config/constants.ts";
 import { textField } from "../domain/text.ts";
 import { ApiError, needGroupAdmin, notFound } from "../http/ApiError.ts";
@@ -20,7 +21,9 @@ export class GroupAccessService {
   private readonly hasher: PasswordHasher;
   private readonly pins: GroupPinGuard;
   private readonly notify: Notifier;
-  constructor(deps: { tx: Transaction; groups: GroupRepository; sessions: SessionRepository; hasher: PasswordHasher; pins: GroupPinGuard; notify: Notifier }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; tx: Transaction; groups: GroupRepository; sessions: SessionRepository; hasher: PasswordHasher; pins: GroupPinGuard; notify: Notifier }) {
+    this.clock = deps.clock;
     this.tx = deps.tx; this.groups = deps.groups; this.sessions = deps.sessions; this.hasher = deps.hasher; this.pins = deps.pins; this.notify = deps.notify;
   }
 
@@ -46,7 +49,7 @@ export class GroupAccessService {
   async unlock(s: GroupScope, pin: () => Promise<unknown>) {
     if (!s.pinHash) return { ok: true };
     await this.pins.check(s.user, s.gid, s.pinHash, await pin());
-    await this.tx.run([this.pins.unlockStmt(s.user, s.gid), this.sessions.deleteExpiredUnlocksStmt(Date.now())]);
+    await this.tx.run([this.pins.unlockStmt(s.user, s.gid), this.sessions.deleteExpiredUnlocksStmt(this.clock.now())]);
     return { ok: true };
   }
 

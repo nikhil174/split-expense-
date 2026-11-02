@@ -1,5 +1,6 @@
 // Who is in a group: inviting people, members suggesting friends, admins
 // approving, removing, and making admins.
+import type { Clock } from "../config/Clock.ts";
 import { loginKind, textField } from "../domain/text.ts";
 import { ApiError, conflict, forbidden, needGroupAdmin, notFound } from "../http/ApiError.ts";
 import type { FriendshipRepository } from "../repository/FriendshipRepository.ts";
@@ -17,7 +18,9 @@ export class MembershipService {
   private readonly users: UserRepository;
   private readonly friendships: FriendshipRepository;
   private readonly notify: Notifier;
-  constructor(deps: { tx: Transaction; groups: GroupRepository; users: UserRepository; friendships: FriendshipRepository; notify: Notifier }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; tx: Transaction; groups: GroupRepository; users: UserRepository; friendships: FriendshipRepository; notify: Notifier }) {
+    this.clock = deps.clock;
     this.tx = deps.tx; this.groups = deps.groups; this.users = deps.users; this.friendships = deps.friendships; this.notify = deps.notify;
   }
 
@@ -47,7 +50,7 @@ export class MembershipService {
     }
     if (row?.status === "pending") {
       await this.tx.run([
-        this.groups.letInPendingStmt(gid, who.id, Date.now()),
+        this.groups.letInPendingStmt(gid, who.id, this.clock.now()),
         this.notify.stmt({ to: who.id, groupId: gid, kind: "approved", title: `You're in “${g.name}”`, body: `${u.name} let you in. Add expenses and settle up here.`, link: `#/g/${gid}`, actor: u.name }),
       ]);
       return { ok: true, status: "active", name: who.display_name };
@@ -79,7 +82,7 @@ export class MembershipService {
     if (action === "approve" || action === "reject") {
       if (row.status !== "pending") throw conflict("This person isn't waiting to join.");
       await this.tx.run(action === "approve"
-        ? [set("status='active',joined_at=?", Date.now()), this.notify.stmt({ to: mid, groupId: gid, kind: "approved", title: `You're in “${row.groupName}”`, body: `${u.name} approved you. Add expenses and settle up here.`, link: `#/g/${gid}`, actor: u.name })]
+        ? [set("status='active',joined_at=?", this.clock.now()), this.notify.stmt({ to: mid, groupId: gid, kind: "approved", title: `You're in “${row.groupName}”`, body: `${u.name} approved you. Add expenses and settle up here.`, link: `#/g/${gid}`, actor: u.name })]
         : [set("status='removed'")]);
       return { ok: true };
     }

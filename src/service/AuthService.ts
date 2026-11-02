@@ -1,5 +1,6 @@
 // Creating accounts and proving who you are: sign-up, sign-in (username,
 // email, or group and name for old accounts), Google, and email links.
+import type { Clock } from "../config/Clock.ts";
 import { EMAIL_RE, USERNAME_RE } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
 import type { Untrusted } from "../domain/input.ts";
@@ -31,7 +32,9 @@ export class AuthService {
   private readonly hasher: PasswordHasher;
   private readonly passwords: AccountPasswordGuard;
   private readonly emailLinks: EmailLinkService;
-  constructor(deps: { env: AppEnv; tx: Transaction; users: UserRepository; sessions: SessionRepository; tokens: EmailTokenRepository; hasher: PasswordHasher; passwords: AccountPasswordGuard; emailLinks: EmailLinkService }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; env: AppEnv; tx: Transaction; users: UserRepository; sessions: SessionRepository; tokens: EmailTokenRepository; hasher: PasswordHasher; passwords: AccountPasswordGuard; emailLinks: EmailLinkService }) {
+    this.clock = deps.clock;
     this.env = deps.env; this.tx = deps.tx; this.users = deps.users; this.sessions = deps.sessions; this.tokens = deps.tokens;
     this.hasher = deps.hasher; this.passwords = deps.passwords; this.emailLinks = deps.emailLinks;
   }
@@ -48,7 +51,7 @@ export class AuthService {
     if (email && await this.users.emailExists(email)) throw conflict("That email is already used by another account. Sign in instead.");
     const uid = newId();
     try {
-      await this.users.insertWithPassword(uid, username, name, email, await this.hasher.hash(pin), Date.now());
+      await this.users.insertWithPassword(uid, username, name, email, await this.hasher.hash(pin), this.clock.now());
     } catch (e) {
       // Someone took the username or email a moment earlier.
       if (String(e).toLowerCase().includes("unique")) throw conflict("That username or email was just taken. Try again.");
@@ -109,7 +112,7 @@ export class AuthService {
     if (!t) throw new ApiError(LINK_GONE, 410);
     const next = passwordOf(b);
     if (!goodPassword(next)) throw new ApiError(PASSWORD_HINT);
-    const done = await this.tokens.useOnce(t.token_hash, Date.now());
+    const done = await this.tokens.useOnce(t.token_hash, this.clock.now());
     if (changesOf(done) !== 1) throw new ApiError("This reset link was already used.", 410);
     await this.tx.run([
       this.users.setPasswordStmt(t.user_id, await this.hasher.hash(next)),
@@ -125,8 +128,8 @@ export class AuthService {
     const t = await this.emailLinks.find(token, "verify");
     if (!t) throw new ApiError("This link has expired or was already used. Send a new one from your profile.", 410);
     await this.tx.run([
-      this.tokens.markUsedStmt(t.token_hash, Date.now()),
-      this.users.markEmailVerifiedStmt(t.user_id, t.email, Date.now()),
+      this.tokens.markUsedStmt(t.token_hash, this.clock.now()),
+      this.users.markEmailVerifiedStmt(t.user_id, t.email, this.clock.now()),
     ]);
     return { ok: true, email: t.email };
   }
@@ -144,7 +147,7 @@ export class AuthService {
     if (await signupLimited()) throw tooMany();
     const uid = newId();
     try {
-      await this.users.insertWithGoogle(uid, await this.freeUsername(g.name), g.name.length >= 2 ? g.name : "Split It user", g.email, g.sub, Date.now(), Date.now());
+      await this.users.insertWithGoogle(uid, await this.freeUsername(g.name), g.name.length >= 2 ? g.name : "Split It user", g.email, g.sub, this.clock.now(), this.clock.now());
     } catch (e) {
       if (String(e).toLowerCase().includes("unique")) throw conflict("Something changed at the same moment. Try again.");
       throw e;

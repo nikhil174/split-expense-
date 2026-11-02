@@ -2,6 +2,7 @@
 // person who received it confirms it; one the receiver recorded themselves
 // ("they paid me") needs a group admin's approval instead.
 import type { Debt as ApiDebt, Debts, Mine, PendingPayment, Settlement } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import type { Untrusted } from "../domain/input.ts";
 import { nameLookup } from "../domain/members.ts";
 import { parseAmountToCents, rupees } from "../domain/money.ts";
@@ -31,7 +32,9 @@ export class SettlementService {
   private readonly groups: GroupRepository;
   private readonly history: HistoryRepository;
   private readonly paymentNotes: PaymentNotifications;
-  constructor(deps: { tx: Transaction; settlements: SettlementRepository; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; paymentNotes: PaymentNotifications }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; tx: Transaction; settlements: SettlementRepository; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; paymentNotes: PaymentNotifications }) {
+    this.clock = deps.clock;
     this.tx = deps.tx; this.settlements = deps.settlements; this.expenses = deps.expenses; this.groups = deps.groups; this.history = deps.history; this.paymentNotes = deps.paymentNotes;
   }
 
@@ -119,7 +122,7 @@ export class SettlementService {
     // approve it, unless the receiver is an admin. An admin may also record
     // a payment to someone who left (who can't confirm it any more).
     const status = initialStatus(to, actorIn(s), byId.get(to)!.active);
-    const settlementId = newId(), now = Date.now();
+    const settlementId = newId(), now = this.clock.now();
     const result = await this.settlements.insertIfOwed({ id: settlementId, gid, from, to, cents, createdBy: u.id, now, status });
     if (changesOf(result) !== 1) throw conflict("The outstanding amount changed. Refresh and try again.");
     if (proof) await this.settlements.insertProof(settlementId, proof.mime, proof.base64, now);
@@ -147,7 +150,7 @@ export class SettlementService {
     if (!pay) throw notFound("Payment not found.");
     const facts = { fromMemberId: pay.fromId, toMemberId: pay.toId, createdBy: pay.createdBy, status: pay.status };
     if (pay.status !== PaymentStatus.Pending) throw conflict(`This payment was already ${pay.status}.`);
-    const now = Date.now();
+    const now = this.clock.now();
     const told = { actor: u, nameOf: nameLookup(await this.groups.members(gid)) };
     const note = { gid, from: pay.fromId, to: pay.toId, cents: pay.cents, createdBy: pay.createdBy };
     if (action === "cancel") {

@@ -2,6 +2,7 @@
 // repositories, security components and services for one request, each
 // given what it depends on through its constructor. Built per request
 // because the environment (secrets, feature switches) is read per request.
+import { systemClock, type Clock } from "../config/Clock.ts";
 import type { RequestContext } from "../http/RequestContext.ts";
 import { AccountMergeRepository } from "../repository/AccountMergeRepository.ts";
 import { EmailTokenRepository } from "../repository/EmailTokenRepository.ts";
@@ -42,6 +43,7 @@ import { SettlementService } from "../service/SettlementService.ts";
 import { SiteAdminService } from "../service/SiteAdminService.ts";
 
 export class Container {
+  readonly clock: Clock;
   // Repositories
   readonly users: UserRepository;
   readonly sessionRepo: SessionRepository;
@@ -67,38 +69,39 @@ export class Container {
 
   constructor(ctx: RequestContext) {
     const { env, db } = ctx;
+    const clock = this.clock = systemClock;
     const tx = new D1Transaction(db);
     const users = this.users = new UserRepository(db);
     const sessions = this.sessionRepo = new SessionRepository(db);
     const groups = this.groupRepo = new GroupRepository(db);
     const expenses = new ExpenseRepository(db);
     const settlements = new SettlementRepository(db);
-    const history = new HistoryRepository(db);
+    const history = new HistoryRepository(db, clock);
     const friendships = new FriendshipRepository(db);
     const tokens = new EmailTokenRepository(db);
-    const notificationRepo = new NotificationRepository(db);
+    const notificationRepo = new NotificationRepository(db, clock);
 
     const hasher = new PasswordHasher(env);
-    this.limiter = new RateLimiter(new RateLimitRepository(db));
-    this.sessions = new SessionManager(sessions, tx);
-    const passwords = new AccountPasswordGuard(env, users, hasher);
-    const pins = this.groupPins = new GroupPinGuard(hasher, this.limiter, sessions);
+    this.limiter = new RateLimiter(new RateLimitRepository(db), clock);
+    this.sessions = new SessionManager(sessions, tx, clock);
+    const passwords = new AccountPasswordGuard(env, users, hasher, clock);
+    const pins = this.groupPins = new GroupPinGuard(hasher, this.limiter, sessions, clock);
 
     const notify = new Notifier(notificationRepo, ctx.outbox);
-    const emailLinks = new EmailLinkService(env, tx, tokens);
-    this.auth = new AuthService({ env, tx, users, sessions, tokens, hasher, passwords, emailLinks });
-    this.account = new AccountService({ env, tx, users, groups, merges: new AccountMergeRepository(db), hasher, passwords, emailLinks });
-    this.groups = new GroupService({ tx, groups, friendships, hasher, pins });
-    this.groupAccess = new GroupAccessService({ tx, groups, sessions, hasher, pins, notify });
-    this.invitations = new InvitationService({ tx, groups, pins, notify });
-    this.members = new MembershipService({ tx, groups, users, friendships, notify });
-    this.expenses = new ExpenseService({ tx, expenses, groups, history, notify });
-    this.settlements = new SettlementService({ tx, settlements, expenses, groups, history, paymentNotes: new PaymentNotifications(notify, tx) });
-    this.insights = new InsightsService({ groups, expenses, settlements });
-    this.paymentMethods = new PaymentMethodService({ methods: new PaymentMethodRepository(db), groups });
-    this.friends = new FriendService({ tx, friendships, users, notify });
-    this.notifications = new NotificationService({ env, tx, notifications: notificationRepo, subscriptions: new PushSubscriptionRepository(db) });
-    this.siteAdmin = new SiteAdminService({ env, tx, users, sessions, groups, stats: new SiteAdminRepository(db) });
+    const emailLinks = new EmailLinkService(env, tx, tokens, clock);
+    this.auth = new AuthService({ clock, env, tx, users, sessions, tokens, hasher, passwords, emailLinks });
+    this.account = new AccountService({ clock, env, tx, users, groups, merges: new AccountMergeRepository(db), hasher, passwords, emailLinks });
+    this.groups = new GroupService({ clock, tx, groups, friendships, hasher, pins });
+    this.groupAccess = new GroupAccessService({ clock, tx, groups, sessions, hasher, pins, notify });
+    this.invitations = new InvitationService({ clock, tx, groups, pins, notify });
+    this.members = new MembershipService({ clock, tx, groups, users, friendships, notify });
+    this.expenses = new ExpenseService({ clock, tx, expenses, groups, history, notify });
+    this.settlements = new SettlementService({ clock, tx, settlements, expenses, groups, history, paymentNotes: new PaymentNotifications(notify, tx) });
+    this.insights = new InsightsService({ clock, groups, expenses, settlements });
+    this.paymentMethods = new PaymentMethodService({ clock, methods: new PaymentMethodRepository(db), groups });
+    this.friends = new FriendService({ clock, tx, friendships, users, notify });
+    this.notifications = new NotificationService({ clock, env, tx, notifications: notificationRepo, subscriptions: new PushSubscriptionRepository(db) });
+    this.siteAdmin = new SiteAdminService({ clock, env, tx, users, sessions, groups, stats: new SiteAdminRepository(db) });
   }
 }
 

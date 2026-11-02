@@ -44,7 +44,7 @@ export class MeController {
   async connectGoogle(a: Authed) {
     if (!a.http.env.GOOGLE_CLIENT_ID) throw new ApiError("Google sign-in isn't set up yet.", 503);
     await a.app.limiter.check("link", a.user.id, RATE_LIMITS.link);
-    const g = await verifyGoogleToken((await a.http.body())?.credential, a.http.env);
+    const g = await verifyGoogleToken((await a.http.body())?.credential, a.http.env, a.app.clock);
     await a.app.account.connectGoogle(a.user, g);
     return freshUser(a);
   }

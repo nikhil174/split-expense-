@@ -1,6 +1,7 @@
 // Getting into a group: invitations (accept or decline), the group's invite
 // link / QR (see it, replace it, turn it off), and asking to join with it.
 import type { Invitation } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import { conflict, needGroupAdmin, notFound, tooMany } from "../http/ApiError.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { Transaction } from "../repository/Transaction.ts";
@@ -17,7 +18,9 @@ export class InvitationService {
   private readonly groups: GroupRepository;
   private readonly pins: GroupPinGuard;
   private readonly notify: Notifier;
-  constructor(deps: { tx: Transaction; groups: GroupRepository; pins: GroupPinGuard; notify: Notifier }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; tx: Transaction; groups: GroupRepository; pins: GroupPinGuard; notify: Notifier }) {
+    this.clock = deps.clock;
     this.tx = deps.tx; this.groups = deps.groups; this.pins = deps.pins; this.notify = deps.notify;
   }
 
@@ -34,7 +37,7 @@ export class InvitationService {
     if (row.pin_hash) await this.pins.check(u, gid, row.pin_hash, await pin());
     const admins = await this.groups.adminIds(gid);
     await this.tx.run([
-      this.groups.acceptInvitationStmt(gid, u.id, u.name, Date.now()),
+      this.groups.acceptInvitationStmt(gid, u.id, u.name, this.clock.now()),
       this.pins.unlockStmt(u, gid),
       ...admins.filter(a => a !== u.id).map(to => this.notify.stmt({ to, groupId: gid, kind: "member_joined", title: `${u.name} joined “${row.name}”`, body: "They accepted your invitation.", link: `#/g/${gid}`, actor: u.name })),
     ]);
@@ -66,7 +69,7 @@ export class InvitationService {
     if (status === "pending") throw conflict("You've already asked to join. A group admin will let you in.");
     if (await rateLimited()) throw tooMany();
     if (g.pin_hash) await this.pins.check(u, g.id, g.pin_hash, await pin());
-    const now = Date.now();
+    const now = this.clock.now();
     if (status === "invited") {
       await this.tx.run([this.groups.joinAsInvitedStmt(g.id, u.id, u.name, now), this.pins.unlockStmt(u, g.id)]);
       return { ok: true, groupId: g.id, status: "active" };

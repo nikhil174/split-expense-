@@ -1,5 +1,6 @@
 // Group PINs: needed to join a group and to open it; opening is remembered
 // for a day on that signed-in device (session).
+import type { Clock } from "../config/Clock.ts";
 import { GROUP_PIN_TRIES, GROUP_UNLOCK_MS, PIN_RE } from "../config/constants.ts";
 import { textField } from "../domain/text.ts";
 import { ApiError } from "../http/ApiError.ts";
@@ -12,7 +13,8 @@ export class GroupPinGuard {
   private readonly hasher: PasswordHasher;
   private readonly limiter: RateLimiter;
   private readonly sessions: SessionRepository;
-  constructor(hasher: PasswordHasher, limiter: RateLimiter, sessions: SessionRepository) { this.hasher = hasher; this.limiter = limiter; this.sessions = sessions; }
+  private readonly clock: Clock;
+  constructor(hasher: PasswordHasher, limiter: RateLimiter, sessions: SessionRepository, clock: Clock) { this.hasher = hasher; this.limiter = limiter; this.sessions = sessions; this.clock = clock; }
 
   // Checks a group's PIN for this person (5 tries per 15 minutes per group);
   // throws when it's wrong. Only wrong PINs count towards the limit.
@@ -26,9 +28,9 @@ export class GroupPinGuard {
   }
 
   // Remembers that this device opened the group (for a day).
-  unlockStmt(u: CurrentUser, gid: string) { return this.sessions.unlockStmt(u.tokenHash, gid, Date.now() + GROUP_UNLOCK_MS); }
+  unlockStmt(u: CurrentUser, gid: string) { return this.sessions.unlockStmt(u.tokenHash, gid, this.clock.now() + GROUP_UNLOCK_MS); }
 
   async isUnlocked(u: CurrentUser, gid: string): Promise<boolean> {
-    return !!(await this.sessions.isUnlocked(u.tokenHash, gid, Date.now()));
+    return !!(await this.sessions.isUnlocked(u.tokenHash, gid, this.clock.now()));
   }
 }

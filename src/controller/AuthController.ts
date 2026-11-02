@@ -87,7 +87,7 @@ export class AuthController {
   async google({ http, app }: Web) {
     if (!http.env.GOOGLE_CLIENT_ID) throw new ApiError("Google sign-in isn't set up yet.", 503);
     await app.limiter.check("signin", await http.clientKey(), RATE_LIMITS.signin);
-    const g = await verifyGoogleToken((await http.body())?.credential, http.env);
+    const g = await verifyGoogleToken((await http.body())?.credential, http.env, app.clock);
     const r = await app.auth.google(g, async () => app.limiter.limited("signup", await http.clientKey(), RATE_LIMITS.signup));
     return app.sessions.start(r.id, { ok: true, id: r.id, created: r.created }, r.created ? 201 : 200);
   }

@@ -1,5 +1,6 @@
 // My notifications (the bell) and phones that receive them.
 import type { AppNotification } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import { NOTIFICATION_KEEP_MS } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
 import type { Untrusted } from "../domain/input.ts";
@@ -16,20 +17,22 @@ export class NotificationService {
   private readonly tx: Transaction;
   private readonly notifications: NotificationRepository;
   private readonly subscriptions: PushSubscriptionRepository;
-  constructor(deps: { env: AppEnv; tx: Transaction; notifications: NotificationRepository; subscriptions: PushSubscriptionRepository }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; env: AppEnv; tx: Transaction; notifications: NotificationRepository; subscriptions: PushSubscriptionRepository }) {
+    this.clock = deps.clock;
     this.env = deps.env; this.tx = deps.tx; this.notifications = deps.notifications; this.subscriptions = deps.subscriptions;
   }
 
   // Newest first, with how many are unread. Ones older than 90 days are
   // cleared as they are read.
   async list(u: CurrentUser): Promise<{ items: AppNotification[]; unread: number }> {
-    await this.notifications.deleteOlderThan(u.id, Date.now() - NOTIFICATION_KEEP_MS);
+    await this.notifications.deleteOlderThan(u.id, this.clock.now() - NOTIFICATION_KEEP_MS);
     const [rows, unread] = await Promise.all([this.notifications.list(u.id), this.notifications.unreadCount(u.id)]);
     return { items: rows.results, unread: Number(unread?.n || 0) };
   }
 
   async markAllRead(u: CurrentUser) {
-    await this.notifications.markAllRead(u.id, Date.now());
+    await this.notifications.markAllRead(u.id, this.clock.now());
     return { ok: true, unread: 0 };
   }
 
@@ -41,7 +44,7 @@ export class NotificationService {
     if (!pushEnabled(this.env)) throw new ApiError("Phone notifications are not set up on this server yet.", 503);
     const sub = validSubscription(await body());
     if (!sub) throw new ApiError("That browser subscription is not valid.");
-    await this.tx.run(this.subscriptions.saveStmts(u.id, sub, Date.now()));
+    await this.tx.run(this.subscriptions.saveStmts(u.id, sub, this.clock.now()));
     return { ok: true };
   }
 

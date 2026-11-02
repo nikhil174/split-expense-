@@ -1,5 +1,6 @@
 // The signed-in person's own account: profile, password, Google, linking
 // another account of theirs.
+import type { Clock } from "../config/Clock.ts";
 import { EMAIL_RE, USERNAME_RE } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
 import type { Untrusted } from "../domain/input.ts";
@@ -27,7 +28,9 @@ export class AccountService {
   private readonly hasher: PasswordHasher;
   private readonly passwords: AccountPasswordGuard;
   private readonly emailLinks: EmailLinkService;
-  constructor(deps: { env: AppEnv; tx: Transaction; users: UserRepository; groups: GroupRepository; merges: AccountMergeRepository; hasher: PasswordHasher; passwords: AccountPasswordGuard; emailLinks: EmailLinkService }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; env: AppEnv; tx: Transaction; users: UserRepository; groups: GroupRepository; merges: AccountMergeRepository; hasher: PasswordHasher; passwords: AccountPasswordGuard; emailLinks: EmailLinkService }) {
+    this.clock = deps.clock;
     this.env = deps.env; this.tx = deps.tx; this.users = deps.users; this.groups = deps.groups; this.merges = deps.merges;
     this.hasher = deps.hasher; this.passwords = deps.passwords; this.emailLinks = deps.emailLinks;
   }
@@ -80,8 +83,8 @@ export class AccountService {
     const owner = await this.users.idByGoogle(g.sub);
     if (owner && owner.id !== u.id) throw conflict("That Google account is already connected to another Split It account.");
     const emailFree = !u.email && !(await this.users.emailUsedByOther(g.email, u.id));
-    if (emailFree) await this.users.connectGoogleWithEmail(u.id, g.sub, g.email, Date.now());
-    else if (u.email === g.email) await this.users.connectGoogleSameEmail(u.id, g.sub, Date.now());
+    if (emailFree) await this.users.connectGoogleWithEmail(u.id, g.sub, g.email, this.clock.now());
+    else if (u.email === g.email) await this.users.connectGoogleSameEmail(u.id, g.sub, this.clock.now());
     else await this.users.connectGoogle(u.id, g.sub);
   }
 

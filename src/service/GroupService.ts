@@ -1,6 +1,7 @@
 // Groups themselves: creating them, my list, a group's details and
 // members, renaming, leaving and deleting.
 import type { FriendState, GroupDetail, GroupSummary, Identity } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import { PIN_RE } from "../config/constants.ts";
 import type { Untrusted } from "../domain/input.ts";
 import { cleanName, textField } from "../domain/text.ts";
@@ -20,7 +21,9 @@ export class GroupService {
   private readonly friendships: FriendshipRepository;
   private readonly hasher: PasswordHasher;
   private readonly pins: GroupPinGuard;
-  constructor(deps: { tx: Transaction; groups: GroupRepository; friendships: FriendshipRepository; hasher: PasswordHasher; pins: GroupPinGuard }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; tx: Transaction; groups: GroupRepository; friendships: FriendshipRepository; hasher: PasswordHasher; pins: GroupPinGuard }) {
+    this.clock = deps.clock;
     this.tx = deps.tx; this.groups = deps.groups; this.friendships = deps.friendships; this.hasher = deps.hasher; this.pins = deps.pins;
   }
 
@@ -29,7 +32,7 @@ export class GroupService {
     const name = cleanName(b?.name);
     if (name.length < 2 || name.length > 80) throw new ApiError("Group name must be 2–80 characters.");
     if (!PIN_RE.test(textField(b?.pin))) throw new ApiError("Choose a 4-digit PIN for the group. Members need it to join and to open the group.");
-    const gid = newId(), now = Date.now();
+    const gid = newId(), now = this.clock.now();
     await this.tx.run([
       this.groups.insertStmt(gid, name, now, u.id, await this.hasher.hash(textField(b?.pin)), newUrlToken()),
       this.groups.addCreatorStmt(gid, u.id, u.name, now),
@@ -39,7 +42,7 @@ export class GroupService {
   }
 
   async listMine(u: CurrentUser): Promise<{ groups: GroupSummary[] }> {
-    const r = await this.groups.listForUser(u.id, u.tokenHash, Date.now());
+    const r = await this.groups.listForUser(u.id, u.tokenHash, this.clock.now());
     return { groups: r.results.map(x => ({ ...x, hasPin: !!x.hasPin, unlocked: !!x.unlocked })) };
   }
 

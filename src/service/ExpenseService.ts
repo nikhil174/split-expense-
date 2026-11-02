@@ -1,6 +1,7 @@
 // Expenses: adding, editing and deleting them (each logged in the group's
 // history and told to everyone in them), listing, and the group's totals.
 import type { Expense, HistoryEntry } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import { MAX_SPLIT_MEMBERS } from "../config/constants.ts";
 import type { Untrusted } from "../domain/input.ts";
 import { nameLookup } from "../domain/members.ts";
@@ -31,7 +32,9 @@ export class ExpenseService {
   private readonly groups: GroupRepository;
   private readonly historyLog: HistoryRepository;
   private readonly notify: Notifier;
-  constructor(deps: { tx: Transaction; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; notify: Notifier }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; tx: Transaction; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; notify: Notifier }) {
+    this.clock = deps.clock;
     this.tx = deps.tx; this.expenses = deps.expenses; this.groups = deps.groups; this.historyLog = deps.history; this.notify = deps.notify;
   }
 
@@ -75,7 +78,7 @@ export class ExpenseService {
     const eid = newId();
     const nameOf = nameLookup(await this.groups.members(s.gid));
     await this.tx.run([
-      this.expenses.insertStmt(eid, s.gid, desc, cents, paidBy, s.user.id, Date.now()),
+      this.expenses.insertStmt(eid, s.gid, desc, cents, paidBy, s.user.id, this.clock.now()),
       ...this.expenses.insertSplitStmts(eid, splitRows),
       ...this.notify.expenseStmts({ kind: "expense_added", gid: s.gid, expenseId: eid, actor: s.user, desc, cents, paidBy, splitRows, nameOf }),
       this.historyLog.insertStmt({ gid: s.gid, entity: "expense", entityId: eid, action: "created", actor: s.user.id, after: snapshot(desc, cents, paidBy, splitRows) }),

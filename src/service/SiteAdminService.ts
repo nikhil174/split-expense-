@@ -7,6 +7,7 @@
 // reset here: the site owner never sets anyone's password (group PINs can be
 // cleared).
 import type { AdminGroup, AdminOverview, AdminUser } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import { ADMIN_UNLOCK_MS, DAY } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
 import { ApiError, notFound } from "../http/ApiError.ts";
@@ -27,7 +28,9 @@ export class SiteAdminService {
   private readonly sessions: SessionRepository;
   private readonly groups: GroupRepository;
   private readonly stats: SiteAdminRepository;
-  constructor(deps: { env: AppEnv; tx: Transaction; users: UserRepository; sessions: SessionRepository; groups: GroupRepository; stats: SiteAdminRepository }) {
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; env: AppEnv; tx: Transaction; users: UserRepository; sessions: SessionRepository; groups: GroupRepository; stats: SiteAdminRepository }) {
+    this.clock = deps.clock;
     this.env = deps.env; this.tx = deps.tx; this.accounts = deps.users; this.sessions = deps.sessions; this.groups = deps.groups; this.stats = deps.stats;
   }
 
@@ -42,7 +45,7 @@ export class SiteAdminService {
     if (!await secretEquals(key, String(this.env.ADMIN_PIN))) throw new ApiError("That's not the admin key.", 401);
     await this.tx.run([
       ...(u.siteAdmin ? [] : [this.accounts.claimSiteOwnerStmt(u.id)]),
-      this.sessions.setAdminUntilStmt(u.tokenHash, Date.now() + ADMIN_UNLOCK_MS),
+      this.sessions.setAdminUntilStmt(u.tokenHash, this.clock.now() + ADMIN_UNLOCK_MS),
     ]);
     if (!(await this.accounts.siteRole(u.id))?.site_role) throw hidden();
     return { ok: true };
@@ -53,10 +56,10 @@ export class SiteAdminService {
     return { ok: true };
   }
 
-  overview(): Promise<AdminOverview> { return this.stats.overview(Date.now() - 7 * DAY); }
+  overview(): Promise<AdminOverview> { return this.stats.overview(this.clock.now() - 7 * DAY); }
 
   async users(q: string): Promise<{ users: AdminUser[] }> {
-    const r = await this.stats.users(q, Date.now());
+    const r = await this.stats.users(q, this.clock.now());
     return { users: r.results.map(x => ({ ...x, legacy: !!x.legacy, siteAdmin: !!x.siteAdmin, hasPin: !!x.hasPin, locked: !!x.locked })) };
   }
 

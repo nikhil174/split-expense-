@@ -3,6 +3,7 @@
 // shrinks it before sending), checked by its actual bytes, not just its
 // declared type.
 import type { GroupPaymentMethod, PaymentMethod } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import { QR_MAX_BYTES, UPI_RE } from "../config/constants.ts";
 import type { Untrusted } from "../domain/input.ts";
 import { textField } from "../domain/text.ts";
@@ -31,7 +32,8 @@ export const methodOut = (r: PaymentMethodRow | null | undefined): PaymentMethod
 export class PaymentMethodService {
   private readonly methods: PaymentMethodRepository;
   private readonly groups: GroupRepository;
-  constructor(deps: { methods: PaymentMethodRepository; groups: GroupRepository }) { this.methods = deps.methods; this.groups = deps.groups; }
+  private readonly clock: Clock;
+  constructor(deps: { clock: Clock; methods: PaymentMethodRepository; groups: GroupRepository }) { this.clock = deps.clock; this.methods = deps.methods; this.groups = deps.groups; }
 
   // My own payment method (how others pay me), the same in every group.
   async mine(u: CurrentUser) { return { method: methodOut(await this.methods.upiOf(u.id)) }; }
@@ -46,7 +48,7 @@ export class PaymentMethodService {
       if ("error" in parsed) throw new ApiError(parsed.error);
       qr = parsed;
     }
-    await this.methods.saveUpi(u.id, upiId, qr, b?.qr === undefined, Date.now());
+    await this.methods.saveUpi(u.id, upiId, qr, b?.qr === undefined, this.clock.now());
     return this.mine(u);
   }
 

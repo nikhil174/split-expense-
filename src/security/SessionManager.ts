@@ -1,6 +1,7 @@
 // Sign-in sessions: an HttpOnly cookie holding a random token; the database
 // keeps only its hash, with the account and an expiry.
 import type { User } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import { SESSION_COOKIE, SESSION_MS } from "../config/constants.ts";
 import { setCookie, type RequestContext } from "../http/RequestContext.ts";
 import { json } from "../http/responses.ts";
@@ -17,7 +18,8 @@ export const userOut = (u: CurrentUser): User => ({ id: u.id, name: u.name, user
 export class SessionManager {
   private readonly sessions: SessionRepository;
   private readonly tx: Transaction;
-  constructor(sessions: SessionRepository, tx: Transaction) { this.sessions = sessions; this.tx = tx; }
+  private readonly clock: Clock;
+  constructor(sessions: SessionRepository, tx: Transaction, clock: Clock) { this.sessions = sessions; this.tx = tx; this.clock = clock; }
 
   // The signed-in person, from their session cookie, or null.
   async currentUser(ctx: RequestContext): Promise<CurrentUser | null> {
@@ -25,20 +27,20 @@ export class SessionManager {
     if (!raw) return null;
     const tokenHash = await sha256Hex(raw);
     const s = await this.sessions.findWithUser(tokenHash);
-    if (!s || s.expires_at < Date.now()) {
+    if (!s || s.expires_at < this.clock.now()) {
       if (s) await this.sessions.delete(tokenHash);
       return null;
     }
     const siteAdmin = s.site_role === "admin";
     return { id: s.id, name: s.display_name, username: s.username, email: s.email || null, legacy: !!s.legacy, hasPin: !!s.hasPin, google: !!s.google, emailVerified: !!s.emailVerified,
-      siteAdmin, adminUnlocked: siteAdmin && Number(s.admin_until) > Date.now(), tokenHash };
+      siteAdmin, adminUnlocked: siteAdmin && Number(s.admin_until) > this.clock.now(), tokenHash };
   }
 
   // Starts a session for an account: the response that sets its cookie.
   async start(userId: string, data: unknown = { ok: true }, status = 200): Promise<Response> {
-    const token = newId() + newId(), expires = Date.now() + SESSION_MS;
+    const token = newId() + newId(), expires = this.clock.now() + SESSION_MS;
     await this.sessions.insert(await sha256Hex(token), userId, expires);
-    try { await this.sessions.deleteExpired(Date.now()); } catch {}
+    try { await this.sessions.deleteExpired(this.clock.now()); } catch {}
     return json(data, status, { "set-cookie": setCookie(SESSION_COOKIE, token, SESSION_MS / 1000) });
   }
 

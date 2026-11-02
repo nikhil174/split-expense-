@@ -12,6 +12,7 @@
 //   http/, config/
 import { housekeeping } from "./app/Container.ts";
 import { handleApi } from "./app/SplitItApplication.ts";
+import { systemClock } from "./config/Clock.ts";
 import { databaseOf, type AppEnv } from "./config/env.ts";
 import { RequestContext } from "./http/RequestContext.ts";
 import { errorResponse, fail } from "./http/responses.ts";
@@ -19,7 +20,7 @@ import { pushEnabled, sendPushes } from "./integration/push.ts";
 
 // Daily housekeeping (cron in wrangler.toml): removes rows that have
 // expired and are never read again. Nothing about money or history is touched.
-export function cleanup(db: D1Database, now = Date.now()) {
+export function cleanup(db: D1Database, now = systemClock.now()) {
   return housekeeping(db).removeExpired(now);
 }
 

@@ -2,6 +2,7 @@
 // "Confirm your email" (24 h) and "reset your password" (30 min, only to a
 // confirmed email). The link carries a random token; only its hash is kept,
 // a new link replaces older unused ones, and each works once.
+import type { Clock } from "../config/Clock.ts";
 import { EMAIL_LINK_MS } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
 import { linkEmail, sendEmail } from "../integration/email.ts";
@@ -16,10 +17,11 @@ export class EmailLinkService {
   private readonly env: AppEnv;
   private readonly tx: Transaction;
   private readonly tokens: EmailTokenRepository;
-  constructor(env: AppEnv, tx: Transaction, tokens: EmailTokenRepository) { this.env = env; this.tx = tx; this.tokens = tokens; }
+  private readonly clock: Clock;
+  constructor(env: AppEnv, tx: Transaction, tokens: EmailTokenRepository, clock: Clock) { this.env = env; this.tx = tx; this.tokens = tokens; this.clock = clock; }
 
   async send(origin: string, user: { id: string; name: string; email: string }, purpose: LinkPurpose): Promise<void> {
-    const token = newUrlToken() + newUrlToken(), now = Date.now();
+    const token = newUrlToken() + newUrlToken(), now = this.clock.now();
     await this.tx.run([
       this.tokens.deleteUnusedStmt(user.id, purpose),
       this.tokens.insertStmt(await sha256Hex(token), user.id, purpose, user.email, now + EMAIL_LINK_MS[purpose]),
@@ -40,7 +42,7 @@ export class EmailLinkService {
   // account still has that email.
   async find(token: unknown, purpose: LinkPurpose): Promise<EmailTokenRow | null> {
     const t = await this.tokens.find(await sha256Hex(String(token || "")), purpose);
-    if (!t || t.used_at || t.expires_at < Date.now() || t.email !== t.currentEmail) return null;
+    if (!t || t.used_at || t.expires_at < this.clock.now() || t.email !== t.currentEmail) return null;
     return t;
   }
 }

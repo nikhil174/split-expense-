@@ -1,16 +1,18 @@
 // appx_notifications: in-app notifications (the bell).
 import type { AppNotification } from "../../shared/api-types.ts";
+import type { Clock } from "../config/Clock.ts";
 import { newId } from "../security/crypto.ts";
 
 export type NewNotification = { to: string; groupId?: string | null; kind: string; title: string; body?: string | null; link?: string | null; actor?: string | null };
 
 export class NotificationRepository {
   private readonly db: D1Database;
-  constructor(db: D1Database) { this.db = db; }
+  private readonly clock: Clock;
+  constructor(db: D1Database, clock: Clock) { this.db = db; this.clock = clock; }
 
   insertStmt(n: NewNotification) {
     return this.db.prepare("INSERT INTO appx_notifications(id,recipient_id,group_id,kind,title,body,link,actor_name,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
-      .bind(newId(), n.to, n.groupId ?? null, n.kind, n.title, n.body ?? null, n.link ?? null, n.actor ?? null, Date.now());
+      .bind(newId(), n.to, n.groupId ?? null, n.kind, n.title, n.body ?? null, n.link ?? null, n.actor ?? null, this.clock.now());
   }
   deleteOlderThan(uid: string, before: number) { return this.db.prepare("DELETE FROM appx_notifications WHERE recipient_id=? AND created_at<?").bind(uid, before).run(); }
   list(uid: string) {
