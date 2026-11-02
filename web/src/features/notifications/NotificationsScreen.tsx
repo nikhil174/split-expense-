@@ -1,6 +1,6 @@
 import * as React from "react";
 import { m } from "motion/react";
-import { Bell, BellOff, BellRing, Check, HandCoins, Pencil, ReceiptText, Smartphone, Trash2, UserPlus, X } from "lucide-react";
+import { Bell, BellOff, BellRing, Check, HandCoins, HeartHandshake, Pencil, ReceiptText, Smartphone, Trash2, UserPlus, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, List, Page, SectionTitle, listItem, pressableRow } from "@/components/app/bits";
 import { BackButton } from "@/features/groups/GroupScreen";
@@ -20,6 +20,12 @@ const ICON: Record<string, { icon: React.ReactNode; tone: string }> = {
   payment_confirmed: { icon: <Check />, tone: "bg-positive-soft text-positive" },
   payment_rejected: { icon: <X />, tone: "bg-negative-soft text-negative" },
   payment_cancelled: { icon: <X />, tone: "bg-[#141716]/[0.05] text-muted-foreground" },
+  // "No need to pay": a lender letting someone off what they owe.
+  waiver_admin_approval: { icon: <HeartHandshake />, tone: "bg-[#e4c06c]/25 text-[#8a6416]" },
+  waiver_pending: { icon: <HeartHandshake />, tone: "bg-[#e4c06c]/25 text-[#8a6416]" },
+  waiver_approved: { icon: <HeartHandshake />, tone: "bg-positive-soft text-positive" },
+  waiver_rejected: { icon: <X />, tone: "bg-negative-soft text-negative" },
+  waiver_cancelled: { icon: <X />, tone: "bg-[#141716]/[0.05] text-muted-foreground" },
   approved: { icon: <Check />, tone: "bg-positive-soft text-positive" },
   access_request: { icon: <UserPlus />, tone: "bg-[#e4c06c]/25 text-[#8a6416]" },
   group_invite: { icon: <UserPlus />, tone: "bg-[#e4c06c]/25 text-[#8a6416]" },

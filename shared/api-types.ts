@@ -57,11 +57,14 @@ export type Mine = Debts & {
   totalYouOweCents: number; totalOwedToYouCents: number;
 };
 export type Balance = { memberId: string; name: string; balanceCents: number; balance: number };
+// "payment": money paid back; "waiver": the lender let the debtor off (no
+// money moved). Both clear the debt once confirmed.
+export type PaymentKind = "payment" | "waiver";
 export type Settlement = {
   id: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
   amountCents: number; amount: number; createdAt: number; createdBy: string; recordedByName: string; decidedAt: number | null;
   // A payment counts only once the receiver confirms it.
-  status: "pending" | "confirmed" | "rejected"; canDecide: boolean; canCancel: boolean; hasProof: boolean;
+  status: "pending" | "confirmed" | "rejected"; kind: PaymentKind; canDecide: boolean; canCancel: boolean; hasProof: boolean;
   // Recorded by the receiver ("they paid me"): a group admin approves it.
   needsAdmin: boolean;
 };
@@ -72,7 +75,7 @@ export type MemberSummary = {
   owes: { memberId: string; name: string; amountCents: number }[];
   owedBy: { memberId: string; name: string; amountCents: number }[];
   expenses: { id: string; description: string; amountCents: number; paidBy: string; paidByName: string; createdAt: number; shareCents: number; splitCount: number; effectCents: number }[];
-  payments: { id: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string; amountCents: number; createdAt: number; status: "pending" | "confirmed" }[];
+  payments: { id: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string; amountCents: number; createdAt: number; status: "pending" | "confirmed"; kind: PaymentKind }[];
 };
 // How a person likes to be paid (UPI only for now).
 export type PaymentMethod = { kind: "upi"; upiId: string | null; hasQr: boolean; updatedAt: number | null };
@@ -83,7 +86,7 @@ export type AppNotification = {
 };
 export type PendingPayment = {
   id: string; groupId: string; groupName: string; fromMemberId: string; fromName: string; toMemberId: string; toName: string;
-  amountCents: number; createdAt: number; incoming: boolean; hasProof: boolean;
+  amountCents: number; kind: PaymentKind; createdAt: number; incoming: boolean; hasProof: boolean;
   // "They paid me", recorded by the receiver: a group admin approves it.
   needsAdmin: boolean;
 };
@@ -91,7 +94,7 @@ export type Spending = { memberId: string; name: string; paidCents: number; shar
 export type Dashboard = { totalSpentCents: number; totalSpent: number; expenseCount: number; spending: Spending[] };
 export type ActivityItem =
   | { type: "expense"; id: string; description: string; paidBy: string; totalCents: number; shareCents: number; effectCents: number; runningCents: number; createdAt: number }
-  | { type: "payment"; id: string; fromMemberId: string; toMemberId: string; amountCents: number; effectCents: number; runningCents: number; createdAt: number };
+  | { type: "payment"; id: string; fromMemberId: string; toMemberId: string; amountCents: number; effectCents: number; runningCents: number; createdAt: number; kind?: PaymentKind };
 // One row per person per group: positive netCents means they owe me.
 // waitingOutCents: I sent them, awaiting their approval; waitingInCents: they sent me, awaiting mine.
 export type PersonBalance = { groupId: string; groupName: string; memberId: string; name: string; active: boolean; netCents: number; waitingOutCents: number; waitingInCents: number };
@@ -102,7 +105,7 @@ export type PersonView = { me: Identity; other: Identity & { active: boolean }; 
 export type StatementItem = {
   type: "expense" | "payment"; id: string; createdAt: number;
   description?: string; paidBy?: string; paidByName?: string; totalCents?: number; shareCents?: number;
-  fromMemberId?: string; fromName?: string; toMemberId?: string; toName?: string; amountCents?: number;
+  fromMemberId?: string; fromName?: string; toMemberId?: string; toName?: string; amountCents?: number; kind?: PaymentKind;
   // How it moved the balance between the two (0 for payments not counted), and the balance after it.
   effectCents: number; runningCents: number;
   // Expenses and confirmed payments are "counted"; other payments keep their status.

@@ -15,6 +15,7 @@ test("all migrations apply cleanly, in Wrangler order, to an empty isolated data
     "0007_member_pins.sql", "0008_unique_member_names.sql", "0009_settlement_confirmation.sql",
     "0010_payment_methods.sql", "0011_notifications.sql", "0012_payment_proofs_and_push.sql", "0013_accounts.sql", "0014_site_admin.sql", "0015_group_pins.sql", "0016_invites_and_friends.sql", "0017_email_links.sql",
     "0018_history_integrity_cleanup.sql",
+    "0019_waivers.sql",
   ]);
   await applyMigrations(db);
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'appx_%' ORDER BY name").all().map(r => r.name);
@@ -25,7 +26,7 @@ test("all migrations apply cleanly, in Wrangler order, to an empty isolated data
   const cols = db.prepare("PRAGMA table_info(appx_settlements)").all().map(c => [c.name, c.type, c.notnull]);
   assert.deepEqual(cols, [["id", "TEXT", 0], ["group_id", "TEXT", 1], ["from_member_id", "TEXT", 1], ["to_member_id", "TEXT", 1],
     ["amount_cents", "INTEGER", 1], ["created_by", "TEXT", 1], ["created_at", "INTEGER", 1],
-    ["status", "TEXT", 1], ["decided_by", "TEXT", 0], ["decided_at", "INTEGER", 0]]);
+    ["status", "TEXT", 1], ["decided_by", "TEXT", 0], ["decided_at", "INTEGER", 0], ["kind", "TEXT", 1]]);
   const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'appx_%'").all().map(r => r.name);
   assert.ok(!indexes.includes("appx_groups_unique_normalized_name"), "group names no longer unique");
   for (const name of ["appx_settlements_group_idx", "appx_expenses_group_created_idx", "appx_users_username_idx", "appx_users_email_idx", "appx_history_entity_idx"]) {
@@ -72,6 +73,20 @@ test("person ids must belong to an account, and names follow the account (0018)"
   assert.throws(() => db.prepare("UPDATE appx_expenses SET paid_by='ghost' WHERE id='e'").run(), /unknown account paid for expense/);
   db.prepare("UPDATE appx_users SET display_name='Annie' WHERE id='a'").run();
   assert.equal(db.prepare("SELECT name FROM appx_group_members WHERE member_id='a'").get().name, "Annie");
+});
+
+test("payments recorded before 0019 become kind 'payment'; only payment and waiver are allowed", async t => {
+  const db = fresh();
+  t.after(() => db.close());
+  await applyMigrations(db, f => f < "0019");
+  db.prepare("INSERT INTO appx_groups(id,name,created_at) VALUES('g','G',1)").run();
+  for (const u of ["a", "b"]) db.prepare("INSERT INTO appx_users(id,username,display_name,created_at) VALUES(?,?,?,1)").run(u, u, u);
+  db.prepare("INSERT INTO appx_settlements(id,group_id,from_member_id,to_member_id,amount_cents,created_by,created_at,status) VALUES('old','g','a','b',100,'a',1,'confirmed')").run();
+  await applyMigrations(db, f => f >= "0019");
+  assert.equal(db.prepare("SELECT kind FROM appx_settlements WHERE id='old'").get().kind, "payment");
+  const insert = db.prepare("INSERT INTO appx_settlements(id,group_id,from_member_id,to_member_id,amount_cents,created_by,created_at,kind) VALUES(?,'g','a','b',50,'b',2,?)");
+  insert.run("w", "waiver");
+  assert.throws(() => insert.run("x", "gift"), /CHECK/);
 });
 
 test("the old one-time reset migration no longer deletes data if it has not run yet", async t => {

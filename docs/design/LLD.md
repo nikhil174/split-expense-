@@ -85,7 +85,7 @@ type InGroup = Authed & { scope: GroupScope };   // gid, user, role, isAdmin, na
 | `InvitationController` | `/api/invitations`, `/api/groups/:id/invitation/(accept|decline)`, `/api/join/:code`; in a group: `invite-link(/reset|/off)` |
 | `MemberController` | in a group: `members/invite`, `members/:id/(approve|reject|remove|cancel-invite|make-admin|make-member)` |
 | `ExpenseController` | in a group: `expenses` (GET/POST), `expenses/:id/edit`, `expenses/:id/delete`, `history` |
-| `SettlementController` | `/api/payments/pending`; in a group: `settlements` (GET/POST), `settlements/mine`, `debts`, `settlements/:id/proof`, `settlements/:id/(confirm|reject|cancel)` |
+| `SettlementController` | `/api/payments/pending`; in a group: `settlements` (GET/POST), `settlements/mine`, `debts`, `settlements/waive`, `settlements/:id/proof`, `settlements/:id/(confirm|reject|cancel)` |
 | `InsightsController` | `/api/balances`; in a group: `balances`, `dashboard`, `members/:id`, `members/:id/statement`, `with/:id`, `pair/:a/:b` |
 | `PaymentMethodController` | `/api/payment-method` (GET/POST), `/qr`, `/delete`; in a group: `payment-methods`, `members/:id/qr` |
 | `NotificationController` | `/api/notifications` (GET), `/read`; `/api/push/key`, `/subscribe`, `/unsubscribe` |
@@ -113,6 +113,7 @@ It contains no business rules.
 | `ExpenseService` | Expenses and their history | `parse`, `add`, `edit`, `delete`, `list`, `history` |
 | `SettlementService` | The payment flow | `list`, `debts`, `record`, `proof`, `decide`, `pendingForMe` |
 | `PaymentNotifications` | Who hears about a payment, and the wording | `recorded`, `confirmed`, `rejected`, `cancelled` |
+| `WaiverNotifications` | Who hears about a waiver ("no need to pay"), and the wording; an approval goes to the whole group | `requested`, `approved`, `rejected`, `cancelled` |
 | `InsightsService` | Read-only views | `home`, `balances`, `dashboard`, `member`, `pair`, `statement` |
 | `PaymentMethodService` | UPI details | `mine`, `save`, `myQr`, `remove`, `inGroup`, `memberQr` |
 | `FriendService` | Friends | `list`, `request`, `act` |
@@ -217,6 +218,7 @@ All bodies are JSON. "Signed in" routes need the `split_user` cookie. "In group"
 | `GET history[?expense=]` | in group | `{ history: HistoryEntry[] }` |
 | `GET settlements`, `settlements/mine`, `debts` | in group | `{ settlements: Settlement[] }`; `Mine`; `Debts` |
 | `POST settlements` | in group | `{ ok, id, amountCents, status }` 201 |
+| `POST settlements/waive` `{ fromMemberId, amount? }` | in group; the lender (the person owed) | `{ ok, id, amountCents, status }` 201; amount defaults to everything still unpaid (owed less pending) |
 | `POST settlements/:id/(confirm|reject|cancel)` | in group (per the payment rules) | `{ ok, status }` / `{ ok, cancelled }` |
 | `GET settlements/:id/proof`, `members/:id/qr` | in group | image |
 | `GET balances`, `dashboard`, `members/:id`, `members/:id/statement`, `with/:id`, `pair/:a/:b`, `payment-methods` | in group | `{ balances }`, `Dashboard`, `MemberSummary`, `Statement`, `PersonView`, `{ people }` |
@@ -248,7 +250,7 @@ All bodies are JSON. "Signed in" routes need the `split_user` cookie. "In group"
 | `appx_group_unlocks` | `(session_hash, group_id)` | until | |
 | `appx_expenses` | `id` | group_id, description, amount_cents, paid_by, created_by, created_at | FK to group; index on (group_id, created_at) |
 | `appx_splits` | `(expense_id, member_id)` | amount_cents | FK to expense, deleted with it |
-| `appx_settlements` | `id` | group_id, from_member_id, to_member_id, amount_cents, status, created_by, created_at, decided_by, decided_at | FK to group; amount > 0; indexes on (group, created_at), (group, from, to), (group, status) |
+| `appx_settlements` | `id` | group_id, from_member_id, to_member_id, amount_cents, status, kind, created_by, created_at, decided_by, decided_at | FK to group; amount > 0; kind is `payment` or `waiver` (0019); indexes on (group, created_at), (group, from, to), (group, status) |
 | `appx_payment_proofs` | `settlement_id` | mime, base64, created_at | kept apart so lists never load images |
 | `appx_history` | `id` | group_id, entity, entity_id, action, actor_id, before_json, after_json, created_at | indexes on (group, entity, entity_id, created_at), (group, created_at) |
 | `appx_notifications` | `id` | recipient_id, group_id, kind, title, body, link, actor_name, created_at, read_at | index on (recipient, created_at) |
@@ -270,6 +272,8 @@ All bodies are JSON. "Signed in" routes need the `split_user` cookie. "In group"
 **Diagram:** [Membership states](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977057) (Miro board)
 
 **Diagram:** [Payment states](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977058) (Miro board)
+
+**Waivers** ("no need to pay") use the same states. The lender records a waiver from the debtor to themselves, so it needs an admin, like "they paid me": `pending` → `confirmed` (an admin approves; at once when the lender is an admin) or `rejected` (an admin), or cancelled (the lender or an admin). The debtor can't decide or cancel it, even as an admin. Once confirmed it clears the debt exactly like a payment.
 
 **Friendships:** none → `pending` (someone asks) → `accepted` (the other person accepts, or asks back). Declining, cancelling or removing deletes the row.
 
@@ -308,13 +312,15 @@ Balances in a group always sum to zero. The same ledger feeds every screen, so t
 | Profile and payment method | 20 per 10 min |
 | Admin key | 10 per 15 min, per account and per IP |
 
-**History snapshot.** `{ description, amountCents, paidBy, splits: [{ memberId, amountCents }] }` for expenses, and `{ fromMemberId, toMemberId, amountCents, createdBy, createdAt }` for payments. Names are added when the history is read.
+**History snapshot.** `{ description, amountCents, paidBy, splits: [{ memberId, amountCents }] }` for expenses, and `{ fromMemberId, toMemberId, amountCents, createdBy, createdAt, kind }` for payments. Names are added when the history is read.
 
 ## 10. Key sequences
 
 **Recording "they paid me".**
 
 **Diagram:** [Recording a payment (they paid me)](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977059) (Miro board)
+
+**Letting someone off (waiver):** rate limit → the lender is the person acting → the debtor is in the group (400) → owed now, less what's pending (409 if nothing is left) → optional amount, at most that → `initialStatus` → conditional INSERT with `kind = 'waiver'` (409 if the debt changed) → notifications: the admins (not the debtor) and the debtor; or, when confirmed at once, every active member. Approving re-checks the debt with the same conditional UPDATE as payments, then tells every active member except the approver.
 
 **Editing an expense:** rate limit → find the expense (404) → payer or admin (403) → read and parse the body → old splits → one transaction: history entry (before and after), notifications (including people removed from the split), update, delete the old splits, insert the new splits.
 
@@ -338,7 +344,7 @@ Balances in a group always sum to zero. The same ledger feeds every screen, so t
 |---|---|---|
 | Unit | `tests/*.test.js` (money, split, settlement logic, payment rules, text, router, notifications, password guard) | Pure functions, or classes with fakes (`Transaction`, `Clock`, repositories) |
 | API | `tests/*.api.test.js` | The real Worker against `node:sqlite` with all migrations (`tests/helpers/d1.js`) |
-| Golden master | `tests/golden/` | Fixed clock, ids and randomness; 416 requests; compares responses, emails, pushes and the database (`npm run golden:record` after an intended change) |
+| Golden master | `tests/golden/` | Fixed clock, ids and randomness; 456 requests; compares responses, emails, pushes and the database (`npm run golden:record` after an intended change) |
 | Migrations | `tests/migrations.test.js`, `tests/legacy-migration.test.js` | Empty database; data written by the old Worker |
 | Browser | `e2e/browser.e2e.mjs` | Playwright, Pixel 7 viewport, local `wrangler dev` |
 

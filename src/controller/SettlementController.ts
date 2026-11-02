@@ -12,6 +12,7 @@ export class SettlementController {
     r.get("settlements", this.list);
     r.get(/^(settlements\/mine|debts)$/, this.debts);
     r.post("settlements", this.record);
+    r.post("settlements/waive", this.waive);
     r.get(/^settlements\/([\w-]+)\/proof$/, this.proof);
     r.post(/^settlements\/([\w-]+)\/(confirm|reject|cancel)$/, this.decide);
   }
@@ -30,6 +31,12 @@ export class SettlementController {
   async record({ http, app, user, scope }: InGroup) {
     await app.limiter.check("settlement", user.id, RATE_LIMITS.settlementWrite);
     return json(await app.settlements.record(scope, await http.body(IMAGE_BODY_BYTES)), 201);
+  }
+
+  // Let someone off what they still owe me ("no need to pay").
+  async waive({ http, app, user, scope }: InGroup) {
+    await app.limiter.check("settlement", user.id, RATE_LIMITS.settlementWrite);
+    return json(await app.settlements.waive(scope, await http.body()), 201);
   }
 
   // The screenshot attached to a payment, for people in the group.

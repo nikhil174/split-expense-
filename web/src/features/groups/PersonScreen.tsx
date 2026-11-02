@@ -9,6 +9,7 @@ import { SettleUpDrawer } from "./SettleUpDrawer";
 import { ExpenseBreakdown } from "./ExpenseBreakdown";
 import { AwaitingBadge } from "./Awaiting";
 import { useDebts, useGroup, usePerson } from "@/hooks/queries";
+import { isWaiver } from "./Awaiting";
 import { inr } from "@/lib/money";
 import { goBack } from "@/lib/route";
 import { cn } from "@/lib/utils";
@@ -80,8 +81,8 @@ export function PersonScreen({ groupId, memberId }: { groupId: string; memberId:
                         <><span className="block truncate text-[15px] font-medium">{it.description}</span>
                           <span className="footnote block truncate text-muted-foreground">{it.paidBy === memberId ? d.other.name + " paid" : "You paid"} {inr(it.totalCents)} · {it.paidBy === memberId ? "your" : d.other.name + "'s"} share {inr(it.shareCents)}</span></>
                       ) : (
-                        <><span className="block truncate text-[15px] font-medium">{it.fromMemberId === memberId ? d.other.name + " paid you" : "You paid " + d.other.name}</span>
-                          <span className="footnote block text-muted-foreground">Payment</span></>
+                        <><span className="block truncate text-[15px] font-medium">{isWaiver(it) ? (it.fromMemberId === memberId ? `You let ${d.other.name} off` : `${d.other.name} let you off`) : it.fromMemberId === memberId ? d.other.name + " paid you" : "You paid " + d.other.name}</span>
+                          <span className="footnote block text-muted-foreground">{isWaiver(it) ? "No need to pay" : "Payment"}</span></>
                       )}
                     </td>
                     <td className={cn("tabular px-2 py-2.5 text-right whitespace-nowrap", it.effectCents > 0 ? "text-positive" : "text-negative")}>{it.effectCents > 0 ? "+" : "−"}{inr(Math.abs(it.effectCents))}</td>

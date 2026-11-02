@@ -9,6 +9,7 @@ import { AwaitingBadge } from "./Awaiting";
 import { ExpandableExpense } from "./ExpenseBreakdown";
 import { usePeopleBalances, usePerson } from "@/hooks/queries";
 import type { PersonBalance } from "@/lib/api";
+import { isWaiver } from "./Awaiting";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
 import { cn } from "@/lib/utils";
@@ -124,8 +125,8 @@ function PersonDetail({ person, onOpenPage }: { person: PersonBalance; onOpenPag
                     <><span className="block truncate text-[15px] font-medium">{it.description}</span>
                       <span className="footnote block truncate text-muted-foreground">{it.paidBy === person.memberId ? person.name + " paid" : "You paid"} {inr(it.totalCents)} · {it.paidBy === person.memberId ? "your" : person.name + "'s"} share {inr(it.shareCents)}</span></>
                   ) : (
-                    <><span className="block truncate text-[15px] font-medium">{it.fromMemberId === person.memberId ? person.name + " paid you" : "You paid " + person.name}</span>
-                      <span className="footnote block text-muted-foreground">Payment</span></>
+                    <><span className="block truncate text-[15px] font-medium">{isWaiver(it) ? (it.fromMemberId === person.memberId ? `You let ${person.name} off` : `${person.name} let you off`) : it.fromMemberId === person.memberId ? person.name + " paid you" : "You paid " + person.name}</span>
+                      <span className="footnote block text-muted-foreground">{isWaiver(it) ? "No need to pay" : "Payment"}</span></>
                   )}
                 </span>
                 <span className={cn("tabular text-right text-[15px] font-medium whitespace-nowrap", it.effectCents > 0 ? "text-positive" : "text-negative")}>{it.effectCents > 0 ? "+" : "−"}{inr(Math.abs(it.effectCents))}</span>

@@ -127,6 +127,15 @@ export function useRecordPayment(groupId: string) {
   });
 }
 
+// Let someone off what they still owe me ("no need to pay"); amount defaults to all of it.
+export function useWaiveDebt(groupId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { fromMemberId: string; amount?: string }) => post<{ id: string; status: "pending" | "confirmed"; amountCents: number }>(`/api/groups/${groupId}/settlements/waive`, body),
+    onSuccess: () => refreshGroup(qc, groupId),
+  });
+}
+
 export const useFriends = () => useQuery({ queryKey: keys.friends, queryFn: () => get<Friends>("/api/friends") });
 export const useInviteLink = (groupId: string, enabled = true) => useQuery({ ...groupQuery<{ code: string | null; canManage: boolean }>(groupId, "invite-link", "/invite-link"), enabled });
 

@@ -15,5 +15,5 @@ export type GroupMember = { id: string; name: string; role: Role; status: Member
 export type ShareRow = { memberId: string; amountCents: number };
 export type EmailTokenRow = { token_hash: string; user_id: string; email: string; expires_at: number; used_at: number | null; currentEmail: string | null; username: string; display_name: string };
 export type PaymentMethodRow = { member_id: string; kind: string; upi_id: string | null; qr_mime: string | null; qr_base64: string | null; updated_at: number | null };
-export type SettlementRow = { id: string; fromId: string; toId: string; cents: number; status: string; createdBy: string; createdAt: number };
+export type SettlementRow = { id: string; fromId: string; toId: string; cents: number; status: string; createdBy: string; createdAt: number; kind: "payment" | "waiver" };
 export type HistoryRow = { id: string; group_id: string; entity: "expense" | "payment"; entity_id: string; action: "created" | "edited" | "deleted" | "cancelled"; actor_id: string; before_json: string | null; after_json: string | null; created_at: number };

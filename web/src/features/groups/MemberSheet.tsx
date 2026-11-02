@@ -8,6 +8,7 @@ import { SheetHeader } from "./AddExpenseDrawer";
 import { PairDetail } from "./PairDetail";
 import { ExpandableExpense } from "./ExpenseBreakdown";
 import { useMemberSummary } from "@/hooks/queries";
+import { isWaiver } from "./Awaiting";
 import { inr } from "@/lib/money";
 import { navigate } from "@/lib/route";
 import { cn } from "@/lib/utils";
@@ -109,8 +110,13 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
                         <li key={x.id} className="flex items-center gap-3 border-b border-hairline px-4 py-3 last:border-0">
                           <DateBadge ts={x.createdAt} />
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[15px] font-medium">{x.fromMemberId === meId ? "You" : x.fromName} paid {label(x.toMemberId, x.toName)}</span>
-                            <span className="footnote block text-muted-foreground">{x.status === "pending" ? `Waiting for ${label(x.toMemberId, x.toName)} to confirm` : "Confirmed"}</span>
+                            {isWaiver(x) ? <>
+                              <span className="block truncate text-[15px] font-medium">{x.toMemberId === meId ? "You" : x.toName} let {label(x.fromMemberId, x.fromName)} off</span>
+                              <span className="footnote block text-muted-foreground">{x.status === "pending" ? "No need to pay · waiting for an admin to approve" : "No need to pay"}</span>
+                            </> : <>
+                              <span className="block truncate text-[15px] font-medium">{x.fromMemberId === meId ? "You" : x.fromName} paid {label(x.toMemberId, x.toName)}</span>
+                              <span className="footnote block text-muted-foreground">{x.status === "pending" ? `Waiting for ${label(x.toMemberId, x.toName)} to confirm` : "Confirmed"}</span>
+                            </>}
                           </span>
                           <span className={cn("tabular text-[14.5px] font-medium", x.status === "pending" && "text-muted-foreground")}>{inr(x.amountCents)}</span>
                         </li>

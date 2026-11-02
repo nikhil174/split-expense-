@@ -5,6 +5,7 @@ import { DateBadge, EmptyState, PersonAvatar } from "@/components/app/bits";
 import { SheetHeader } from "./AddExpenseDrawer";
 import { ExpandableExpense } from "./ExpenseBreakdown";
 import { usePair } from "@/hooks/queries";
+import { isWaiver } from "./Awaiting";
 import { inr } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import * as React from "react";
@@ -57,8 +58,10 @@ export function PairDetail({ groupId, creditorId, debtorId, meId }: { groupId: s
                       </>
                     ) : (
                       <>
-                        <span className="block truncate text-[15px] font-medium">{nm(it.fromMemberId!, nameOf(it.fromMemberId!))} paid {it.toMemberId === meId ? "you" : nameOf(it.toMemberId!)}</span>
-                        <span className="footnote block text-muted-foreground">Payment</span>
+                        <span className="block truncate text-[15px] font-medium">{isWaiver(it)
+                          ? <>{nm(it.toMemberId!, nameOf(it.toMemberId!))} let {it.fromMemberId === meId ? "you" : nameOf(it.fromMemberId!)} off</>
+                          : <>{nm(it.fromMemberId!, nameOf(it.fromMemberId!))} paid {it.toMemberId === meId ? "you" : nameOf(it.toMemberId!)}</>}</span>
+                        <span className="footnote block text-muted-foreground">{isWaiver(it) ? "No need to pay" : "Payment"}</span>
                       </>
                     )}
                   </span>
@@ -66,7 +69,7 @@ export function PairDetail({ groupId, creditorId, debtorId, meId }: { groupId: s
                     <span className={cn("tabular block text-[14.5px] font-medium whitespace-nowrap", it.type === "payment" ? "text-positive" : "text-foreground")}>
                       {it.type === "payment" ? "−" : "+"}{inr(Math.abs(it.effectCents))}
                     </span>
-                    <span className="block text-[11.5px] whitespace-nowrap text-muted-foreground">{it.type === "payment" ? "paid back" : `${nm(debtor.id, debtor.name)} ${debtor.id === meId ? "owe" : "owes"}`}</span>
+                    <span className="block text-[11.5px] whitespace-nowrap text-muted-foreground">{it.type === "payment" ? (isWaiver(it) ? "let off" : "paid back") : `${nm(debtor.id, debtor.name)} ${debtor.id === meId ? "owe" : "owes"}`}</span>
                   </span>
                 </>);
             })}

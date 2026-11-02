@@ -14,6 +14,9 @@ export function AwaitingBadge({ cents, label = "awaiting approval", className }:
   );
 }
 
+// A waiver: the lender let the debtor off ("no need to pay"), not money paid.
+export const isWaiver = (p: { kind?: string }) => p.kind === "waiver";
+
 export const proofSrc = (groupId: string, settlementId: string) => `/api/groups/${encodeURIComponent(groupId)}/settlements/${encodeURIComponent(settlementId)}/proof`;
 
 // Full-size view of a payment screenshot.

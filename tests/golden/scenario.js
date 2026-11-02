@@ -470,4 +470,41 @@ export async function scenario(t) {
   await c("signin after three months", "POST", "/api/auth/signin", { keepAs: "vicky", body: { login: "vicky", password: PASS } });
   await c("old notifications cleared on read", "GET", "/api/notifications", { as: "vicky" });
   await t.cron("daily cleanup later");
+
+  // ----- No need to pay (waivers), in a new group -----
+  // Vicky (admin) and Jagan (made admin) can approve; Paro lends to Gina.
+  await c("signin jagan later", "POST", "/api/auth/signin", { keepAs: "jagan", body: { login: "jagan", password: PASS } });
+  await c("signin paro later", "POST", "/api/auth/signin", { keepAs: "paro", body: { login: "paro", password: PASS } });
+  await c("signin gina later", "POST", "/api/auth/signin", { keepAs: "gina", body: { login: "ginarao", password: PASS } });
+  const flat = (await c("flat group", "POST", "/api/groups", { as: "vicky", body: { name: "Flat", pin: PIN } })).data.group.id;
+  const F = `/api/groups/${flat}`, W = F + "/settlements/waive", FS = F + "/settlements";
+  for (const who of ["jagan", "paro", "ginarao"]) await c(`flat invite ${who}`, "POST", F + "/members/invite", { as: "vicky", body: { login: who } });
+  for (const who of ["jagan", "paro", "gina"]) await c(`flat accept ${who}`, "POST", F + "/invitation/accept", { as: who, body: { pin: PIN } });
+  await c("flat make jagan admin", "POST", F + `/members/${ids.jagan}/make-admin`, { as: "vicky" });
+  await c("flat rent", "POST", F + "/expenses", { as: "paro", body: { description: "Rent", amount: "300", paidBy: ids.paro, memberIds: [ids.paro, ids.gina, ids.vicky] } });
+  await c("flat wifi", "POST", F + "/expenses", { as: "vicky", body: { description: "Wifi", amount: "90", paidBy: ids.vicky, memberIds: [ids.vicky, ids.gina] } });
+  await c("waive nobody", "POST", W, { as: "paro", body: {} });
+  await c("waive self", "POST", W, { as: "paro", body: { fromMemberId: ids.paro } });
+  await c("waive outsider", "POST", W, { as: "paro", body: { fromMemberId: ids.nikhil } });
+  await c("waive not owed", "POST", W, { as: "jagan", body: { fromMemberId: ids.gina } });
+  await c("waive bad amount", "POST", W, { as: "paro", body: { fromMemberId: ids.gina, amount: "abc" } });
+  await c("waive too much", "POST", W, { as: "paro", body: { fromMemberId: ids.gina, amount: "500" } });
+  const w1 = (await c("waive part", "POST", W, { as: "paro", body: { fromMemberId: ids.gina, amount: "40" } })).data.id;
+  await c("waiver pending (admin)", "GET", "/api/payments/pending", { as: "jagan" });
+  await c("waiver pending (debtor)", "GET", "/api/payments/pending", { as: "gina" });
+  await c("lender can't approve waiver", "POST", `${FS}/${w1}/confirm`, { as: "paro" });
+  await c("debtor can't cancel waiver", "POST", `${FS}/${w1}/cancel`, { as: "gina" });
+  await c("admin approves waiver", "POST", `${FS}/${w1}/confirm`, { as: "jagan" });
+  const w2 = (await c("waive the rest", "POST", W, { as: "paro", body: { fromMemberId: ids.gina } })).data.id;
+  await c("waive nothing left", "POST", W, { as: "paro", body: { fromMemberId: ids.gina } });
+  await c("admin rejects waiver", "POST", `${FS}/${w2}/reject`, { as: "vicky" });
+  const w3 = (await c("waive the rest again", "POST", W, { as: "paro", body: { fromMemberId: ids.gina } })).data.id;
+  await c("lender cancels waiver", "POST", `${FS}/${w3}/cancel`, { as: "paro" });
+  await c("admin lender waives at once", "POST", W, { as: "vicky", body: { fromMemberId: ids.gina } });
+  await c("flat payments", "GET", FS, { as: "gina" });
+  await c("flat debts", "GET", F + "/debts", { as: "gina" });
+  await c("gina with paro", "GET", F + `/with/${ids.paro}`, { as: "gina" });
+  await c("gina summary", "GET", F + `/members/${ids.gina}`, { as: "gina" });
+  await c("gina statement", "GET", F + `/members/${ids.gina}/statement`, { as: "gina" });
+  for (const who of ["gina", "paro", "vicky", "jagan"]) await c(`waiver notifications ${who}`, "GET", "/api/notifications", { as: who });
 }

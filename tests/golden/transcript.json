@@ -6456,6 +6456,7 @@
       "toMemberId": "00000000-0000-4000-8000-000000000001",
       "toName": "Nikhil Srivastava",
       "amountCents": 10000,
+      "kind": "payment",
       "createdAt": 1790839310000,
       "hasProof": true,
       "needsAdmin": false,
@@ -6487,6 +6488,7 @@
       "toMemberId": "00000000-0000-4000-8000-000000000001",
       "toName": "Nikhil Srivastava",
       "amountCents": 10000,
+      "kind": "payment",
       "createdAt": 1790839310000,
       "hasProof": true,
       "needsAdmin": false,
@@ -6753,6 +6755,7 @@
       "toMemberId": "00000000-0000-4000-8000-000000000004",
       "toName": "Vicky",
       "amountCents": 30000,
+      "kind": "payment",
       "createdAt": 1790839325000,
       "hasProof": false,
       "needsAdmin": true,
@@ -6782,6 +6785,7 @@
       "toMemberId": "00000000-0000-4000-8000-000000000004",
       "toName": "Vicky",
       "amountCents": 30000,
+      "kind": "payment",
       "createdAt": 1790839325000,
       "hasProof": false,
       "needsAdmin": true,
@@ -6813,6 +6817,7 @@
       "toMemberId": "00000000-0000-4000-8000-000000000004",
       "toName": "Vicky",
       "amountCents": 30000,
+      "kind": "payment",
       "createdAt": 1790839325000,
       "hasProof": false,
       "needsAdmin": true,
@@ -7364,6 +7369,7 @@
       "toName": "Jagan",
       "amountCents": 30000,
       "status": "rejected",
+      "kind": "payment",
       "createdBy": "old-1",
       "hasProof": false,
       "decidedAt": 1790839345000,
@@ -7382,6 +7388,7 @@
       "toName": "Nikhil Srivastava",
       "amountCents": 10000,
       "status": "confirmed",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000001",
       "hasProof": false,
       "decidedAt": 1790839341000,
@@ -7400,6 +7407,7 @@
       "toName": "Arsha",
       "amountCents": 2000,
       "status": "pending",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000001",
       "hasProof": false,
       "decidedAt": null,
@@ -7418,6 +7426,7 @@
       "toName": "Vicky",
       "amountCents": 1000,
       "status": "rejected",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000004",
       "hasProof": false,
       "decidedAt": 1790839333000,
@@ -7436,6 +7445,7 @@
       "toName": "Vicky",
       "amountCents": 30000,
       "status": "confirmed",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000004",
       "hasProof": false,
       "decidedAt": 1790839331000,
@@ -7454,6 +7464,7 @@
       "toName": "Nikhil Srivastava",
       "amountCents": 5000,
       "status": "rejected",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000010",
       "hasProof": false,
       "decidedAt": 1790839321000,
@@ -7472,6 +7483,7 @@
       "toName": "Nikhil Srivastava",
       "amountCents": 10000,
       "status": "confirmed",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000007",
       "hasProof": true,
       "decidedAt": 1790839318000,
@@ -7505,6 +7517,7 @@
       "toName": "Jagan",
       "amountCents": 30000,
       "status": "rejected",
+      "kind": "payment",
       "createdBy": "old-1",
       "hasProof": false,
       "decidedAt": 1790839345000,
@@ -7523,6 +7536,7 @@
       "toName": "Nikhil Srivastava",
       "amountCents": 10000,
       "status": "confirmed",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000001",
       "hasProof": false,
       "decidedAt": 1790839341000,
@@ -7541,6 +7555,7 @@
       "toName": "Arsha",
       "amountCents": 2000,
       "status": "pending",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000001",
       "hasProof": false,
       "decidedAt": null,
@@ -7559,6 +7574,7 @@
       "toName": "Vicky",
       "amountCents": 1000,
       "status": "rejected",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000004",
       "hasProof": false,
       "decidedAt": 1790839333000,
@@ -7577,6 +7593,7 @@
       "toName": "Vicky",
       "amountCents": 30000,
       "status": "confirmed",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000004",
       "hasProof": false,
       "decidedAt": 1790839331000,
@@ -7595,6 +7612,7 @@
       "toName": "Nikhil Srivastava",
       "amountCents": 5000,
       "status": "rejected",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000010",
       "hasProof": false,
       "decidedAt": 1790839321000,
@@ -7613,6 +7631,7 @@
       "toName": "Nikhil Srivastava",
       "amountCents": 10000,
       "status": "confirmed",
+      "kind": "payment",
       "createdBy": "00000000-0000-4000-8000-000000000007",
       "hasProof": true,
       "decidedAt": 1790839318000,
@@ -7724,6 +7743,7 @@
       "amountCents": 30000,
       "createdAt": 1790839325000,
       "status": "confirmed",
+      "kind": "payment",
       "fromName": "Jagan",
       "toName": "Vicky"
      },
@@ -7734,6 +7754,7 @@
       "amountCents": 10000,
       "createdAt": 1790839310000,
       "status": "confirmed",
+      "kind": "payment",
       "fromName": "Jagan",
       "toName": "Nikhil Srivastava"
      }
@@ -7827,6 +7848,7 @@
       "amountCents": 30000,
       "createdAt": 1790839325000,
       "status": "confirmed",
+      "kind": "payment",
       "fromName": "Jagan",
       "toName": "Vicky"
      }
@@ -7877,6 +7899,7 @@
       "amountCents": 30000,
       "effectCents": -30000,
       "createdAt": 1790839325000,
+      "kind": "payment",
       "runningCents": 13300
      },
      {
@@ -7923,6 +7946,7 @@
       "amountCents": 10000,
       "effectCents": -10000,
       "createdAt": 1790839310000,
+      "kind": "payment",
       "runningCents": 80010
      },
      {
@@ -8106,6 +8130,7 @@
         "amountCents": 10000,
         "effectCents": 10000,
         "createdAt": 1790839310000,
+        "kind": "payment",
         "runningCents": -80010,
         "status": "counted",
         "fromName": "Jagan",
@@ -8147,6 +8172,7 @@
         "amountCents": 30000,
         "effectCents": 0,
         "createdAt": 1790839342000,
+        "kind": "payment",
         "status": "rejected",
         "runningCents": 5000,
         "fromName": "Raju",
@@ -8181,6 +8207,7 @@
         "amountCents": 30000,
         "effectCents": 30000,
         "createdAt": 1790839325000,
+        "kind": "payment",
         "runningCents": -13300,
         "status": "counted",
         "fromName": "Jagan",
@@ -8194,6 +8221,7 @@
         "amountCents": 1000,
         "effectCents": 0,
         "createdAt": 1790839332000,
+        "kind": "payment",
         "status": "rejected",
         "runningCents": -13300,
         "fromName": "Jagan",
@@ -8296,6 +8324,7 @@
         "amountCents": 5000,
         "effectCents": 0,
         "createdAt": 1790839320000,
+        "kind": "payment",
         "status": "rejected",
         "runningCents": 80010,
         "fromName": "Arsha",
@@ -8337,6 +8366,7 @@
         "amountCents": 10000,
         "effectCents": -10000,
         "createdAt": 1790839310000,
+        "kind": "payment",
         "runningCents": 80010,
         "status": "counted",
         "fromName": "Jagan",
@@ -8371,6 +8401,7 @@
         "amountCents": 10000,
         "effectCents": -10000,
         "createdAt": 1790839341000,
+        "kind": "payment",
         "runningCents": 80010,
         "status": "counted",
         "fromName": "Paro",
@@ -8869,6 +8900,7 @@
        "amountCents": 1000,
        "createdBy": "00000000-0000-4000-8000-000000000004",
        "createdAt": 1790839338000,
+       "kind": "payment",
        "fromName": "Jagan",
        "toName": "Vicky",
        "createdByName": "Vicky"
@@ -8889,6 +8921,7 @@
        "amountCents": 1000,
        "createdBy": "00000000-0000-4000-8000-000000000004",
        "createdAt": 1790839336000,
+       "kind": "payment",
        "fromName": "Jagan",
        "toName": "Vicky",
        "createdByName": "Vicky"
@@ -8909,6 +8942,7 @@
        "amountCents": 1000,
        "createdBy": "00000000-0000-4000-8000-000000000004",
        "createdAt": 1790839334000,
+       "kind": "payment",
        "fromName": "Jagan",
        "toName": "Vicky",
        "createdByName": "Vicky"
@@ -8929,6 +8963,7 @@
        "amountCents": 2000,
        "createdBy": "00000000-0000-4000-8000-000000000010",
        "createdAt": 1790839322000,
+       "kind": "payment",
        "fromName": "Arsha",
        "toName": "Nikhil Srivastava",
        "createdByName": "Arsha"
@@ -11682,6 +11717,1463 @@
      "cleanup {\"sessions\":0,\"unlocks\":0,\"rateLimits\":0,\"emailLinks\":0,\"notifications\":0}"
     ]
    ]
+  },
+  {
+   "n": 417,
+   "label": "signin jagan later",
+   "method": "POST",
+   "path": "/api/auth/signin",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "set-cookie": "split_user=00000000-0000-4000-8000-00000000017100000000-0000-4000-8000-000000000172; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000007",
+    "legacy": false
+   }
+  },
+  {
+   "n": 418,
+   "label": "signin paro later",
+   "method": "POST",
+   "path": "/api/auth/signin",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "set-cookie": "split_user=00000000-0000-4000-8000-00000000017300000000-0000-4000-8000-000000000174; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000013",
+    "legacy": false
+   }
+  },
+  {
+   "n": 419,
+   "label": "signin gina later",
+   "method": "POST",
+   "path": "/api/auth/signin",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "set-cookie": "split_user=00000000-0000-4000-8000-00000000017500000000-0000-4000-8000-000000000176; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000035",
+    "legacy": false
+   }
+  },
+  {
+   "n": 420,
+   "label": "flat group",
+   "method": "POST",
+   "path": "/api/groups",
+   "status": 201,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "group": {
+     "id": "00000000-0000-4000-8000-000000000177",
+     "name": "Flat"
+    }
+   }
+  },
+  {
+   "n": 421,
+   "label": "flat invite jagan",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/members/invite",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "status": "invited",
+    "name": "Jagan"
+   }
+  },
+  {
+   "n": 422,
+   "label": "flat invite paro",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/members/invite",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "status": "invited",
+    "name": "Paro"
+   }
+  },
+  {
+   "n": 423,
+   "label": "flat invite ginarao",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/members/invite",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "status": "invited",
+    "name": "Gina Rao"
+   }
+  },
+  {
+   "n": 424,
+   "label": "flat accept jagan",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/invitation/accept",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "groupId": "00000000-0000-4000-8000-000000000177"
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Jagan joined “Flat”",
+       "body": "They accepted your invitation.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "member_joined"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
+  },
+  {
+   "n": 425,
+   "label": "flat accept paro",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/invitation/accept",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "groupId": "00000000-0000-4000-8000-000000000177"
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Paro joined “Flat”",
+       "body": "They accepted your invitation.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "member_joined"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
+  },
+  {
+   "n": 426,
+   "label": "flat accept gina",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/invitation/accept",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "groupId": "00000000-0000-4000-8000-000000000177"
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Gina Rao joined “Flat”",
+       "body": "They accepted your invitation.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "member_joined"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
+  },
+  {
+   "n": 427,
+   "label": "flat make jagan admin",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/members/00000000-0000-4000-8000-000000000007/make-admin",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true
+   }
+  },
+  {
+   "n": 428,
+   "label": "flat rent",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses",
+   "status": 201,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000185",
+    "amountCents": 30000,
+    "splits": [
+     {
+      "memberId": "00000000-0000-4000-8000-000000000013",
+      "amountCents": 10000
+     },
+     {
+      "memberId": "00000000-0000-4000-8000-000000000035",
+      "amountCents": 10000
+     },
+     {
+      "memberId": "00000000-0000-4000-8000-000000000004",
+      "amountCents": 10000
+     }
+    ]
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Paro added “Rent”",
+       "body": "Paro paid ₹300.00 · you owe ₹100.00",
+       "link": "#/g/00000000-0000-4000-8000-000000000177/e/00000000-0000-4000-8000-000000000185",
+       "tag": "expense_added"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
+  },
+  {
+   "n": 429,
+   "label": "flat wifi",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses",
+   "status": 201,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000189",
+    "amountCents": 9000,
+    "splits": [
+     {
+      "memberId": "00000000-0000-4000-8000-000000000004",
+      "amountCents": 4500
+     },
+     {
+      "memberId": "00000000-0000-4000-8000-000000000035",
+      "amountCents": 4500
+     }
+    ]
+   }
+  },
+  {
+   "n": 430,
+   "label": "waive nobody",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 400,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "Choose who you're letting off."
+   }
+  },
+  {
+   "n": 431,
+   "label": "waive self",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 400,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "You can't let yourself off."
+   }
+  },
+  {
+   "n": 432,
+   "label": "waive outsider",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 400,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "They must belong to this group."
+   }
+  },
+  {
+   "n": 433,
+   "label": "waive not owed",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 409,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "They don't owe you anything."
+   }
+  },
+  {
+   "n": 434,
+   "label": "waive bad amount",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 400,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "Enter an amount in rupees with at most two decimal places."
+   }
+  },
+  {
+   "n": 435,
+   "label": "waive too much",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 409,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "They owe you ₹100.00 that isn't already waiting for approval, so you can let them off at most that."
+   }
+  },
+  {
+   "n": 436,
+   "label": "waive part",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 201,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000192",
+    "amountCents": 4000,
+    "status": "pending"
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Paro wants to let Gina Rao off ₹40.00",
+       "body": "Gina Rao won't need to pay it once an admin approves.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "waiver_admin_approval"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
+  },
+  {
+   "n": 437,
+   "label": "waiver pending (admin)",
+   "method": "GET",
+   "path": "/api/payments/pending",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "toConfirm": [
+     {
+      "id": "00000000-0000-4000-8000-000000000192",
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat",
+      "fromMemberId": "00000000-0000-4000-8000-000000000035",
+      "fromName": "Gina Rao",
+      "toMemberId": "00000000-0000-4000-8000-000000000013",
+      "toName": "Paro",
+      "amountCents": 4000,
+      "kind": "waiver",
+      "createdAt": 1799393056000,
+      "hasProof": false,
+      "needsAdmin": true,
+      "incoming": true
+     }
+    ],
+    "waiting": []
+   }
+  },
+  {
+   "n": 438,
+   "label": "waiver pending (debtor)",
+   "method": "GET",
+   "path": "/api/payments/pending",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "toConfirm": [],
+    "waiting": [
+     {
+      "id": "00000000-0000-4000-8000-000000000192",
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat",
+      "fromMemberId": "00000000-0000-4000-8000-000000000035",
+      "fromName": "Gina Rao",
+      "toMemberId": "00000000-0000-4000-8000-000000000013",
+      "toName": "Paro",
+      "amountCents": 4000,
+      "kind": "waiver",
+      "createdAt": 1799393056000,
+      "hasProof": false,
+      "needsAdmin": true,
+      "incoming": false
+     }
+    ]
+   }
+  },
+  {
+   "n": 439,
+   "label": "lender can't approve waiver",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000192/confirm",
+   "status": 403,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "A group admin approves letting them off."
+   }
+  },
+  {
+   "n": 440,
+   "label": "debtor can't cancel waiver",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000192/cancel",
+   "status": 403,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "Only the person who is owed or a group admin can cancel this."
+   }
+  },
+  {
+   "n": 441,
+   "label": "admin approves waiver",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000192/confirm",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "status": "confirmed"
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Paro let Gina Rao off ₹40.00, approved by Jagan",
+       "body": "Gina Rao doesn't need to pay it back.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "waiver_approved"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
+  },
+  {
+   "n": 442,
+   "label": "waive the rest",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 201,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000199",
+    "amountCents": 6000,
+    "status": "pending"
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Paro wants to let Gina Rao off ₹60.00",
+       "body": "Gina Rao won't need to pay it once an admin approves.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "waiver_admin_approval"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
+  },
+  {
+   "n": 443,
+   "label": "waive nothing left",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 409,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "Everything they owe you is already waiting for approval."
+   }
+  },
+  {
+   "n": 444,
+   "label": "admin rejects waiver",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000199/reject",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "status": "rejected"
+   }
+  },
+  {
+   "n": 445,
+   "label": "waive the rest again",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 201,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000205",
+    "amountCents": 6000,
+    "status": "pending"
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Paro wants to let Gina Rao off ₹60.00",
+       "body": "Gina Rao won't need to pay it once an admin approves.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "waiver_admin_approval"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
+  },
+  {
+   "n": 446,
+   "label": "lender cancels waiver",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000205/cancel",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "cancelled": true
+   }
+  },
+  {
+   "n": 447,
+   "label": "admin lender waives at once",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/waive",
+   "status": 201,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000211",
+    "amountCents": 4500,
+    "status": "confirmed"
+   }
+  },
+  {
+   "n": 448,
+   "label": "flat payments",
+   "method": "GET",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "settlements": [
+     {
+      "id": "00000000-0000-4000-8000-000000000211",
+      "fromMemberId": "00000000-0000-4000-8000-000000000035",
+      "fromName": "Gina Rao",
+      "toMemberId": "00000000-0000-4000-8000-000000000004",
+      "toName": "Vicky",
+      "amountCents": 4500,
+      "status": "confirmed",
+      "kind": "waiver",
+      "createdBy": "00000000-0000-4000-8000-000000000004",
+      "hasProof": false,
+      "decidedAt": 1799393067000,
+      "createdAt": 1799393067000,
+      "recordedByName": "Vicky",
+      "amount": 45,
+      "needsAdmin": true,
+      "canDecide": false,
+      "canCancel": false
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000199",
+      "fromMemberId": "00000000-0000-4000-8000-000000000035",
+      "fromName": "Gina Rao",
+      "toMemberId": "00000000-0000-4000-8000-000000000013",
+      "toName": "Paro",
+      "amountCents": 6000,
+      "status": "rejected",
+      "kind": "waiver",
+      "createdBy": "00000000-0000-4000-8000-000000000013",
+      "hasProof": false,
+      "decidedAt": 1799393064000,
+      "createdAt": 1799393062000,
+      "recordedByName": "Paro",
+      "amount": 60,
+      "needsAdmin": true,
+      "canDecide": false,
+      "canCancel": false
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000192",
+      "fromMemberId": "00000000-0000-4000-8000-000000000035",
+      "fromName": "Gina Rao",
+      "toMemberId": "00000000-0000-4000-8000-000000000013",
+      "toName": "Paro",
+      "amountCents": 4000,
+      "status": "confirmed",
+      "kind": "waiver",
+      "createdBy": "00000000-0000-4000-8000-000000000013",
+      "hasProof": false,
+      "decidedAt": 1799393061000,
+      "createdAt": 1799393056000,
+      "recordedByName": "Paro",
+      "amount": 40,
+      "needsAdmin": true,
+      "canDecide": false,
+      "canCancel": false
+     }
+    ]
+   }
+  },
+  {
+   "n": 449,
+   "label": "flat debts",
+   "method": "GET",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/debts",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "model": "direct-expense-attribution",
+    "debts": [
+     {
+      "fromMemberId": "00000000-0000-4000-8000-000000000004",
+      "fromName": "Vicky",
+      "toMemberId": "00000000-0000-4000-8000-000000000013",
+      "toName": "Paro",
+      "amountCents": 10000,
+      "amount": 100,
+      "waitingCents": 0,
+      "canRecord": false,
+      "counterpartyActive": true
+     },
+     {
+      "fromMemberId": "00000000-0000-4000-8000-000000000035",
+      "fromName": "Gina Rao",
+      "toMemberId": "00000000-0000-4000-8000-000000000013",
+      "toName": "Paro",
+      "amountCents": 6000,
+      "amount": 60,
+      "waitingCents": 0,
+      "canRecord": true,
+      "counterpartyActive": true
+     }
+    ]
+   }
+  },
+  {
+   "n": 450,
+   "label": "gina with paro",
+   "method": "GET",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/with/00000000-0000-4000-8000-000000000013",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "me": {
+     "id": "00000000-0000-4000-8000-000000000035",
+     "name": "Gina Rao"
+    },
+    "other": {
+     "id": "00000000-0000-4000-8000-000000000013",
+     "name": "Paro",
+     "active": true
+    },
+    "netCents": -6000,
+    "items": [
+     {
+      "type": "payment",
+      "id": "00000000-0000-4000-8000-000000000192",
+      "fromMemberId": "00000000-0000-4000-8000-000000000035",
+      "toMemberId": "00000000-0000-4000-8000-000000000013",
+      "amountCents": 4000,
+      "effectCents": 4000,
+      "createdAt": 1799393056000,
+      "kind": "waiver",
+      "runningCents": -6000
+     },
+     {
+      "type": "expense",
+      "id": "00000000-0000-4000-8000-000000000185",
+      "description": "Rent",
+      "paidBy": "00000000-0000-4000-8000-000000000013",
+      "totalCents": 30000,
+      "shareCents": 10000,
+      "effectCents": -10000,
+      "createdAt": 1799393048000,
+      "runningCents": -10000
+     }
+    ]
+   }
+  },
+  {
+   "n": 451,
+   "label": "gina summary",
+   "method": "GET",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/members/00000000-0000-4000-8000-000000000035",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "member": {
+     "id": "00000000-0000-4000-8000-000000000035",
+     "name": "Gina Rao",
+     "active": true,
+     "isMe": true
+    },
+    "paidCents": 0,
+    "shareCents": 14500,
+    "balanceCents": -6000,
+    "owes": [
+     {
+      "memberId": "00000000-0000-4000-8000-000000000013",
+      "name": "Paro",
+      "amountCents": 6000
+     }
+    ],
+    "owedBy": [],
+    "expenses": [
+     {
+      "id": "00000000-0000-4000-8000-000000000189",
+      "description": "Wifi",
+      "amountCents": 9000,
+      "paidBy": "00000000-0000-4000-8000-000000000004",
+      "createdAt": 1799393049000,
+      "shareCents": 4500,
+      "splitCount": 2,
+      "paidByName": "Vicky",
+      "effectCents": -4500
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000185",
+      "description": "Rent",
+      "amountCents": 30000,
+      "paidBy": "00000000-0000-4000-8000-000000000013",
+      "createdAt": 1799393048000,
+      "shareCents": 10000,
+      "splitCount": 3,
+      "paidByName": "Paro",
+      "effectCents": -10000
+     }
+    ],
+    "payments": [
+     {
+      "id": "00000000-0000-4000-8000-000000000211",
+      "fromMemberId": "00000000-0000-4000-8000-000000000035",
+      "toMemberId": "00000000-0000-4000-8000-000000000004",
+      "amountCents": 4500,
+      "createdAt": 1799393067000,
+      "status": "confirmed",
+      "kind": "waiver",
+      "fromName": "Gina Rao",
+      "toName": "Vicky"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000192",
+      "fromMemberId": "00000000-0000-4000-8000-000000000035",
+      "toMemberId": "00000000-0000-4000-8000-000000000013",
+      "amountCents": 4000,
+      "createdAt": 1799393056000,
+      "status": "confirmed",
+      "kind": "waiver",
+      "fromName": "Gina Rao",
+      "toName": "Paro"
+     }
+    ]
+   }
+  },
+  {
+   "n": 452,
+   "label": "gina statement",
+   "method": "GET",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/members/00000000-0000-4000-8000-000000000035/statement",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "group": {
+     "id": "00000000-0000-4000-8000-000000000177",
+     "name": "Flat"
+    },
+    "person": {
+     "id": "00000000-0000-4000-8000-000000000035",
+     "name": "Gina Rao",
+     "username": "ginarao",
+     "active": true
+    },
+    "generatedAt": 1799393072000,
+    "totals": {
+     "paidCents": 0,
+     "shareCents": 14500,
+     "balanceCents": -6000
+    },
+    "expenses": [
+     {
+      "id": "00000000-0000-4000-8000-000000000185",
+      "createdAt": 1799393048000,
+      "description": "Rent",
+      "totalCents": 30000,
+      "paidBy": "00000000-0000-4000-8000-000000000013",
+      "paidByName": "Paro",
+      "shareCents": 10000,
+      "splitCount": 3,
+      "cumulativeShareCents": 10000
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000189",
+      "createdAt": 1799393049000,
+      "description": "Wifi",
+      "totalCents": 9000,
+      "paidBy": "00000000-0000-4000-8000-000000000004",
+      "paidByName": "Vicky",
+      "shareCents": 4500,
+      "splitCount": 2,
+      "cumulativeShareCents": 14500
+     }
+    ],
+    "pairs": [
+     {
+      "id": "00000000-0000-4000-8000-000000000007",
+      "name": "Jagan",
+      "active": true,
+      "netCents": 0,
+      "items": []
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000013",
+      "name": "Paro",
+      "active": true,
+      "netCents": -6000,
+      "items": [
+       {
+        "type": "expense",
+        "id": "00000000-0000-4000-8000-000000000185",
+        "description": "Rent",
+        "paidBy": "00000000-0000-4000-8000-000000000013",
+        "totalCents": 30000,
+        "shareCents": 10000,
+        "effectCents": -10000,
+        "createdAt": 1799393048000,
+        "runningCents": -10000,
+        "status": "counted",
+        "paidByName": "Paro"
+       },
+       {
+        "type": "payment",
+        "id": "00000000-0000-4000-8000-000000000192",
+        "fromMemberId": "00000000-0000-4000-8000-000000000035",
+        "toMemberId": "00000000-0000-4000-8000-000000000013",
+        "amountCents": 4000,
+        "effectCents": 4000,
+        "createdAt": 1799393056000,
+        "kind": "waiver",
+        "runningCents": -6000,
+        "status": "counted",
+        "fromName": "Gina Rao",
+        "toName": "Paro"
+       },
+       {
+        "type": "payment",
+        "id": "00000000-0000-4000-8000-000000000199",
+        "fromMemberId": "00000000-0000-4000-8000-000000000035",
+        "toMemberId": "00000000-0000-4000-8000-000000000013",
+        "amountCents": 6000,
+        "effectCents": 0,
+        "createdAt": 1799393062000,
+        "kind": "waiver",
+        "status": "rejected",
+        "runningCents": -6000,
+        "fromName": "Gina Rao",
+        "toName": "Paro"
+       }
+      ]
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "name": "Vicky",
+      "active": true,
+      "netCents": 0,
+      "items": [
+       {
+        "type": "expense",
+        "id": "00000000-0000-4000-8000-000000000189",
+        "description": "Wifi",
+        "paidBy": "00000000-0000-4000-8000-000000000004",
+        "totalCents": 9000,
+        "shareCents": 4500,
+        "effectCents": -4500,
+        "createdAt": 1799393049000,
+        "runningCents": -4500,
+        "status": "counted",
+        "paidByName": "Vicky"
+       },
+       {
+        "type": "payment",
+        "id": "00000000-0000-4000-8000-000000000211",
+        "fromMemberId": "00000000-0000-4000-8000-000000000035",
+        "toMemberId": "00000000-0000-4000-8000-000000000004",
+        "amountCents": 4500,
+        "effectCents": 4500,
+        "createdAt": 1799393067000,
+        "kind": "waiver",
+        "runningCents": 0,
+        "status": "counted",
+        "fromName": "Gina Rao",
+        "toName": "Vicky"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "n": 453,
+   "label": "waiver notifications gina",
+   "method": "GET",
+   "path": "/api/notifications",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "items": [
+     {
+      "id": "00000000-0000-4000-8000-000000000212",
+      "kind": "waiver_approved",
+      "title": "Vicky let you off ₹45.00",
+      "body": "You don't need to pay it. It's cleared from what you owe Vicky.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000004",
+      "actorName": "Vicky",
+      "createdAt": 1799393067000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000210",
+      "kind": "waiver_cancelled",
+      "title": "Paro is no longer letting you off ₹60.00",
+      "body": "You still owe it.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+      "actorName": "Paro",
+      "createdAt": 1799393066000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000208",
+      "kind": "waiver_pending",
+      "title": "Paro is letting you off ₹60.00",
+      "body": "You won't need to pay it once a group admin approves.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+      "actorName": "Paro",
+      "createdAt": 1799393065000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000204",
+      "kind": "waiver_rejected",
+      "title": "Vicky didn't approve Paro letting you off ₹60.00",
+      "body": "You still owe it.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+      "actorName": "Vicky",
+      "createdAt": 1799393064000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000202",
+      "kind": "waiver_pending",
+      "title": "Paro is letting you off ₹60.00",
+      "body": "You won't need to pay it once a group admin approves.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+      "actorName": "Paro",
+      "createdAt": 1799393062000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000196",
+      "kind": "waiver_approved",
+      "title": "Paro let you off ₹40.00",
+      "body": "You don't need to pay it. It's cleared from what you owe Paro.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+      "actorName": "Jagan",
+      "createdAt": 1799393061000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000195",
+      "kind": "waiver_pending",
+      "title": "Paro is letting you off ₹40.00",
+      "body": "You won't need to pay it once a group admin approves.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+      "actorName": "Paro",
+      "createdAt": 1799393056000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000190",
+      "kind": "expense_added",
+      "title": "Vicky added “Wifi”",
+      "body": "Vicky paid ₹90.00 · you owe ₹45.00",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/e/00000000-0000-4000-8000-000000000189",
+      "actorName": "Vicky",
+      "createdAt": 1799393049000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000186",
+      "kind": "expense_added",
+      "title": "Paro added “Rent”",
+      "body": "Paro paid ₹300.00 · you owe ₹100.00",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/e/00000000-0000-4000-8000-000000000185",
+      "actorName": "Paro",
+      "createdAt": 1799393048000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000180",
+      "kind": "group_invite",
+      "title": "Vicky invited you to “Flat”",
+      "body": "Open Split It to accept or decline.",
+      "link": "#/",
+      "actorName": "Vicky",
+      "createdAt": 1799393043000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     }
+    ],
+    "unread": 10
+   }
+  },
+  {
+   "n": 454,
+   "label": "waiver notifications paro",
+   "method": "GET",
+   "path": "/api/notifications",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "items": [
+     {
+      "id": "00000000-0000-4000-8000-000000000214",
+      "kind": "waiver_approved",
+      "title": "Vicky let Gina Rao off ₹45.00",
+      "body": "Gina Rao doesn't need to pay it back.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Vicky",
+      "createdAt": 1799393067000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000203",
+      "kind": "waiver_rejected",
+      "title": "Vicky didn't approve letting Gina Rao off ₹60.00",
+      "body": "Gina Rao still owes it.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000035",
+      "actorName": "Vicky",
+      "createdAt": 1799393064000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000197",
+      "kind": "waiver_approved",
+      "title": "Jagan approved letting Gina Rao off ₹40.00",
+      "body": "It's cleared from what Gina Rao owes you.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000035",
+      "actorName": "Jagan",
+      "createdAt": 1799393061000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000179",
+      "kind": "group_invite",
+      "title": "Vicky invited you to “Flat”",
+      "body": "Open Split It to accept or decline.",
+      "link": "#/",
+      "actorName": "Vicky",
+      "createdAt": 1799393042000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     }
+    ],
+    "unread": 4
+   }
+  },
+  {
+   "n": 455,
+   "label": "waiver notifications vicky",
+   "method": "GET",
+   "path": "/api/notifications",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "items": [
+     {
+      "id": "00000000-0000-4000-8000-000000000207",
+      "kind": "waiver_admin_approval",
+      "title": "Paro wants to let Gina Rao off ₹60.00",
+      "body": "Gina Rao won't need to pay it once an admin approves.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Paro",
+      "createdAt": 1799393065000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000201",
+      "kind": "waiver_admin_approval",
+      "title": "Paro wants to let Gina Rao off ₹60.00",
+      "body": "Gina Rao won't need to pay it once an admin approves.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Paro",
+      "createdAt": 1799393062000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000198",
+      "kind": "waiver_approved",
+      "title": "Paro let Gina Rao off ₹40.00, approved by Jagan",
+      "body": "Gina Rao doesn't need to pay it back.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Jagan",
+      "createdAt": 1799393061000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000194",
+      "kind": "waiver_admin_approval",
+      "title": "Paro wants to let Gina Rao off ₹40.00",
+      "body": "Gina Rao won't need to pay it once an admin approves.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Paro",
+      "createdAt": 1799393056000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000187",
+      "kind": "expense_added",
+      "title": "Paro added “Rent”",
+      "body": "Paro paid ₹300.00 · you owe ₹100.00",
+      "link": "#/g/00000000-0000-4000-8000-000000000177/e/00000000-0000-4000-8000-000000000185",
+      "actorName": "Paro",
+      "createdAt": 1799393048000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000183",
+      "kind": "member_joined",
+      "title": "Gina Rao joined “Flat”",
+      "body": "They accepted your invitation.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Gina Rao",
+      "createdAt": 1799393046000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000182",
+      "kind": "member_joined",
+      "title": "Paro joined “Flat”",
+      "body": "They accepted your invitation.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Paro",
+      "createdAt": 1799393045000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000181",
+      "kind": "member_joined",
+      "title": "Jagan joined “Flat”",
+      "body": "They accepted your invitation.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Jagan",
+      "createdAt": 1799393044000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     }
+    ],
+    "unread": 8
+   }
+  },
+  {
+   "n": 456,
+   "label": "waiver notifications jagan",
+   "method": "GET",
+   "path": "/api/notifications",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "items": [
+     {
+      "id": "00000000-0000-4000-8000-000000000213",
+      "kind": "waiver_approved",
+      "title": "Vicky let Gina Rao off ₹45.00",
+      "body": "Gina Rao doesn't need to pay it back.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Vicky",
+      "createdAt": 1799393067000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000206",
+      "kind": "waiver_admin_approval",
+      "title": "Paro wants to let Gina Rao off ₹60.00",
+      "body": "Gina Rao won't need to pay it once an admin approves.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Paro",
+      "createdAt": 1799393065000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000200",
+      "kind": "waiver_admin_approval",
+      "title": "Paro wants to let Gina Rao off ₹60.00",
+      "body": "Gina Rao won't need to pay it once an admin approves.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Paro",
+      "createdAt": 1799393062000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000193",
+      "kind": "waiver_admin_approval",
+      "title": "Paro wants to let Gina Rao off ₹40.00",
+      "body": "Gina Rao won't need to pay it once an admin approves.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Paro",
+      "createdAt": 1799393056000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000184",
+      "kind": "made_admin",
+      "title": "You're now an admin of “Flat”",
+      "body": "Vicky made you an admin. You can manage members and edit anything in the group.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Vicky",
+      "createdAt": 1799393047000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000178",
+      "kind": "group_invite",
+      "title": "Vicky invited you to “Flat”",
+      "body": "Open Split It to accept or decline.",
+      "link": "#/",
+      "actorName": "Vicky",
+      "createdAt": 1799393041000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     }
+    ],
+    "unread": 6
+   }
   }
  ],
  "db": {
@@ -11695,6 +13187,24 @@
     "paid_by": "00000000-0000-4000-8000-000000000004",
     "created_by": "00000000-0000-4000-8000-000000000004",
     "created_at": 1790839426000
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000185",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "description": "Rent",
+    "amount_cents": 30000,
+    "paid_by": "00000000-0000-4000-8000-000000000013",
+    "created_by": "00000000-0000-4000-8000-000000000013",
+    "created_at": 1799393048000
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000189",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "description": "Wifi",
+    "amount_cents": 9000,
+    "paid_by": "00000000-0000-4000-8000-000000000004",
+    "created_by": "00000000-0000-4000-8000-000000000004",
+    "created_at": 1799393049000
    }
   ],
   "appx_friendships": [
@@ -11745,6 +13255,42 @@
     "invited_by": null
    },
    {
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "member_id": "00000000-0000-4000-8000-000000000004",
+    "name": "Vicky",
+    "role": "admin",
+    "status": "active",
+    "joined_at": 1799393040000,
+    "invited_by": null
+   },
+   {
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "member_id": "00000000-0000-4000-8000-000000000007",
+    "name": "Jagan",
+    "role": "admin",
+    "status": "active",
+    "joined_at": 1799393044000,
+    "invited_by": "00000000-0000-4000-8000-000000000004"
+   },
+   {
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "member_id": "00000000-0000-4000-8000-000000000013",
+    "name": "Paro",
+    "role": "member",
+    "status": "active",
+    "joined_at": 1799393045000,
+    "invited_by": "00000000-0000-4000-8000-000000000004"
+   },
+   {
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "member_id": "00000000-0000-4000-8000-000000000035",
+    "name": "Gina Rao",
+    "role": "member",
+    "status": "active",
+    "joined_at": 1799393046000,
+    "invited_by": "00000000-0000-4000-8000-000000000004"
+   },
+   {
     "group_id": "old-group",
     "member_id": "admin",
     "name": "Old Admin",
@@ -11781,7 +13327,28 @@
     "invited_by": null
    }
   ],
-  "appx_group_unlocks": [],
+  "appx_group_unlocks": [
+   {
+    "session_hash": "57d354428357f1b4b44990884ad5482de11d888038e5209b559f8fe1e5b8fef0",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "until": 1799479444000
+   },
+   {
+    "session_hash": "a69d6e135702d7fe6eb997d90f20a99149fdedc3df4b1369536e939dab2184f4",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "until": 1799479445000
+   },
+   {
+    "session_hash": "ebd22fb6e5db445161ca6ee6db33cdfa26da179f6ec9c75d47d00c2f0591883f",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "until": 1799479440000
+   },
+   {
+    "session_hash": "ec144a0af7a14254166351c4b32d4ccced0ad9555148d2241c62d6e12a85990a",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "until": 1799479446000
+   }
+  ],
   "appx_groups": [
    {
     "id": "00000000-0000-4000-8000-000000000164",
@@ -11790,6 +13357,14 @@
     "created_by": "00000000-0000-4000-8000-000000000004",
     "pin_hash": "pbkdf2-sha256$1000$0a8d109316991c9f22a528ab2eb134b7$b2a12716d581d238d9d9cbddc5c850abf6a53a32cddd1458eab12d249c2123ae",
     "invite_code": "Or1Aw0bJTM9S1VjbXuFk5w"
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000177",
+    "name": "Flat",
+    "created_at": 1799393040000,
+    "created_by": "00000000-0000-4000-8000-000000000004",
+    "pin_hash": "pbkdf2-sha256$1000$6aed70f376f97cff8205880b8e119417$8f74b6f8248cbe6d890e4be9fc8b3bc170d7a6181fcd5299a9844688d26d6187",
+    "invite_code": "mh2gI6YprC-yNbg7vkHERw"
    },
    {
     "id": "old-group",
@@ -11811,6 +13386,39 @@
     "before_json": null,
     "after_json": "{\"description\":\"Snacks\",\"amountCents\":5000,\"paidBy\":\"00000000-0000-4000-8000-000000000004\",\"splits\":[{\"memberId\":\"00000000-0000-4000-8000-000000000004\",\"amountCents\":5000}]}",
     "created_at": 1790839426000
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000188",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "entity": "expense",
+    "entity_id": "00000000-0000-4000-8000-000000000185",
+    "action": "created",
+    "actor_id": "00000000-0000-4000-8000-000000000013",
+    "before_json": null,
+    "after_json": "{\"description\":\"Rent\",\"amountCents\":30000,\"paidBy\":\"00000000-0000-4000-8000-000000000013\",\"splits\":[{\"memberId\":\"00000000-0000-4000-8000-000000000013\",\"amountCents\":10000},{\"memberId\":\"00000000-0000-4000-8000-000000000035\",\"amountCents\":10000},{\"memberId\":\"00000000-0000-4000-8000-000000000004\",\"amountCents\":10000}]}",
+    "created_at": 1799393048000
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000191",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "entity": "expense",
+    "entity_id": "00000000-0000-4000-8000-000000000189",
+    "action": "created",
+    "actor_id": "00000000-0000-4000-8000-000000000004",
+    "before_json": null,
+    "after_json": "{\"description\":\"Wifi\",\"amountCents\":9000,\"paidBy\":\"00000000-0000-4000-8000-000000000004\",\"splits\":[{\"memberId\":\"00000000-0000-4000-8000-000000000004\",\"amountCents\":4500},{\"memberId\":\"00000000-0000-4000-8000-000000000035\",\"amountCents\":4500}]}",
+    "created_at": 1799393049000
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000209",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "entity": "payment",
+    "entity_id": "00000000-0000-4000-8000-000000000205",
+    "action": "cancelled",
+    "actor_id": "00000000-0000-4000-8000-000000000013",
+    "before_json": "{\"fromMemberId\":\"00000000-0000-4000-8000-000000000035\",\"toMemberId\":\"00000000-0000-4000-8000-000000000013\",\"amountCents\":6000,\"createdBy\":\"00000000-0000-4000-8000-000000000013\",\"createdAt\":1799393065000,\"kind\":\"waiver\"}",
+    "after_json": null,
+    "created_at": 1799393066000
    }
   ],
   "appx_notifications": [
@@ -11824,42 +13432,6 @@
     "link": "#/friends",
     "actor_name": "Vicky",
     "created_at": 1790838257000,
-    "read_at": null
-   },
-   {
-    "id": "00000000-0000-4000-8000-000000000050",
-    "recipient_id": "00000000-0000-4000-8000-000000000013",
-    "group_id": null,
-    "kind": "friend_request",
-    "title": "Jagan wants to be friends",
-    "body": "Accept it in Friends.",
-    "link": "#/friends",
-    "actor_name": "Jagan",
-    "created_at": 1790838259000,
-    "read_at": null
-   },
-   {
-    "id": "00000000-0000-4000-8000-000000000051",
-    "recipient_id": "00000000-0000-4000-8000-000000000007",
-    "group_id": null,
-    "kind": "friend_accepted",
-    "title": "Paro accepted your friend request",
-    "body": "You can now invite each other to groups.",
-    "link": "#/friends",
-    "actor_name": "Paro",
-    "created_at": 1790838260000,
-    "read_at": null
-   },
-   {
-    "id": "00000000-0000-4000-8000-000000000054",
-    "recipient_id": "00000000-0000-4000-8000-000000000007",
-    "group_id": null,
-    "kind": "friend_request",
-    "title": "Vicky wants to be friends",
-    "body": "Accept it in Friends.",
-    "link": "#/friends",
-    "actor_name": "Vicky",
-    "created_at": 1790838267000,
     "read_at": null
    },
    {
@@ -11897,6 +13469,342 @@
     "actor_name": "Vicky",
     "created_at": 1790839234000,
     "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000178",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "group_invite",
+    "title": "Vicky invited you to “Flat”",
+    "body": "Open Split It to accept or decline.",
+    "link": "#/",
+    "actor_name": "Vicky",
+    "created_at": 1799393041000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000179",
+    "recipient_id": "00000000-0000-4000-8000-000000000013",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "group_invite",
+    "title": "Vicky invited you to “Flat”",
+    "body": "Open Split It to accept or decline.",
+    "link": "#/",
+    "actor_name": "Vicky",
+    "created_at": 1799393042000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000180",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "group_invite",
+    "title": "Vicky invited you to “Flat”",
+    "body": "Open Split It to accept or decline.",
+    "link": "#/",
+    "actor_name": "Vicky",
+    "created_at": 1799393043000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000181",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "member_joined",
+    "title": "Jagan joined “Flat”",
+    "body": "They accepted your invitation.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Jagan",
+    "created_at": 1799393044000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000182",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "member_joined",
+    "title": "Paro joined “Flat”",
+    "body": "They accepted your invitation.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Paro",
+    "created_at": 1799393045000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000183",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "member_joined",
+    "title": "Gina Rao joined “Flat”",
+    "body": "They accepted your invitation.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Gina Rao",
+    "created_at": 1799393046000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000184",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "made_admin",
+    "title": "You're now an admin of “Flat”",
+    "body": "Vicky made you an admin. You can manage members and edit anything in the group.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Vicky",
+    "created_at": 1799393047000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000186",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "expense_added",
+    "title": "Paro added “Rent”",
+    "body": "Paro paid ₹300.00 · you owe ₹100.00",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/e/00000000-0000-4000-8000-000000000185",
+    "actor_name": "Paro",
+    "created_at": 1799393048000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000187",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "expense_added",
+    "title": "Paro added “Rent”",
+    "body": "Paro paid ₹300.00 · you owe ₹100.00",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/e/00000000-0000-4000-8000-000000000185",
+    "actor_name": "Paro",
+    "created_at": 1799393048000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000190",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "expense_added",
+    "title": "Vicky added “Wifi”",
+    "body": "Vicky paid ₹90.00 · you owe ₹45.00",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/e/00000000-0000-4000-8000-000000000189",
+    "actor_name": "Vicky",
+    "created_at": 1799393049000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000193",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_admin_approval",
+    "title": "Paro wants to let Gina Rao off ₹40.00",
+    "body": "Gina Rao won't need to pay it once an admin approves.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Paro",
+    "created_at": 1799393056000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000194",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_admin_approval",
+    "title": "Paro wants to let Gina Rao off ₹40.00",
+    "body": "Gina Rao won't need to pay it once an admin approves.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Paro",
+    "created_at": 1799393056000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000195",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_pending",
+    "title": "Paro is letting you off ₹40.00",
+    "body": "You won't need to pay it once a group admin approves.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+    "actor_name": "Paro",
+    "created_at": 1799393056000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000196",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_approved",
+    "title": "Paro let you off ₹40.00",
+    "body": "You don't need to pay it. It's cleared from what you owe Paro.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+    "actor_name": "Jagan",
+    "created_at": 1799393061000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000197",
+    "recipient_id": "00000000-0000-4000-8000-000000000013",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_approved",
+    "title": "Jagan approved letting Gina Rao off ₹40.00",
+    "body": "It's cleared from what Gina Rao owes you.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000035",
+    "actor_name": "Jagan",
+    "created_at": 1799393061000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000198",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_approved",
+    "title": "Paro let Gina Rao off ₹40.00, approved by Jagan",
+    "body": "Gina Rao doesn't need to pay it back.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Jagan",
+    "created_at": 1799393061000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000200",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_admin_approval",
+    "title": "Paro wants to let Gina Rao off ₹60.00",
+    "body": "Gina Rao won't need to pay it once an admin approves.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Paro",
+    "created_at": 1799393062000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000201",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_admin_approval",
+    "title": "Paro wants to let Gina Rao off ₹60.00",
+    "body": "Gina Rao won't need to pay it once an admin approves.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Paro",
+    "created_at": 1799393062000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000202",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_pending",
+    "title": "Paro is letting you off ₹60.00",
+    "body": "You won't need to pay it once a group admin approves.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+    "actor_name": "Paro",
+    "created_at": 1799393062000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000203",
+    "recipient_id": "00000000-0000-4000-8000-000000000013",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_rejected",
+    "title": "Vicky didn't approve letting Gina Rao off ₹60.00",
+    "body": "Gina Rao still owes it.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000035",
+    "actor_name": "Vicky",
+    "created_at": 1799393064000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000204",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_rejected",
+    "title": "Vicky didn't approve Paro letting you off ₹60.00",
+    "body": "You still owe it.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+    "actor_name": "Vicky",
+    "created_at": 1799393064000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000206",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_admin_approval",
+    "title": "Paro wants to let Gina Rao off ₹60.00",
+    "body": "Gina Rao won't need to pay it once an admin approves.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Paro",
+    "created_at": 1799393065000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000207",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_admin_approval",
+    "title": "Paro wants to let Gina Rao off ₹60.00",
+    "body": "Gina Rao won't need to pay it once an admin approves.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Paro",
+    "created_at": 1799393065000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000208",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_pending",
+    "title": "Paro is letting you off ₹60.00",
+    "body": "You won't need to pay it once a group admin approves.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+    "actor_name": "Paro",
+    "created_at": 1799393065000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000210",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_cancelled",
+    "title": "Paro is no longer letting you off ₹60.00",
+    "body": "You still owe it.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000013",
+    "actor_name": "Paro",
+    "created_at": 1799393066000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000212",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_approved",
+    "title": "Vicky let you off ₹45.00",
+    "body": "You don't need to pay it. It's cleared from what you owe Vicky.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/p/00000000-0000-4000-8000-000000000004",
+    "actor_name": "Vicky",
+    "created_at": 1799393067000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000213",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_approved",
+    "title": "Vicky let Gina Rao off ₹45.00",
+    "body": "Gina Rao doesn't need to pay it back.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Vicky",
+    "created_at": 1799393067000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000214",
+    "recipient_id": "00000000-0000-4000-8000-000000000013",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_approved",
+    "title": "Vicky let Gina Rao off ₹45.00",
+    "body": "Gina Rao doesn't need to pay it back.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Vicky",
+    "created_at": 1799393067000,
+    "read_at": null
    }
   ],
   "appx_payment_methods": [
@@ -11929,25 +13837,143 @@
   ],
   "appx_rate_limits": [
    {
+    "bucket": "expense:00000000-0000-4000-8000-000000000004",
+    "window_start": 1799392800000,
+    "count": 1
+   },
+   {
+    "bucket": "expense:00000000-0000-4000-8000-000000000013",
+    "window_start": 1799392800000,
+    "count": 1
+   },
+   {
+    "bucket": "group:00000000-0000-4000-8000-000000000004",
+    "window_start": 1799392800000,
+    "count": 1
+   },
+   {
+    "bucket": "invite:00000000-0000-4000-8000-000000000004",
+    "window_start": 1799392800000,
+    "count": 3
+   },
+   {
+    "bucket": "settlement:00000000-0000-4000-8000-000000000004",
+    "window_start": 1799392800000,
+    "count": 1
+   },
+   {
+    "bucket": "settlement:00000000-0000-4000-8000-000000000007",
+    "window_start": 1799392800000,
+    "count": 1
+   },
+   {
+    "bucket": "settlement:00000000-0000-4000-8000-000000000013",
+    "window_start": 1799392800000,
+    "count": 9
+   },
+   {
     "bucket": "signin:9192d2b445b7375ee7a1d199ebe4ba25",
     "window_start": 1799392500000,
-    "count": 1
+    "count": 4
    }
   ],
   "appx_settings": [],
-  "appx_settlements": [],
+  "appx_settlements": [
+   {
+    "id": "00000000-0000-4000-8000-000000000192",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "from_member_id": "00000000-0000-4000-8000-000000000035",
+    "to_member_id": "00000000-0000-4000-8000-000000000013",
+    "amount_cents": 4000,
+    "created_by": "00000000-0000-4000-8000-000000000013",
+    "created_at": 1799393056000,
+    "status": "confirmed",
+    "decided_by": "00000000-0000-4000-8000-000000000007",
+    "decided_at": 1799393061000,
+    "kind": "waiver"
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000199",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "from_member_id": "00000000-0000-4000-8000-000000000035",
+    "to_member_id": "00000000-0000-4000-8000-000000000013",
+    "amount_cents": 6000,
+    "created_by": "00000000-0000-4000-8000-000000000013",
+    "created_at": 1799393062000,
+    "status": "rejected",
+    "decided_by": "00000000-0000-4000-8000-000000000004",
+    "decided_at": 1799393064000,
+    "kind": "waiver"
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000211",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "from_member_id": "00000000-0000-4000-8000-000000000035",
+    "to_member_id": "00000000-0000-4000-8000-000000000004",
+    "amount_cents": 4500,
+    "created_by": "00000000-0000-4000-8000-000000000004",
+    "created_at": 1799393067000,
+    "status": "confirmed",
+    "decided_by": "00000000-0000-4000-8000-000000000004",
+    "decided_at": 1799393067000,
+    "kind": "waiver"
+   }
+  ],
   "appx_splits": [
    {
     "expense_id": "00000000-0000-4000-8000-000000000165",
     "member_id": "00000000-0000-4000-8000-000000000004",
     "amount_cents": 5000
+   },
+   {
+    "expense_id": "00000000-0000-4000-8000-000000000185",
+    "member_id": "00000000-0000-4000-8000-000000000004",
+    "amount_cents": 10000
+   },
+   {
+    "expense_id": "00000000-0000-4000-8000-000000000185",
+    "member_id": "00000000-0000-4000-8000-000000000013",
+    "amount_cents": 10000
+   },
+   {
+    "expense_id": "00000000-0000-4000-8000-000000000185",
+    "member_id": "00000000-0000-4000-8000-000000000035",
+    "amount_cents": 10000
+   },
+   {
+    "expense_id": "00000000-0000-4000-8000-000000000189",
+    "member_id": "00000000-0000-4000-8000-000000000004",
+    "amount_cents": 4500
+   },
+   {
+    "expense_id": "00000000-0000-4000-8000-000000000189",
+    "member_id": "00000000-0000-4000-8000-000000000035",
+    "amount_cents": 4500
    }
   ],
   "appx_user_sessions": [
    {
+    "token_hash": "57d354428357f1b4b44990884ad5482de11d888038e5209b559f8fe1e5b8fef0",
+    "user_id": "00000000-0000-4000-8000-000000000007",
+    "expires_at": 1799997837000,
+    "admin_until": null
+   },
+   {
+    "token_hash": "a69d6e135702d7fe6eb997d90f20a99149fdedc3df4b1369536e939dab2184f4",
+    "user_id": "00000000-0000-4000-8000-000000000013",
+    "expires_at": 1799997838000,
+    "admin_until": null
+   },
+   {
     "token_hash": "ebd22fb6e5db445161ca6ee6db33cdfa26da179f6ec9c75d47d00c2f0591883f",
     "user_id": "00000000-0000-4000-8000-000000000004",
     "expires_at": 1799997834000,
+    "admin_until": null
+   },
+   {
+    "token_hash": "ec144a0af7a14254166351c4b32d4ccced0ad9555148d2241c62d6e12a85990a",
+    "user_id": "00000000-0000-4000-8000-000000000035",
+    "expires_at": 1799997839000,
     "admin_until": null
    }
   ],
