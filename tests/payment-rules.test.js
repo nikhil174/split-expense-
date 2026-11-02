@@ -82,7 +82,9 @@ test("asking to be let off: the lender or an admin decides; the debtor can only 
   assert.equal(needsAdminApproval(asked), false);
   assert.deepEqual([admin, payer, receiver, other].map(a => canDecide(asked, a)), [true, false, true, false]);
   assert.deepEqual([admin, payer, receiver, other].map(a => canCancel(asked, a)), [true, true, false, false]);
-  assert.deepEqual([admin, payer, receiver].map(a => awaitsDecisionBy(asked, a)), [false, false, true]);
+  assert.deepEqual([admin, payer, receiver, other].map(a => awaitsDecisionBy(asked, a)), [true, false, true, false], "the lender and the admins are asked");
+  assert.equal(awaitsDecisionBy(asked, { id: "bea", isAdmin: true }), false, "never the debtor, even as an admin");
+  assert.equal(awaitsDecisionBy(normal, admin), false, "unchanged for payments");
   assert.equal(decisionRefusal(asked, payer), "The person you owe, or a group admin, decides this.");
   assert.equal(decisionRefusal(asked, { id: "bea", isAdmin: true }), "The person you owe, or a group admin, decides this.", "not even as an admin");
   assert.equal(decisionRefusal(asked, other), "Only the person who is owed, or a group admin, can decide this.");

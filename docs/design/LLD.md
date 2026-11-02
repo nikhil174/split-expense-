@@ -274,7 +274,7 @@ All bodies are JSON. "Signed in" routes need the `split_user` cookie. "In group"
 
 **Diagram:** [Payment states](https://miro.com/app/board/uXjVESjyb2E=/?moveToWidget=3458764689111977058) (Miro board)
 
-**Waivers** ("no need to pay") use the same states, and either side can start one. The usual rule decides who answers. If the **lender offers** it (recorded by the receiver, like "they paid me"), a group admin approves it, at once when the lender is an admin. If the **debtor asks** for it (recorded by the payer, like a normal payment), the lender or a group admin says yes or no, and it always starts `pending`. The debtor never decides one, even as an admin. They can withdraw their own request, but not cancel the lender's offer. Once confirmed it clears the debt exactly like a payment.
+**Waivers** ("no need to pay") use the same states, and either side can start one. The usual rule decides who answers. If the **lender offers** it (recorded by the receiver, like "they paid me"), a group admin approves it, at once when the lender is an admin. If the **debtor asks** for it (recorded by the payer, like a normal payment), the lender or a group admin says yes or no, and it always starts `pending`. Both the lender and the group's admins are asked; it shows on their Home. The debtor never decides one, even as an admin. They can withdraw their own request, but not cancel the lender's offer. Once confirmed it clears the debt exactly like a payment.
 
 **Friendships:** none → `pending` (someone asks) → `accepted` (the other person accepts, or asks back). Declining, cancelling or removing deletes the row.
 

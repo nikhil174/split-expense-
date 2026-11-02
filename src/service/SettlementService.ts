@@ -158,7 +158,7 @@ export class SettlementService {
 
   // The debtor asks the lender to let them off what they still owe. It is
   // recorded by the debtor, like a payment they made, so the lender (or a
-  // group admin, but never the debtor) decides it.
+  // group admin, but never the debtor) decides it; both are told.
   async askWaiver(s: GroupScope, b: Untrusted<"toMemberId" | "amount">) {
     const from = s.user.id, to = textField(b?.toMemberId);
     if (!to) throw new ApiError("Choose who you're asking.");
@@ -197,9 +197,10 @@ export class SettlementService {
     const result = await this.settlements.insertIfOwed({ id, gid, from, to, cents, createdBy: u.id, now, status, kind: PaymentKind.Waiver });
     if (changesOf(result) !== 1) throw conflict("The outstanding amount changed. Refresh and try again.");
     const note = { gid, from, to, cents, createdBy: u.id }, told = { actor: u, nameOf: nameLookup(members) };
-    const notes = asked ? this.waiverNotes.asked(note, told)
+    const adminIds = members.filter(x => x.role === "admin" && x.active).map(x => x.id);
+    const notes = asked ? this.waiverNotes.asked(note, told, adminIds)
       : status === PaymentStatus.Confirmed ? this.waiverNotes.approved(note, told, members.filter(x => x.active).map(x => x.id))
-      : this.waiverNotes.requested(note, told, members.filter(x => x.role === "admin" && x.active).map(x => x.id));
+      : this.waiverNotes.requested(note, told, adminIds);
     await this.send(notes);
     return { ok: true, id, amountCents: cents, status };
   }

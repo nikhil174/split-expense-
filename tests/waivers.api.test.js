@@ -187,9 +187,11 @@ test("the debtor asks to be let off: the lender says yes, and the whole group is
   const r = await ask("Cy", { toMemberId: ids.Bea });
   assert.deepEqual([r.status, r.data.status, r.data.amountCents], [201, "pending", 3000], "defaults to everything still unpaid");
   assert.equal(await w.owes("Cy"), 3000, "doesn't count until Bea says yes");
-  // Bea decides it (like a payment to her); admins aren't bothered with it.
+  // Bea decides it (like a payment to her), or a group admin; both are asked.
   assert.deepEqual((await w.inbox("Bea")).map(n => [n.kind, n.title]), [["waiver_asked", "Cy asks you to let them off ₹30.00"]]);
-  assert.equal((await w.inbox("admin")).length, 0);
+  assert.deepEqual((await w.inbox("admin")).map(n => [n.kind, n.title]), [["waiver_asked", "Cy asks Bea to let them off ₹30.00"]]);
+  assert.deepEqual((await w.pending("admin")).toConfirm.map(x => [x.fromName, x.toName, x.kind]), [["Cy", "Bea", "waiver"]]);
+  assert.equal((await w.inbox("Dee")).length, 0);
   assert.deepEqual((await w.pending("Bea")).toConfirm.map(x => [x.fromName, x.kind, x.needsAdmin]), [["Cy", "waiver", false]]);
   assert.deepEqual((await w.pending("Cy")).waiting.map(x => x.kind), ["waiver"]);
   const bea = await w.row("Bea", r.data.id), cy = await w.row("Cy", r.data.id), dee = await w.row("Dee", r.data.id), admin = await w.row("admin", r.data.id);
@@ -241,6 +243,11 @@ test("asking: the lender says no, the debtor withdraws, or an admin decides for 
   const d = await ask("Cy", { toMemberId: ids.Bea });
   assert.deepEqual([d.status, d.data.status], [201, "pending"]);
   assert.equal((await w.post("Cy", `/settlements/${d.data.id}/confirm`)).status, 403);
+  // Cy (an admin) sees it waiting on Bea, not as something to approve; the other admin is asked.
+  const cyPending = await w.pending("Cy");
+  assert.deepEqual([cyPending.toConfirm.length, cyPending.waiting.map(x => [x.toName, x.kind, x.needsAdmin])], [0, [["Bea", "waiver", false]]]);
+  assert.equal((await w.inbox("Cy")).filter(n => n.kind === "waiver_asked").length, 0);
+  assert.equal((await w.inbox("admin"))[0].title, "Cy asks Bea to let them off ₹20.00");
 });
 
 test("you can't ask someone who left the group to let you off", async t => {

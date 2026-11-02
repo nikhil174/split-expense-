@@ -68,9 +68,11 @@ export function decisionRefusal(p: PaymentFacts, actor: PaymentActor): string | 
 }
 
 // Is it in this person's "to confirm" list on Home? Admins see "they paid
-// me" payments recorded by someone else; everyone sees payments to them.
+// me" payments recorded by someone else, and requests to be let off (except
+// their own); everyone sees payments to them.
 export function awaitsDecisionBy(p: PaymentFacts, actor: PaymentActor): boolean {
-  return needsAdminApproval(p) ? actor.isAdmin && p.createdBy !== actor.id && !isWaivedDebtor(p, actor) : p.toMemberId === actor.id;
+  if (needsAdminApproval(p)) return actor.isAdmin && p.createdBy !== actor.id && !isWaivedDebtor(p, actor);
+  return p.toMemberId === actor.id || (isWaiver(p) && actor.isAdmin && !isWaivedDebtor(p, actor));
 }
 
 // May this person record a payment from `from` to `to`? Members record

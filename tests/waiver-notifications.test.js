@@ -60,10 +60,13 @@ test("rejected or cancelled: the lender and the debtor, never the person acting"
 // Bea asks Cy to let her off ₹123.45.
 const ask = { ...w, createdBy: "bea" };
 
-test("asked: only the lender hears it, to say yes or no", () => {
+test("asked: the lender and the admins hear it (never the debtor, even as an admin)", () => {
   const f = fakes();
-  f.notes.asked(ask, ctx("bea"));
-  assert.deepEqual(rows(f), [["cy", "waiver_asked", "Bea asks you to let them off ₹123.45", "Say yes and they won't need to pay it; everyone in the group is told. Or say no and they still owe it.", "#/g/g"]]);
+  f.notes.asked(ask, ctx("bea"), ["adm", "bea", "cy"]);
+  assert.deepEqual(rows(f), [
+    ["cy", "waiver_asked", "Bea asks you to let them off ₹123.45", "Say yes and they won't need to pay it; everyone in the group is told. Or say no and they still owe it.", "#/g/g"],
+    ["adm", "waiver_asked", "Bea asks Cy to let them off ₹123.45", "Cy or a group admin decides. You're an admin, so you can too.", "#/g/g"],
+  ]);
 });
 
 test("a request granted: by the lender in the usual words, by an admin naming who decided", () => {

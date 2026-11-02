@@ -29,11 +29,16 @@ export class WaiverNotifications {
     ].filter(n => n !== null);
   }
 
-  // The debtor asked to be let off: the lender decides (a group admin may
-  // too, from the group's payments).
-  asked(w: WaiverNote, { actor }: Context): Statement[] {
-    return [this.note(w, actor, w.to, "waiver_asked", `${actor.name} asks you to let them off ${inrText(w.cents)}`,
-      "Say yes and they won't need to pay it; everyone in the group is told. Or say no and they still owe it.", `#/g/${w.gid}`)].filter(n => n !== null);
+  // The debtor asked to be let off: the lender decides, or a group admin
+  // (never the debtor, even if they are an admin).
+  asked(w: WaiverNote, { actor, nameOf }: Context, adminIds: string[]): Statement[] {
+    const amount = inrText(w.cents), lender = nameOf(w.to);
+    return [
+      this.note(w, actor, w.to, "waiver_asked", `${actor.name} asks you to let them off ${amount}`,
+        "Say yes and they won't need to pay it; everyone in the group is told. Or say no and they still owe it.", `#/g/${w.gid}`),
+      ...adminIds.filter(id => id !== w.from && id !== w.to).map(admin => this.note(w, actor, admin, "waiver_asked",
+        `${actor.name} asks ${lender} to let them off ${amount}`, `${lender} or a group admin decides. You're an admin, so you can too.`, `#/g/${w.gid}`)),
+    ].filter(n => n !== null);
   }
 
   // Approved (or recorded by an admin lender, which needs no approval): the
