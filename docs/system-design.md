@@ -26,7 +26,21 @@ Non-goals for now: payment methods other than UPI, and email delivery. Invitatio
 
 ## 2. Architecture
 
-The architecture is unchanged: a single Cloudflare Worker (`src/index.js`) serves the JSON API and the React app (`web/`, built into `dist/`). Data lives in one D1 database. Money is kept in integer paise everywhere.
+A single Cloudflare Worker (`src/index.ts`) serves the JSON API and the React app (`web/`, built into `dist/`). Data lives in one D1 database. Money is kept in integer paise everywhere.
+
+The Worker is TypeScript in Spring-style layers: controllers (routes) → services (rules) → repositories (SQL), with security components (passwords, sessions, rate limits, Google, group PINs), pure domain logic, and integrations (email, push) beside them; `src/app/Container.ts` wires them through constructors, and `src/app/SplitItApplication.ts` is the request pipeline. The JSON shapes of answers live in `shared/api-types.ts`, used by both the services and the React app. See the README's "Backend code" table.
+
+```mermaid
+flowchart TB
+  R["Request"] --> P["SplitItApplication<br/>public → sign-in → console → signed-in → group access + PIN → group"]
+  P --> C["Controllers<br/>routes, rate limits"]
+  C --> S["Services<br/>business rules"]
+  S --> Rep["Repositories<br/>SQL"]
+  S --> Sec["Security<br/>passwords, sessions, PINs"]
+  S --> Dom["Domain<br/>money, splits, debts"]
+  S --> Int["Integrations<br/>email, push"]
+  Rep --> D1[("D1")]
+```
 
 ```mermaid
 flowchart LR
@@ -34,7 +48,7 @@ flowchart LR
     UI["React app<br/>TanStack Query"]
     SW["Service worker<br/>(push + offline shell)"]
   end
-  UI -- "fetch /api/* (split_user cookie)" --> W["Cloudflare Worker<br/>src/index.js"]
+  UI -- "fetch /api/* (split_user cookie)" --> W["Cloudflare Worker<br/>src/index.ts"]
   W -- "SQL" --> D1[("D1<br/>appx_* tables")]
   W -- "Web Push (VAPID)" --> PS["Push services<br/>FCM / Apple / Mozilla"]
   PS --> SW

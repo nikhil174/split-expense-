@@ -2,7 +2,7 @@
 // Only for intended behaviour changes: review the diff before committing.
 //   npm run golden:record
 import { writeFileSync } from "node:fs";
-import worker from "../../src/index.js";
+import worker from "../../src/index.ts";
 import { runScenario } from "./harness.js";
 
 const result = await runScenario(worker);

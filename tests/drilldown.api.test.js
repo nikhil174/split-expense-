@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { makeEnv, call, setupGroup, payAndConfirm } from "./helpers/d1.js";
-import { computePairwiseDebts, outstandingDebt, pairwiseActivity } from "../src/settlement-logic.js";
-import { allocateEqualSplit } from "../src/split-logic.js";
+import { computePairwiseDebts, outstandingDebt, pairwiseActivity } from "../src/domain/settlement.ts";
+import { allocateEqualSplit } from "../src/domain/split.ts";
 
 async function fixture(t) {
   const { raw, env } = await makeEnv();

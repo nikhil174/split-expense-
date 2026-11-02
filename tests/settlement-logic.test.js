@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { allocateEqualSplit, allocateManualSplit } from "../src/split-logic.js";
-import { computeBalances, computePairwiseDebts, debtsForMember, outstandingDebt, validateSettlement } from "../src/settlement-logic.js";
+import { allocateEqualSplit, allocateManualSplit } from "../src/domain/split.ts";
+import { computeBalances, computePairwiseDebts, debtsForMember, outstandingDebt, validateSettlement } from "../src/domain/settlement.ts";
 
 // Tiny in-memory ledger mirroring what the Worker aggregates from D1.
 function ledger() {

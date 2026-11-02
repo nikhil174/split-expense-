@@ -9,8 +9,8 @@ const AMOUNT_PATTERN = /^(\d{1,10})(?:\.(\d{1,2}))?$/;
 // Accepts a non-negative number or a plain decimal string with at most two
 // decimal places ("10", "10.5", "10.50"). Rejects exponents, hex, signs,
 // booleans, arrays, fractional paise ("10.005") and anything non-finite.
-export function parseAmountToCents(value, { allowZero = false, max = MAX_AMOUNT_CENTS } = {}) {
-  let text;
+export function parseAmountToCents(value: unknown, { allowZero = false, max = MAX_AMOUNT_CENTS }: { allowZero?: boolean; max?: number } = {}): number {
+  let text: string;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new TypeError("Enter a valid amount.");
     text = String(value);
@@ -27,3 +27,9 @@ export function parseAmountToCents(value, { allowZero = false, max = MAX_AMOUNT_
   if (cents > max) throw new TypeError("Amount is too large.");
   return cents;
 }
+
+// Paise as rupees for JSON (e.g. 450050 → 4500.5).
+export const rupees = (cents: number): number => cents / 100;
+
+// Paise as Indian-formatted rupees for messages: ₹4,500.50.
+export const inrText = (cents: number): string => "₹" + (cents / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

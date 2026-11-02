@@ -1,4 +1,9 @@
-export function allocateEqualSplit(totalCents, memberIds) {
+// Splitting an expense into shares, in integer paise.
+
+export type ShareRow = { memberId: string; amountCents: number };
+
+// Equal split: the remainder paise go to the first members, one each.
+export function allocateEqualSplit(totalCents: number, memberIds: unknown[]): ShareRow[] {
   if (!Number.isSafeInteger(totalCents) || totalCents < 0) throw new TypeError("totalCents must be a non-negative safe integer");
   if (!Array.isArray(memberIds) || memberIds.length === 0) throw new TypeError("At least one split member is required");
   const unique = [...new Set(memberIds.map(String))];
@@ -6,10 +11,11 @@ export function allocateEqualSplit(totalCents, memberIds) {
   const remainder = totalCents % unique.length;
   return unique.map((memberId, index) => ({ memberId, amountCents: base + (index < remainder ? 1 : 0) }));
 }
-export function membersInGroup(groupMembers, groupId) { return groupMembers.filter(member => member.groupId === groupId); }
-export function expensesInGroup(expenses, groupId) { return expenses.filter(expense => expense.groupId === groupId); }
+export function membersInGroup<T extends { groupId: string }>(groupMembers: T[], groupId: string): T[] { return groupMembers.filter(member => member.groupId === groupId); }
+export function expensesInGroup<T extends { groupId: string }>(expenses: T[], groupId: string): T[] { return expenses.filter(expense => expense.groupId === groupId); }
 
-export function allocateManualSplit(totalCents, allocations, allowedMemberIds) {
+// Exact amounts per person, which must add up to the total.
+export function allocateManualSplit(totalCents: number, allocations: { memberId?: unknown; amountCents?: unknown }[], allowedMemberIds: unknown[]): ShareRow[] {
   if (!Number.isSafeInteger(totalCents) || totalCents <= 0) {
     throw new TypeError("totalCents must be a positive safe integer");
   }
@@ -21,14 +27,14 @@ export function allocateManualSplit(totalCents, allocations, allowedMemberIds) {
   }
 
   const allowed = new Set(allowedMemberIds.map(String));
-  const seen = new Set();
+  const seen = new Set<string>();
   const rows = allocations.map(item => {
     const memberId = String(item?.memberId ?? "");
     const amountCents = item?.amountCents;
     if (!memberId || seen.has(memberId) || !allowed.has(memberId)) {
       throw new TypeError("Manual allocations must use unique members in this group");
     }
-    if (!Number.isSafeInteger(amountCents) || amountCents < 0) {
+    if (typeof amountCents !== "number" || !Number.isSafeInteger(amountCents) || amountCents < 0) {
       throw new TypeError("Manual allocation cents must be a non-negative safe integer");
     }
     seen.add(memberId);

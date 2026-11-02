@@ -1,10 +1,10 @@
 // Frozen copy of the Worker as it ran before accounts (main @ d3fe599), used only
 // by tests/legacy-migration.test.js to create real old-format data through the
 // old API before applying migration 0013. Do not edit.
-import { allocateEqualSplit, allocateManualSplit } from "../../../src/split-logic.js";
-import { pushEnabled, sendPushes, validSubscription } from "../../../src/push.js";
-import { parseAmountToCents } from "../../../src/money.js";
-import { computeBalances, computePairwiseDebts, debtsForMember, outstandingDebt, pairwiseActivity, validateSettlement, SettlementError } from "../../../src/settlement-logic.js";
+import { allocateEqualSplit, allocateManualSplit } from "../../../src/domain/split.ts";
+import { pushEnabled, sendPushes, validSubscription } from "../../../src/integration/push.ts";
+import { parseAmountToCents } from "../../../src/domain/money.ts";
+import { computeBalances, computePairwiseDebts, debtsForMember, outstandingDebt, pairwiseActivity, validateSettlement, SettlementError } from "../../../src/domain/settlement.ts";
 
 const SESSION_MS = 3 * 60 * 60 * 1000;
 const INVITE_MS = 7 * 24 * 60 * 60 * 1000;

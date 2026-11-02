@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import worker from "../src/index.js";
+import worker from "../src/index.ts";
 import { runScenario } from "./golden/harness.js";
 
 const expected = JSON.parse(readFileSync(new URL("./golden/transcript.json", import.meta.url), "utf8"));

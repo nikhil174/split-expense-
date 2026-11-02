@@ -1,5 +1,5 @@
 name = "split-expense"
-main = "src/index.js"
+main = "src/index.ts"
 compatibility_date = "2026-10-28"
 keep_vars = true
 
@@ -26,6 +26,6 @@ migrations_dir = "migrations"
 
 # Daily housekeeping at 03:17 UTC (08:47 IST): removes expired sessions,
 # group unlocks, rate-limit counters, used/expired email links and old read
-# notifications. See cleanup() in src/index.js.
+# notifications. See cleanup() in src/index.ts.
 [triggers]
 crons = ["17 3 * * *"]

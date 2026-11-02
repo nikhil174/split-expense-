@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { makeEnv, call, setupGroup } from "./helpers/d1.js";
-import { cleanup } from "../src/index.js";
+import { cleanup } from "../src/index.ts";
 
 test("history keeps every expense change and cancelled payments, with names, and balances ignore it", async t => {
   const { raw, env } = await makeEnv();

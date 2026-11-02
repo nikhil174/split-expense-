@@ -1,0 +1,50 @@
+// My notifications (the bell) and phones that receive them.
+import type { AppNotification } from "../../shared/api-types.ts";
+import { NOTIFICATION_KEEP_MS } from "../config/constants.ts";
+import type { AppEnv } from "../config/env.ts";
+import { ApiError } from "../http/ApiError.ts";
+import { pushEnabled, validSubscription } from "../integration/push.ts";
+import type { NotificationRepository } from "../repository/NotificationRepository.ts";
+import type { PushSubscriptionRepository } from "../repository/PushSubscriptionRepository.ts";
+import type { CurrentUser } from "../repository/types.ts";
+import { textField } from "../security/passwords.ts";
+
+export class NotificationService {
+  private readonly env: AppEnv;
+  private readonly db: D1Database;
+  private readonly notifications: NotificationRepository;
+  private readonly subscriptions: PushSubscriptionRepository;
+  constructor(deps: { env: AppEnv; db: D1Database; notifications: NotificationRepository; subscriptions: PushSubscriptionRepository }) {
+    this.env = deps.env; this.db = deps.db; this.notifications = deps.notifications; this.subscriptions = deps.subscriptions;
+  }
+
+  // Newest first, with how many are unread. Ones older than 90 days are
+  // cleared as they are read.
+  async list(u: CurrentUser): Promise<{ items: AppNotification[]; unread: number }> {
+    await this.notifications.deleteOlderThan(u.id, Date.now() - NOTIFICATION_KEEP_MS);
+    const [rows, unread] = await Promise.all([this.notifications.list(u.id), this.notifications.unreadCount(u.id)]);
+    return { items: rows.results, unread: Number(unread?.n || 0) };
+  }
+
+  async markAllRead(u: CurrentUser) {
+    await this.notifications.markAllRead(u.id, Date.now());
+    return { ok: true, unread: 0 };
+  }
+
+  // The public key browsers subscribe with (null when push is not set up).
+  pushKey() { return { publicKey: pushEnabled(this.env) ? this.env.VAPID_PUBLIC_KEY : null }; }
+
+  // Saves this browser's subscription (body read only when push is set up).
+  async subscribe(u: CurrentUser, body: () => Promise<unknown>) {
+    if (!pushEnabled(this.env)) throw new ApiError("Phone notifications are not set up on this server yet.", 503);
+    const sub = validSubscription(await body());
+    if (!sub) throw new ApiError("That browser subscription is not valid.");
+    await this.db.batch(this.subscriptions.saveStmts(u.id, sub, Date.now()));
+    return { ok: true };
+  }
+
+  async unsubscribe(u: CurrentUser, b: any) {
+    await this.subscriptions.delete(textField(b?.endpoint), u.id);
+    return { ok: true };
+  }
+}

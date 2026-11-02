@@ -7,13 +7,17 @@
 //  - Message encryption (RFC 8291, aes128gcm): only that browser can read
 //    the title/body; the push service just relays bytes.
 // Without the secrets, push is simply off and nothing is sent.
+import type { AppEnv } from "../config/env.ts";
+
+// One notification to deliver to a person's phones.
+export type PushNote = { to: string; title: string; body?: string | null; link?: string | null; kind: string };
 
 const enc = new TextEncoder();
 export const b64u = {
-  encode: bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
-  decode: str => Uint8Array.from(atob(String(str).replace(/-/g, "+").replace(/_/g, "/") + "===".slice((String(str).length + 3) % 4)), c => c.charCodeAt(0)),
+  encode: (bytes: ArrayBuffer | Uint8Array): string => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+  decode: (str: unknown): Uint8Array => Uint8Array.from(atob(String(str).replace(/-/g, "+").replace(/_/g, "/") + "===".slice((String(str).length + 3) % 4)), c => c.charCodeAt(0)),
 };
-const concat = (...parts) => {
+const concat = (...parts: Uint8Array[]): Uint8Array => {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let i = 0;
   for (const p of parts) { out.set(p, i); i += p.length; }
@@ -22,7 +26,7 @@ const concat = (...parts) => {
 
 // Only real push services: the Worker never sends to an arbitrary URL.
 const PUSH_HOSTS = /^(fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|push\.services\.mozilla\.com|[a-z0-9.-]*\.push\.apple\.com|[a-z0-9.-]*\.notify\.windows\.com)$/i;
-export function validSubscription(sub) {
+export function validSubscription(sub: any): { endpoint: string; p256dh: string; auth: string } | null {
   try {
     const url = new URL(String(sub?.endpoint || ""));
     if (url.protocol !== "https:" || !PUSH_HOSTS.test(url.hostname) || url.href.length > 1000) return null;
@@ -32,20 +36,20 @@ export function validSubscription(sub) {
   } catch { return null; }
 }
 
-export const pushEnabled = env => !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY);
+export const pushEnabled = (env: AppEnv): boolean => !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY);
 
-async function hkdf(salt, ikm, info, bytes) {
+async function hkdf(salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, bytes: number): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
   return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info }, key, bytes * 8));
 }
 
 // RFC 8291 + RFC 8188: one aes128gcm record for this browser's keys.
-export async function encryptPayload(payload, p256dhB64, authB64) {
+export async function encryptPayload(payload: string, p256dhB64: string, authB64: string): Promise<Uint8Array> {
   const uaPublic = b64u.decode(p256dhB64), authSecret = b64u.decode(authB64);
   const uaKey = await crypto.subtle.importKey("raw", uaPublic, { name: "ECDH", namedCurve: "P-256" }, false, []);
-  const local = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
-  const asPublic = new Uint8Array(await crypto.subtle.exportKey("raw", local.publicKey));
-  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: uaKey }, local.privateKey, 256));
+  const local = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]) as CryptoKeyPair;
+  const asPublic = new Uint8Array(await crypto.subtle.exportKey("raw", local.publicKey) as ArrayBuffer);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: uaKey } as unknown as SubtleCryptoDeriveKeyAlgorithm, local.privateKey, 256));
   const ikm = await hkdf(authSecret, shared, concat(enc.encode("WebPush: info\0"), uaPublic, asPublic), 32);
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const cek = await hkdf(salt, ikm, enc.encode("Content-Encoding: aes128gcm\0"), 16);
@@ -61,14 +65,14 @@ export async function encryptPayload(payload, p256dhB64, authB64) {
 }
 
 // RFC 8292: "vapid t=<ES256 JWT>, k=<public key>" for one push service.
-let signingKey = null;
-export async function vapidAuthorization(endpoint, env, now = Date.now()) {
+let signingKey: { pub: string; key: CryptoKey } | null = null;
+export async function vapidAuthorization(endpoint: string, env: AppEnv, now = Date.now()): Promise<string> {
   if (!signingKey || signingKey.pub !== env.VAPID_PUBLIC_KEY) {
-    const pub = b64u.decode(env.VAPID_PUBLIC_KEY);
+    const pub = b64u.decode(env.VAPID_PUBLIC_KEY!);
     const jwk = { kty: "EC", crv: "P-256", d: env.VAPID_PRIVATE_KEY, x: b64u.encode(pub.slice(1, 33)), y: b64u.encode(pub.slice(33, 65)), ext: true };
-    signingKey = { pub: env.VAPID_PUBLIC_KEY, key: await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]) };
+    signingKey = { pub: env.VAPID_PUBLIC_KEY!, key: await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]) };
   }
-  const part = obj => b64u.encode(enc.encode(JSON.stringify(obj)));
+  const part = (obj: unknown) => b64u.encode(enc.encode(JSON.stringify(obj)));
   const unsigned = `${part({ typ: "JWT", alg: "ES256" })}.${part({ aud: new URL(endpoint).origin, exp: Math.floor(now / 1000) + 12 * 3600, sub: env.VAPID_SUBJECT || "mailto:admin@example.com" })}`;
   const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, signingKey.key, enc.encode(unsigned));
   return `vapid t=${unsigned}.${b64u.encode(sig)}, k=${env.VAPID_PUBLIC_KEY}`;
@@ -76,11 +80,11 @@ export async function vapidAuthorization(endpoint, env, now = Date.now()) {
 
 // Sends each notification in `notes` to all of its recipient's devices.
 // Devices the push service says are gone (404/410) are forgotten.
-export async function sendPushes(env, db, notes) {
+export async function sendPushes(env: AppEnv, db: D1Database, notes: PushNote[]): Promise<void> {
   if (!pushEnabled(env) || !notes.length) return;
   const to = [...new Set(notes.map(n => n.to))];
-  const subs = (await db.prepare("SELECT endpoint,member_id,p256dh,auth FROM appx_push_subscriptions WHERE member_id IN (" + to.map(() => "?").join(",") + ")").bind(...to).all()).results;
-  const gone = [];
+  const subs = (await db.prepare("SELECT endpoint,member_id,p256dh,auth FROM appx_push_subscriptions WHERE member_id IN (" + to.map(() => "?").join(",") + ")").bind(...to).all<{ endpoint: string; member_id: string; p256dh: string; auth: string }>()).results;
+  const gone: string[] = [];
   await Promise.all(notes.flatMap(n => subs.filter(s => s.member_id === n.to).map(async s => {
     try {
       const payload = JSON.stringify({ title: n.title, body: n.body || "", link: n.link || "#/", tag: n.kind });
