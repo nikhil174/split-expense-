@@ -619,6 +619,39 @@ try {
   await cy.getByText("Bea E2E let you off ₹30.00").waitFor();
   step("no need to pay: the lender lets someone off, a group admin approves, the group is told, and it's settled");
 
+  // The other way round: Cy asks Bea to let him off; Bea says yes.
+  await bea.evaluate(async ([gid, body]) => { const r = await fetch(`/api/groups/${gid}/expenses`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) throw new Error(await r.text()); },
+    [gid, { description: "Juice", amount: "40", paidBy: idOf("Bea E2E"), memberIds: [idOf("Bea E2E"), idOf("Cyrus E2E")] }]);
+  await cy.goto(BASE + "/#/"); await cy.reload();
+  await openGroup(cy);
+  await cy.getByRole("button", { name: "Settle up" }).click();
+  const cySettle = cy.getByRole("dialog");
+  const payBea = cySettle.getByRole("button", { name: /^Pay Bea E2E/ });
+  if (await payBea.count()) await payBea.click();
+  await cySettle.getByTestId("ask-waiver-open").click();
+  const askDialog = cy.getByRole("alertdialog");
+  await askDialog.getByText("Ask Bea E2E to let you off ₹20.00?").waitFor();
+  await shot(cy, "ask-waiver");
+  await askDialog.getByTestId("waive-confirm").click();
+  await toast(cy, "Asked Bea E2E to let you off ₹20.00.");
+  await bea.goto(BASE + "/#/"); await bea.reload();
+  const askCard = bea.getByTestId("pending-payments");
+  await askCard.getByText("Cyrus E2E asks you to let them off").waitFor();
+  await shot(bea, "ask-waiver-answer");
+  await askCard.getByRole("button", { name: /^Confirm ₹20\.00 from Cyrus E2E/ }).click();
+  await toast(bea, "You let Cyrus E2E off ₹20.00.");
+  await bea.getByText("All settled up").waitFor(); // Home updates without a reload
+  await cy.goto(BASE + "/#/notifications"); await cy.reload();
+  await cy.getByText("Bea E2E let you off ₹20.00").waitFor();
+  // The Payments tab shows each one in full (no cut-off labels).
+  await bea.goto(BASE + "/#/"); await bea.reload();
+  await openGroup(bea);
+  await bea.getByRole("tab", { name: "Payments", exact: true }).click();
+  await bea.getByText("You let Cyrus E2E off").first().waitFor();
+  await noHorizontalOverflow(bea, "payments with waivers");
+  await shot(bea, "payments-waivers");
+  step("asking to be let off: the debtor asks, the lender says yes, the group is told, and it's settled");
+
   // Group settings: the ⚙ on Home's group list, only for the group's admins.
   await admin.goto(BASE + "/#/"); await admin.reload();
   await admin.getByRole("button", { name: "Settings for " + GROUP }).click();
