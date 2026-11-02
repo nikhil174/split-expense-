@@ -41,6 +41,7 @@ import { PaymentMethodService } from "../service/PaymentMethodService.ts";
 import { PaymentNotifications } from "../service/PaymentNotifications.ts";
 import { SettlementService } from "../service/SettlementService.ts";
 import { SiteAdminService } from "../service/SiteAdminService.ts";
+import { WaiverNotifications } from "../service/WaiverNotifications.ts";
 
 export class Container {
   readonly clock: Clock;
@@ -96,7 +97,7 @@ export class Container {
     this.invitations = new InvitationService({ clock, tx, groups, pins, notify });
     this.members = new MembershipService({ clock, tx, groups, users, friendships, notify });
     this.expenses = new ExpenseService({ clock, tx, expenses, groups, history, notify });
-    this.settlements = new SettlementService({ clock, tx, settlements, expenses, groups, history, paymentNotes: new PaymentNotifications(notify, tx) });
+    this.settlements = new SettlementService({ clock, tx, settlements, expenses, groups, history, paymentNotes: new PaymentNotifications(notify, tx), waiverNotes: new WaiverNotifications(notify) });
     this.insights = new InsightsService({ clock, groups, expenses, settlements });
     this.paymentMethods = new PaymentMethodService({ clock, methods: new PaymentMethodRepository(db), groups });
     this.friends = new FriendService({ clock, tx, friendships, users, notify });

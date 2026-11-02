@@ -1,12 +1,14 @@
 // Payments between members ("settling up"). A payment counts only once the
 // person who received it confirms it; one the receiver recorded themselves
-// ("they paid me") needs a group admin's approval instead.
+// ("they paid me") needs a group admin's approval instead. A lender can also
+// let someone off what they still owe (a waiver), which a group admin approves
+// and the whole group hears about.
 import type { Debt as ApiDebt, Debts, Mine, PendingPayment, Settlement } from "../../shared/api-types.ts";
 import type { Clock } from "../config/Clock.ts";
 import type { Untrusted } from "../domain/input.ts";
 import { nameLookup } from "../domain/members.ts";
 import { parseAmountToCents, rupees } from "../domain/money.ts";
-import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, needsAdminApproval, PaymentKind, PaymentStatus, type PaymentActor } from "../domain/payments.ts";
+import { awaitsDecisionBy, canCancel, canDecide, decisionRefusal, initialStatus, mayCancel, mayRecord, mayRecordDebt, mayWaive, needsAdminApproval, PaymentKind, PaymentStatus, type PaymentActor } from "../domain/payments.ts";
 import { computePairwiseDebts, debtsForMember, outstandingDebt, SettlementError, validateSettlement, type Debt } from "../domain/settlement.ts";
 import { textField } from "../domain/text.ts";
 import { ApiError, conflict, forbidden, notFound } from "../http/ApiError.ts";
@@ -14,13 +16,14 @@ import type { ExpenseRepository } from "../repository/ExpenseRepository.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { HistoryRepository } from "../repository/HistoryRepository.ts";
 import type { SettlementRepository } from "../repository/SettlementRepository.ts";
-import type { Transaction } from "../repository/Transaction.ts";
+import type { Statement, Transaction } from "../repository/Transaction.ts";
 import { changesOf } from "../repository/db.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import { newId } from "../security/crypto.ts";
 import type { GroupScope } from "./GroupScope.ts";
 import { parseImage } from "./PaymentMethodService.ts";
 import type { PaymentNotifications } from "./PaymentNotifications.ts";
+import type { WaiverNotifications } from "./WaiverNotifications.ts";
 
 // The person acting in a group, as the payment rules see them.
 const actorIn = (s: GroupScope): PaymentActor => ({ id: s.user.id, isAdmin: s.isAdmin });
@@ -32,10 +35,12 @@ export class SettlementService {
   private readonly groups: GroupRepository;
   private readonly history: HistoryRepository;
   private readonly paymentNotes: PaymentNotifications;
+  private readonly waiverNotes: WaiverNotifications;
   private readonly clock: Clock;
-  constructor(deps: { clock: Clock; tx: Transaction; settlements: SettlementRepository; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; paymentNotes: PaymentNotifications }) {
+  constructor(deps: { clock: Clock; tx: Transaction; settlements: SettlementRepository; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; paymentNotes: PaymentNotifications; waiverNotes: WaiverNotifications }) {
     this.clock = deps.clock;
-    this.tx = deps.tx; this.settlements = deps.settlements; this.expenses = deps.expenses; this.groups = deps.groups; this.history = deps.history; this.paymentNotes = deps.paymentNotes;
+    this.tx = deps.tx; this.settlements = deps.settlements; this.expenses = deps.expenses; this.groups = deps.groups; this.history = deps.history;
+    this.paymentNotes = deps.paymentNotes; this.waiverNotes = deps.waiverNotes;
   }
 
   // The group's payments, newest first, with what I may do with each.
@@ -135,6 +140,41 @@ export class SettlementService {
     return { ok: true, id: settlementId, amountCents: cents, status };
   }
 
+  // The lender lets a member off what they still owe them ("no need to pay").
+  // It is stored as a payment from the debtor to the lender that the lender
+  // recorded, so a group admin approves it (an admin lender's counts at once)
+  // and, once confirmed, it clears the debt exactly as a payment would. The
+  // amount defaults to everything still unpaid: what is owed less what is
+  // already waiting for approval.
+  async waive(s: GroupScope, b: Untrusted<"fromMemberId" | "amount">) {
+    const u = s.user, gid = s.gid, actor = actorIn(s);
+    const from = textField(b?.fromMemberId), to = u.id;
+    if (!from) throw new ApiError("Choose who you're letting off.");
+    if (from === to) throw new ApiError("You can't let yourself off.");
+    if (!mayWaive(to, actor)) throw forbidden("Only the person who is owed can let someone off.");
+    const members = await this.groups.members(gid);
+    if (!members.some(x => x.id === from)) throw new ApiError("They must belong to this group.");
+    const due = outstandingDebt(computePairwiseDebts(await this.expenses.ledger(gid)), from, to);
+    if (due === 0) throw conflict("They don't owe you anything.");
+    const left = due - await this.settlements.pendingBetween(gid, from, to);
+    if (left <= 0) throw conflict("Everything they owe you is already waiting for approval.");
+    let cents = left;
+    if (b?.amount !== undefined && b?.amount !== null && b?.amount !== "") {
+      try { cents = parseAmountToCents(b.amount); } catch (error) { throw new ApiError((error as Error).message); }
+      if (cents > left) throw conflict(`They owe you ₹${(left / 100).toFixed(2)} that isn't already waiting for approval, so you can let them off at most that.`);
+    }
+    const status = initialStatus(to, actor, true);
+    const id = newId(), now = this.clock.now();
+    const result = await this.settlements.insertIfOwed({ id, gid, from, to, cents, createdBy: u.id, now, status, kind: PaymentKind.Waiver });
+    if (changesOf(result) !== 1) throw conflict("The outstanding amount changed. Refresh and try again.");
+    const note = { gid, from, to, cents }, told = { actor: u, nameOf: nameLookup(members) };
+    const notes = status === PaymentStatus.Confirmed
+      ? this.waiverNotes.approved(note, told, members.filter(x => x.active).map(x => x.id))
+      : this.waiverNotes.requested(note, told, members.filter(x => x.role === "admin" && x.active).map(x => x.id));
+    await this.send(notes);
+    return { ok: true, id, amountCents: cents, status };
+  }
+
   // The screenshot attached to a payment.
   async proof(s: GroupScope, sid: string) {
     const r = await this.settlements.proof(sid, s.gid);
@@ -148,32 +188,39 @@ export class SettlementService {
     const u = s.user, gid = s.gid, actor = actorIn(s);
     const pay = await this.settlements.find(sid, gid);
     if (!pay) throw notFound("Payment not found.");
-    const facts = { fromMemberId: pay.fromId, toMemberId: pay.toId, createdBy: pay.createdBy, status: pay.status };
-    if (pay.status !== PaymentStatus.Pending) throw conflict(`This payment was already ${pay.status}.`);
+    const waiver = pay.kind === PaymentKind.Waiver;
+    const facts = { fromMemberId: pay.fromId, toMemberId: pay.toId, createdBy: pay.createdBy, status: pay.status, kind: pay.kind };
+    if (pay.status !== PaymentStatus.Pending) throw conflict(`This ${waiver ? "request to let them off" : "payment"} was already ${pay.status}.`);
     const now = this.clock.now();
-    const told = { actor: u, nameOf: nameLookup(await this.groups.members(gid)) };
+    const members = await this.groups.members(gid);
+    const told = { actor: u, nameOf: nameLookup(members) };
     const note = { gid, from: pay.fromId, to: pay.toId, cents: pay.cents, createdBy: pay.createdBy };
     if (action === "cancel") {
-      if (!mayCancel(facts, actor)) throw forbidden("Only the person who recorded it, the payer or a group admin can cancel this payment.");
+      if (!mayCancel(facts, actor)) throw forbidden(waiver ? "Only the person who is owed or a group admin can cancel this." : "Only the person who recorded it, the payer or a group admin can cancel this payment.");
       await this.tx.run([
-        this.history.insertStmt({ gid, entity: "payment", entityId: sid, action: "cancelled", actor: u.id, before: { fromMemberId: pay.fromId, toMemberId: pay.toId, amountCents: pay.cents, createdBy: pay.createdBy, createdAt: pay.createdAt } }),
+        this.history.insertStmt({ gid, entity: "payment", entityId: sid, action: "cancelled", actor: u.id, before: { fromMemberId: pay.fromId, toMemberId: pay.toId, amountCents: pay.cents, createdBy: pay.createdBy, createdAt: pay.createdAt, kind: pay.kind } }),
         this.settlements.deleteProofStmt(sid),
         this.settlements.deletePendingStmt(sid),
       ]);
-      await this.paymentNotes.cancelled(note, told);
+      if (waiver) await this.send(this.waiverNotes.cancelled(note, told));
+      else await this.paymentNotes.cancelled(note, told);
       return { ok: true, cancelled: true };
     }
     const refusal = decisionRefusal(facts, actor);
     if (refusal) throw forbidden(refusal);
     if (action === "reject") {
       await this.settlements.reject(sid, u.id, now);
-      await this.paymentNotes.rejected(note, told);
+      if (waiver) await this.send(this.waiverNotes.rejected(note, told));
+      else await this.paymentNotes.rejected(note, told);
       return { ok: true, status: PaymentStatus.Rejected };
     }
     // Confirm only while it still fits what is owed (expenses may have changed).
     const result = await this.settlements.confirmIfOwed(sid, u.id, now, gid, pay.fromId, pay.toId);
-    if (changesOf(result) !== 1) throw conflict("This payment is now more than what is owed, because expenses changed since it was sent. Reject it and ask for a new one.");
-    await this.paymentNotes.confirmed(note, told);
+    if (changesOf(result) !== 1) throw conflict(waiver
+      ? "This is now more than they owe, because expenses changed since it was asked. Reject it and ask again."
+      : "This payment is now more than what is owed, because expenses changed since it was sent. Reject it and ask for a new one.");
+    if (waiver) await this.send(this.waiverNotes.approved(note, told, members.filter(x => x.active).map(x => x.id)));
+    else await this.paymentNotes.confirmed(note, told);
     return { ok: true, status: PaymentStatus.Confirmed };
   }
 
@@ -188,5 +235,10 @@ export class SettlementService {
       return { id: x.id, groupId: x.groupId, groupName: x.groupName, fromMemberId: x.fromMemberId, fromName: x.fromName, toMemberId: x.toMemberId, toName: x.toName, amountCents: x.amountCents, kind: x.kind, createdAt: x.createdAt, hasProof: !!x.hasProof, needsAdmin, incoming: decide };
     });
     return { toConfirm: rows.filter(x => x.incoming), waiting: rows.filter(x => !x.incoming && (x.fromMemberId === u.id || x.toMemberId === u.id)) };
+  }
+
+  // Writes notifications, if there are any.
+  private async send(notes: Statement[]): Promise<void> {
+    if (notes.length) await this.tx.run(notes);
   }
 }
