@@ -67,4 +67,9 @@ test("a waiver: only the lender asks, only an admin approves, and the debtor can
   assert.equal(decisionRefusal(waiver, admin), null);
   assert.deepEqual([admin, payer, receiver].map(a => awaitsDecisionBy(waiver, a)), [true, false, false]);
   assert.equal(initialStatus("cy", { id: "cy", isAdmin: true }, true), PaymentStatus.Confirmed, "an admin lender's waiver counts at once");
+  // Bea, the debtor, is an admin too: she still can't decide or cancel being let off.
+  const adminDebtor = { id: "bea", isAdmin: true };
+  assert.deepEqual([canDecide(waiver, adminDebtor), canCancel(waiver, adminDebtor), awaitsDecisionBy(waiver, adminDebtor)], [false, false, false]);
+  assert.equal(decisionRefusal(waiver, adminDebtor), "Another group admin approves letting you off.");
+  assert.deepEqual([canDecide(theyPaidMe, adminDebtor), canCancel(theyPaidMe, adminDebtor)], [true, true], "unchanged for payments");
 });

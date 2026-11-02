@@ -15,9 +15,9 @@ const ctx = actor => ({ actor: { id: actor, name: names[actor] }, nameOf: id => 
 const w = { gid: "g", from: "bea", to: "cy", cents: 12345 };
 const rows = f => f.sent.map(n => [n.to, n.kind, n.title, n.body, n.link]);
 
-test("asked: the admins (not the lender, even if one) and the debtor; one statement each", () => {
+test("asked: the admins (not the lender or the debtor, even if admins) and the debtor; one statement each", () => {
   const f = fakes();
-  const stmts = f.notes.requested(w, ctx("cy"), ["adm", "cy"]);
+  const stmts = f.notes.requested(w, ctx("cy"), ["adm", "cy", "bea"]);
   assert.equal(stmts.length, 2);
   assert.deepEqual(rows(f), [
     ["adm", "waiver_admin_approval", "Cy wants to let Bea off ₹123.45", "Bea won't need to pay it once an admin approves.", "#/g/g"],

@@ -160,3 +160,22 @@ test("approving re-checks the debt, because expenses may have changed since it w
   assert.deepEqual([late.status, late.data.error], [409, "This is now more than they owe, because expenses changed since it was asked. Reject it and ask again."]);
   assert.equal((await w.post("admin", `/settlements/${r.data.id}/reject`)).status, 200);
 });
+
+test("a debtor who is a group admin can't approve or cancel being let off; another admin decides", async t => {
+  const w = await world(t);
+  const { ids } = w;
+  assert.equal((await w.post("admin", `/members/${ids.Cy}/make-admin`)).status, 200);
+  const r = await w.waive("Bea", { fromMemberId: ids.Cy });
+  // Cy hears it as the debtor, not as an admin asked to approve it.
+  assert.deepEqual((await w.inbox("Cy")).map(n => n.kind), ["waiver_pending"]);
+  assert.deepEqual([(await w.pending("Cy")).toConfirm.length, (await w.pending("Cy")).waiting.map(x => x.kind)], [0, ["waiver"]]);
+  const row = await w.row("Cy", r.data.id);
+  assert.deepEqual([row.canDecide, row.canCancel], [false, false]);
+  const confirm = await w.post("Cy", `/settlements/${r.data.id}/confirm`);
+  assert.deepEqual([confirm.status, confirm.data.error], [403, "Another group admin approves letting you off."]);
+  assert.equal((await w.post("Cy", `/settlements/${r.data.id}/reject`)).status, 403);
+  assert.equal((await w.post("Cy", `/settlements/${r.data.id}/cancel`)).status, 403);
+  assert.equal(await w.owes("Cy"), 3000);
+  assert.equal((await w.post("admin", `/settlements/${r.data.id}/confirm`)).status, 200);
+  assert.equal(await w.owes("Cy"), 0);
+});

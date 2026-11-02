@@ -14,11 +14,11 @@ export class WaiverNotifications {
   constructor(notify: Notifier) { this.notify = notify; }
 
   // The lender asked: the group's admins approve it, and the debtor hears
-  // what's coming.
+  // what's coming (as the debtor, even if they are an admin too).
   requested(w: WaiverNote, { actor, nameOf }: Context, adminIds: string[]): Statement[] {
     const amount = inrText(w.cents), debtor = nameOf(w.from);
     return [
-      ...adminIds.filter(id => id !== actor.id).map(admin => this.note(w, actor, admin, "waiver_admin_approval",
+      ...adminIds.filter(id => id !== actor.id && id !== w.from).map(admin => this.note(w, actor, admin, "waiver_admin_approval",
         `${actor.name} wants to let ${debtor} off ${amount}`, `${debtor} won't need to pay it once an admin approves.`, `#/g/${w.gid}`)),
       this.note(w, actor, w.from, "waiver_pending",
         `${actor.name} is letting you off ${amount}`, "You won't need to pay it once a group admin approves.", `#/g/${w.gid}/p/${w.to}`),
