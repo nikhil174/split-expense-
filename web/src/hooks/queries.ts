@@ -135,6 +135,14 @@ export function useWaiveDebt(groupId: string) {
     onSuccess: () => refreshGroup(qc, groupId),
   });
 }
+// Ask the person I owe to let me off ("no need to pay"); they decide. Amount defaults to all of it.
+export function useAskWaiver(groupId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { toMemberId: string; amount?: string }) => post<{ id: string; status: "pending"; amountCents: number }>(`/api/groups/${groupId}/settlements/ask-waiver`, body),
+    onSuccess: () => refreshGroup(qc, groupId),
+  });
+}
 
 export const useFriends = () => useQuery({ queryKey: keys.friends, queryFn: () => get<Friends>("/api/friends") });
 export const useInviteLink = (groupId: string, enabled = true) => useQuery({ ...groupQuery<{ code: string | null; canManage: boolean }>(groupId, "invite-link", "/invite-link"), enabled });

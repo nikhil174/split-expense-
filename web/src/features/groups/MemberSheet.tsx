@@ -112,7 +112,7 @@ export function MemberSheet({ groupId, memberId, onClose, meId }: { groupId: str
                           <span className="min-w-0 flex-1">
                             {isWaiver(x) ? <>
                               <span className="block truncate text-[15px] font-medium">{x.toMemberId === meId ? "You" : x.toName} let {label(x.fromMemberId, x.fromName)} off</span>
-                              <span className="footnote block text-muted-foreground">{x.status === "pending" ? "No need to pay · waiting for an admin to approve" : "No need to pay"}</span>
+                              <span className="footnote block text-muted-foreground">{x.status === "pending" ? "No need to pay · waiting for a decision" : "No need to pay"}</span>
                             </> : <>
                               <span className="block truncate text-[15px] font-medium">{x.fromMemberId === meId ? "You" : x.fromName} paid {label(x.toMemberId, x.toName)}</span>
                               <span className="footnote block text-muted-foreground">{x.status === "pending" ? `Waiting for ${label(x.toMemberId, x.toName)} to confirm` : "Confirmed"}</span>
