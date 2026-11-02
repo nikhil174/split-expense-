@@ -81,16 +81,16 @@ The Worker is TypeScript in layers, each depending only on the ones below it:
 | `src/index.ts` | Worker entry: `fetch` (API and app), `scheduled` (daily cleanup) |
 | `src/app/` | `SplitItApplication.ts`: the request pipeline (public routes → sign-in → site owner console → signed-in routes → group access and PIN → group routes); `Container.ts`: dependency injection (each class gets what it needs through its constructor) |
 | `src/controller/` | `@RestController`s: map routes to services, read the request, apply rate limits |
-| `src/service/` | `@Service`s: the business rules (who may do what, payments, notifications, history) |
-| `src/repository/` | `@Repository`s: every SQL statement (Cloudflare D1) |
-| `src/security/` | password hashing, sessions, rate limiter, Google token check, group PIN guard |
-| `src/domain/` | pure money, split and debt logic (no I/O) |
+| `src/service/` | `@Service`s, one responsibility each: accounts, sign-in, groups, invitations, group access and PIN, members, expenses, payments (and payment notifications), insights, friends, notifications, site owner |
+| `src/repository/` | `@Repository`s: every SQL statement (Cloudflare D1); `Transaction` runs writes all-or-nothing |
+| `src/security/` | password hashing and lockout, sessions, rate limiter, Google token check, group PIN guard |
+| `src/domain/` | pure rules with no I/O: money, splits, debts, payment rules (who decides, cancels, records), text normalization, untrusted input types |
 | `src/integration/` | email (Brevo) and phone push (Web Push) |
 | `src/http/` | router, request context, `ApiError` and the error handler (`@ControllerAdvice`) |
-| `src/config/` | limits, lifetimes and formats; the `Env` type |
+| `src/config/` | limits, lifetimes and formats; the `Env` type; the injected `Clock` |
 | `shared/api-types.ts` | the JSON shapes of API answers, used by both the services and the React app |
 
-Services throw `ApiError(message, status)`; the error handler answers `{ error }` with that status. Wrangler compiles the TypeScript on deploy, so the deploy command is unchanged.
+Services throw `ApiError(message, status)`; the error handler answers `{ error }` with that status. Wrangler compiles the TypeScript on deploy, so the deploy command is unchanged. How the layers follow SOLID is in `docs/system-design.md` ("Backend design").
 
 ## Cloudflare deployment
 1. Set production secrets (never commit them): `npx wrangler secret put ADMIN_PIN` and `npx wrangler secret put SESSION_SECRET` (long random value). Rotate them if old values were exposed. Deploys fail with "required secrets have not been set" until both exist.

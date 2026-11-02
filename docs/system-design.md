@@ -55,6 +55,18 @@ flowchart LR
   W -. "phase 3: verify ID token" .-> G["Google JWKS"]
 ```
 
+### Backend design
+
+The layers depend only downwards: controllers → services → repositories, with security, domain, integrations and config beside them. Classes get what they need through their constructors, and `src/app/Container.ts` is the one place that builds them (dependency injection without a framework).
+
+- **Single responsibility.** Each class has one reason to change. Controllers read requests and apply rate limits. Services hold the business rules, split by area: groups, invitations, group access and PIN, members, expenses, payments, insights, and so on. Who hears about a payment, and in what words, is a separate class (`PaymentNotifications`). Repositories hold every SQL statement and nothing else; input normalization lives in `domain/`.
+- **Open/closed.** Adding an endpoint means adding a controller method and one `register` line. The request pipeline (`SplitItApplication`) and the router don't change.
+- **Liskov substitution.** Anything that satisfies an interface works: the `Transaction` and `Clock` implementations, or a fake account store, notifier or transaction in tests.
+- **Interface segregation.** Controllers receive only what their stage of the request has: `Web`, then `Authed` (a signed-in user), then `InGroup` (a member who opened the group). Services declare the request fields they read (`Untrusted<"name" | "pin">`).
+- **Dependency inversion.** Services and security classes depend on abstractions (`Transaction`, `Clock`, repositories), not on Cloudflare D1 or the system time. Only repositories touch D1.
+
+Rules that more than one place needs are pure functions in `domain/`. These include the debt model, splits, money parsing and the payment rules: who may confirm, reject, cancel or record a payment, whether it needs an admin, and the status it starts with. They are unit-tested directly. API answers have one definition (`shared/api-types.ts`), which the services return and the React app reads. Request bodies are typed as untrusted until checked, and the backend has no `any`. A golden-master test (`tests/golden/`) replays the whole API and must reproduce its recording exactly, so refactors can't change behaviour unnoticed.
+
 ## 3. Data model
 
 ```mermaid
