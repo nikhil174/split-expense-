@@ -7,6 +7,7 @@ import { ApiError, conflict, notFound, tooMany } from "../http/ApiError.ts";
 import { emailEnabled } from "../integration/email.ts";
 import type { EmailTokenRepository } from "../repository/EmailTokenRepository.ts";
 import type { SessionRepository } from "../repository/SessionRepository.ts";
+import type { Transaction } from "../repository/Transaction.ts";
 import type { UserRepository } from "../repository/UserRepository.ts";
 import { changesOf } from "../repository/db.ts";
 import type { UserRow } from "../repository/types.ts";
@@ -22,15 +23,15 @@ const LINK_GONE = "This reset link has expired or was already used. Ask for a ne
 
 export class AuthService {
   private readonly env: AppEnv;
-  private readonly db: D1Database;
+  private readonly tx: Transaction;
   private readonly users: UserRepository;
   private readonly sessions: SessionRepository;
   private readonly tokens: EmailTokenRepository;
   private readonly hasher: PasswordHasher;
   private readonly passwords: AccountPasswordGuard;
   private readonly emailLinks: EmailLinkService;
-  constructor(deps: { env: AppEnv; db: D1Database; users: UserRepository; sessions: SessionRepository; tokens: EmailTokenRepository; hasher: PasswordHasher; passwords: AccountPasswordGuard; emailLinks: EmailLinkService }) {
-    this.env = deps.env; this.db = deps.db; this.users = deps.users; this.sessions = deps.sessions; this.tokens = deps.tokens;
+  constructor(deps: { env: AppEnv; tx: Transaction; users: UserRepository; sessions: SessionRepository; tokens: EmailTokenRepository; hasher: PasswordHasher; passwords: AccountPasswordGuard; emailLinks: EmailLinkService }) {
+    this.env = deps.env; this.tx = deps.tx; this.users = deps.users; this.sessions = deps.sessions; this.tokens = deps.tokens;
     this.hasher = deps.hasher; this.passwords = deps.passwords; this.emailLinks = deps.emailLinks;
   }
 
@@ -109,7 +110,7 @@ export class AuthService {
     if (!goodPassword(next)) throw new ApiError(PASSWORD_HINT);
     const done = await this.tokens.useOnce(t.token_hash, Date.now());
     if (changesOf(done) !== 1) throw new ApiError("This reset link was already used.", 410);
-    await this.db.batch([
+    await this.tx.run([
       this.users.setPasswordStmt(t.user_id, await this.hasher.hash(next)),
       this.sessions.deleteUnlocksForUserStmt(t.user_id),
       this.sessions.deleteForUserStmt(t.user_id),
@@ -122,7 +123,7 @@ export class AuthService {
   async verifyEmail(token: unknown) {
     const t = await this.emailLinks.find(token, "verify");
     if (!t) throw new ApiError("This link has expired or was already used. Send a new one from your profile.", 410);
-    await this.db.batch([
+    await this.tx.run([
       this.tokens.markUsedStmt(t.token_hash, Date.now()),
       this.users.markEmailVerifiedStmt(t.user_id, t.email, Date.now()),
     ]);

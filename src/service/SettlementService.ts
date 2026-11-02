@@ -1,6 +1,7 @@
 // Payments between members ("settling up"). A payment counts only once the
 // person who received it confirms it; one the receiver recorded themselves
 // ("they paid me") needs a group admin's approval instead.
+import type { Statement, Transaction } from "../repository/Transaction.ts";
 import type { Debt as ApiDebt, Debts, Mine, PendingPayment, Settlement } from "../../shared/api-types.ts";
 import { FORMER_MEMBER } from "../config/constants.ts";
 import { nameLookup } from "../domain/members.ts";
@@ -24,14 +25,14 @@ import type { Notifier } from "./Notifier.ts";
 import { parseImage } from "./PaymentMethodService.ts";
 
 export class SettlementService {
-  private readonly db: D1Database;
+  private readonly tx: Transaction;
   private readonly settlements: SettlementRepository;
   private readonly expenses: ExpenseRepository;
   private readonly groups: GroupRepository;
   private readonly history: HistoryRepository;
   private readonly notify: Notifier;
-  constructor(deps: { db: D1Database; settlements: SettlementRepository; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; notify: Notifier }) {
-    this.db = deps.db; this.settlements = deps.settlements; this.expenses = deps.expenses; this.groups = deps.groups; this.history = deps.history; this.notify = deps.notify;
+  constructor(deps: { tx: Transaction; settlements: SettlementRepository; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; notify: Notifier }) {
+    this.tx = deps.tx; this.settlements = deps.settlements; this.expenses = deps.expenses; this.groups = deps.groups; this.history = deps.history; this.notify = deps.notify;
   }
 
   // The group's payments, newest first, with what I may do with each.
@@ -125,7 +126,7 @@ export class SettlementService {
     if (proof) await this.settlements.insertProof(settlementId, proof.mime, proof.base64, now);
     // Tell the receiver (to confirm it) and, if someone else recorded it, the payer.
     // "They paid me" waiting for approval goes to the group's admins.
-    const nm = (x: string) => byId.get(x)?.name || FORMER_MEMBER, notes: D1PreparedStatement[] = [];
+    const nm = (x: string) => byId.get(x)?.name || FORMER_MEMBER, notes: Statement[] = [];
     if (byReceiver && status === PaymentStatus.Pending) {
       for (const a of members.filter(x => x.role === "admin" && x.active && x.id !== u.id)) {
         notes.push(this.notify.stmt({ to: a.id, groupId: gid, kind: "payment_admin_approval", actor: u.name, title: `${u.name} says ${nm(from)} paid them ${inrText(cents)}`, body: "Approve it if it's right; it counts once an admin approves.", link: `#/g/${gid}` }));
@@ -139,7 +140,7 @@ export class SettlementService {
     if (from !== u.id) notes.push(this.notify.stmt({ to: from, groupId: gid, kind: "payment_recorded", actor: u.name,
       title: `${u.name} recorded your payment of ${inrText(cents)} to ${to === u.id ? "them" : nm(to)}`,
       body: pending ? (byReceiver ? "It counts once a group admin approves it." : `It counts once ${nm(to)} confirms it.`) : "It counts in your balance now.", link: `#/g/${gid}/p/${to}` }));
-    if (notes.length) await this.db.batch(notes);
+    if (notes.length) await this.tx.run(notes);
     return { ok: true, id: settlementId, amountCents: cents, status };
   }
 
@@ -161,12 +162,12 @@ export class SettlementService {
     const now = Date.now();
     const nm = nameLookup(await this.groups.members(gid));
     // Each side is taken to what's between them and the other person.
-    const tell = (to: string, kind: string, title: string, body: string) => to === u.id ? Promise.resolve() : this.db.batch([this.notify.stmt({ to, groupId: gid, kind, title, body, link: `#/g/${gid}/p/${to === pay.fromId ? pay.toId : pay.fromId}`, actor: u.name })]);
+    const tell = (to: string, kind: string, title: string, body: string) => to === u.id ? Promise.resolve() : this.tx.run([this.notify.stmt({ to, groupId: gid, kind, title, body, link: `#/g/${gid}/p/${to === pay.fromId ? pay.toId : pay.fromId}`, actor: u.name })]);
     // "They paid me", recorded by the receiver: a group admin decides it.
     const needsAdmin = needsAdminApproval(facts);
     if (action === "cancel") {
       if (!mayCancel(facts, actor)) throw forbidden("Only the person who recorded it, the payer or a group admin can cancel this payment.");
-      await this.db.batch([
+      await this.tx.run([
         this.history.insertStmt({ gid, entity: "payment", entityId: sid, action: "cancelled", actor: u.id, before: { fromMemberId: pay.fromId, toMemberId: pay.toId, amountCents: pay.cents, createdBy: pay.createdBy, createdAt: pay.createdAt } }),
         this.settlements.deleteProofStmt(sid),
         this.settlements.deletePendingStmt(sid),

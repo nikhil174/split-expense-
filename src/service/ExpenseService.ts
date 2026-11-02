@@ -11,6 +11,7 @@ import { ApiError, forbidden, notFound } from "../http/ApiError.ts";
 import type { ExpenseRepository } from "../repository/ExpenseRepository.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { HistoryRepository } from "../repository/HistoryRepository.ts";
+import type { Transaction } from "../repository/Transaction.ts";
 import { newId } from "../security/crypto.ts";
 import type { GroupScope } from "./GroupService.ts";
 import type { Notifier } from "./Notifier.ts";
@@ -21,13 +22,13 @@ export type ExpenseInput = { desc: string; cents: number; paidBy: string; splitR
 const snapshot = (desc: string, cents: number, paidBy: string, splitRows: ShareRow[]) => ({ description: desc, amountCents: cents, paidBy, splits: splitRows.map(r => ({ memberId: r.memberId, amountCents: r.amountCents })) });
 
 export class ExpenseService {
-  private readonly db: D1Database;
+  private readonly tx: Transaction;
   private readonly expenses: ExpenseRepository;
   private readonly groups: GroupRepository;
   private readonly historyLog: HistoryRepository;
   private readonly notify: Notifier;
-  constructor(deps: { db: D1Database; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; notify: Notifier }) {
-    this.db = deps.db; this.expenses = deps.expenses; this.groups = deps.groups; this.historyLog = deps.history; this.notify = deps.notify;
+  constructor(deps: { tx: Transaction; expenses: ExpenseRepository; groups: GroupRepository; history: HistoryRepository; notify: Notifier }) {
+    this.tx = deps.tx; this.expenses = deps.expenses; this.groups = deps.groups; this.historyLog = deps.history; this.notify = deps.notify;
   }
 
   // Validates an add/edit expense request body against the group's active
@@ -69,7 +70,7 @@ export class ExpenseService {
     const { desc, cents, paidBy, splitRows } = await this.parse(s.gid, b);
     const eid = newId();
     const nameOf = nameLookup(await this.groups.members(s.gid));
-    await this.db.batch([
+    await this.tx.run([
       this.expenses.insertStmt(eid, s.gid, desc, cents, paidBy, s.user.id, Date.now()),
       ...this.expenses.insertSplitStmts(eid, splitRows),
       ...this.notify.expenseStmts({ kind: "expense_added", gid: s.gid, expenseId: eid, actor: s.user, desc, cents, paidBy, splitRows, nameOf }),
@@ -88,7 +89,7 @@ export class ExpenseService {
     // People taken out of the split hear about it too.
     const oldSplits = await this.expenses.splitsSorted(e.id);
     const before = oldSplits.map(r => r.memberId);
-    await this.db.batch([
+    await this.tx.run([
       this.historyLog.insertStmt({ gid: s.gid, entity: "expense", entityId: e.id, action: "edited", actor: s.user.id, before: snapshot(e.description, e.amount_cents, e.paid_by, oldSplits), after: snapshot(desc, cents, paidBy, splitRows) }),
       ...this.notify.expenseStmts({ kind: "expense_edited", gid: s.gid, expenseId: e.id, actor: s.user, desc, cents, paidBy, splitRows, nameOf: nameLookup(await this.groups.members(s.gid)), alsoTell: [e.paid_by, ...before] }),
       this.expenses.updateStmt(e.id, s.gid, desc, cents, paidBy),
@@ -103,7 +104,7 @@ export class ExpenseService {
     if (!e) throw notFound("Expense not found.");
     if (!s.isAdmin && e.paid_by !== s.user.id) throw forbidden("Only the person who paid for this expense or a group admin can delete it.");
     const oldSplits = await this.expenses.splits(e.id);
-    await this.db.batch([
+    await this.tx.run([
       ...this.notify.expenseStmts({ kind: "expense_deleted", gid: s.gid, actor: s.user, desc: e.description, cents: e.amount_cents, paidBy: e.paid_by, splitRows: oldSplits, nameOf: nameLookup(await this.groups.members(s.gid)) }),
       this.historyLog.insertStmt({ gid: s.gid, entity: "expense", entityId: e.id, action: "deleted", actor: s.user.id, before: snapshot(e.description, e.amount_cents, e.paid_by, oldSplits) }),
       this.expenses.deleteSplitsStmt(e.id),

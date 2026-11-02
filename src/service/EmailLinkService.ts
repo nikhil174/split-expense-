@@ -6,6 +6,7 @@ import { EMAIL_LINK_MS } from "../config/constants.ts";
 import type { AppEnv } from "../config/env.ts";
 import { linkEmail, sendEmail } from "../integration/email.ts";
 import type { EmailTokenRepository } from "../repository/EmailTokenRepository.ts";
+import type { Transaction } from "../repository/Transaction.ts";
 import type { EmailTokenRow } from "../repository/types.ts";
 import { newUrlToken, sha256Hex } from "../security/crypto.ts";
 
@@ -13,13 +14,13 @@ export type LinkPurpose = "verify" | "reset";
 
 export class EmailLinkService {
   private readonly env: AppEnv;
-  private readonly db: D1Database;
+  private readonly tx: Transaction;
   private readonly tokens: EmailTokenRepository;
-  constructor(env: AppEnv, db: D1Database, tokens: EmailTokenRepository) { this.env = env; this.db = db; this.tokens = tokens; }
+  constructor(env: AppEnv, tx: Transaction, tokens: EmailTokenRepository) { this.env = env; this.tx = tx; this.tokens = tokens; }
 
   async send(origin: string, user: { id: string; name: string; email: string }, purpose: LinkPurpose): Promise<void> {
     const token = newUrlToken() + newUrlToken(), now = Date.now();
-    await this.db.batch([
+    await this.tx.run([
       this.tokens.deleteUnusedStmt(user.id, purpose),
       this.tokens.insertStmt(await sha256Hex(token), user.id, purpose, user.email, now + EMAIL_LINK_MS[purpose]),
     ]);

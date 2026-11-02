@@ -5,6 +5,7 @@ import { inrText } from "../domain/money.ts";
 import type { ShareRow } from "../domain/split.ts";
 import type { PushNote } from "../integration/push.ts";
 import type { NewNotification, NotificationRepository } from "../repository/NotificationRepository.ts";
+import type { Statement } from "../repository/Transaction.ts";
 
 export type Actor = { id: string; name: string };
 
@@ -13,7 +14,7 @@ export class Notifier {
   private readonly outbox: PushNote[];
   constructor(repo: NotificationRepository, outbox: PushNote[]) { this.repo = repo; this.outbox = outbox; }
 
-  stmt(n: NewNotification): D1PreparedStatement {
+  stmt(n: NewNotification): Statement {
     this.outbox.push(n as PushNote);
     return this.repo.insertStmt(n);
   }
@@ -23,7 +24,7 @@ export class Notifier {
   expenseStmts({ kind, gid, expenseId, actor, desc, cents, paidBy, splitRows, nameOf, alsoTell = [] }: {
     kind: "expense_added" | "expense_edited" | "expense_deleted"; gid: string; expenseId?: string; actor: Actor; desc: string; cents: number; paidBy: string;
     splitRows: ShareRow[]; nameOf: (id: string) => string; alsoTell?: string[];
-  }): D1PreparedStatement[] {
+  }): Statement[] {
     const verb = { expense_added: "added", expense_edited: "changed", expense_deleted: "deleted" }[kind];
     const people = new Set([paidBy, ...splitRows.map(r => r.memberId), ...alsoTell]);
     people.delete(actor.id);

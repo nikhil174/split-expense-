@@ -1,4 +1,5 @@
 // Moving everything of one account into another ("I had another account").
+import type { Statement } from "./Transaction.ts";
 
 export class AccountMergeRepository {
   private readonly db: D1Database;
@@ -9,12 +10,12 @@ export class AccountMergeRepository {
   // group where both are members, shares on the same expense are added together
   // and payments between the two are dropped (they were to oneself), so group
   // balances stay zero-sum. Returns the statements for one atomic batch.
-  async mergeStatements(to: string, from: string): Promise<D1PreparedStatement[]> {
+  async mergeStatements(to: string, from: string): Promise<Statement[]> {
     const db = this.db;
     const toName = (await db.prepare("SELECT display_name FROM appx_users WHERE id=?").bind(to).first<{ display_name: string }>())?.display_name;
     const groups = (await db.prepare("SELECT group_id,role,status,joined_at FROM appx_group_members WHERE member_id=?").bind(from).all<{ group_id: string; role: string; status: string; joined_at: number | null }>()).results;
     const rank: Record<string, number> = { active: 3, pending: 2, invited: 1, suggested: 1, removed: 0 };
-    const out: D1PreparedStatement[] = [];
+    const out: Statement[] = [];
     for (const g of groups) {
       const gid = g.group_id, mine = await db.prepare("SELECT role,status FROM appx_group_members WHERE group_id=? AND member_id=?").bind(gid, to).first<{ role: string; status: string }>();
       const role = g.role === "admin" || mine?.role === "admin" ? "admin" : "member";

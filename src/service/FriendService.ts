@@ -4,17 +4,18 @@ import type { Friends } from "../../shared/api-types.ts";
 import { loginKind, textField } from "../domain/text.ts";
 import { ApiError, conflict, notFound } from "../http/ApiError.ts";
 import { pairOf, type FriendshipRepository } from "../repository/FriendshipRepository.ts";
+import type { Transaction } from "../repository/Transaction.ts";
 import type { UserRepository } from "../repository/UserRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import type { Notifier } from "./Notifier.ts";
 
 export class FriendService {
-  private readonly db: D1Database;
+  private readonly tx: Transaction;
   private readonly friendships: FriendshipRepository;
   private readonly users: UserRepository;
   private readonly notify: Notifier;
-  constructor(deps: { db: D1Database; friendships: FriendshipRepository; users: UserRepository; notify: Notifier }) {
-    this.db = deps.db; this.friendships = deps.friendships; this.users = deps.users; this.notify = deps.notify;
+  constructor(deps: { tx: Transaction; friendships: FriendshipRepository; users: UserRepository; notify: Notifier }) {
+    this.tx = deps.tx; this.friendships = deps.friendships; this.users = deps.users; this.notify = deps.notify;
   }
 
   async list(u: CurrentUser): Promise<Friends> {
@@ -40,11 +41,11 @@ export class FriendService {
     if (row && row.requested_by === u.id) throw conflict(`You've already asked ${who.display_name}.`);
     if (row) {
       // They had asked me: asking back accepts.
-      await this.db.batch([this.friendships.acceptStmt(a, bb),
+      await this.tx.run([this.friendships.acceptStmt(a, bb),
         this.notify.stmt({ to: who.id, kind: "friend_accepted", title: `${u.name} accepted your friend request`, body: "You can now invite each other to groups.", link: "#/friends", actor: u.name })]);
       return { ok: true, status: "friends", name: who.display_name };
     }
-    await this.db.batch([this.friendships.requestStmt(a, bb, u.id, Date.now()),
+    await this.tx.run([this.friendships.requestStmt(a, bb, u.id, Date.now()),
       this.notify.stmt({ to: who.id, kind: "friend_request", title: `${u.name} wants to be friends`, body: "Accept it in Friends.", link: "#/friends", actor: u.name })]);
     return { ok: true, status: "requested", name: who.display_name };
   }
@@ -57,7 +58,7 @@ export class FriendService {
     if (!row) throw notFound("No friend request with that person.");
     if (action === "accept") {
       if (row.status !== "pending" || row.requested_by === u.id) throw conflict("There's no request from them to accept.");
-      await this.db.batch([this.friendships.acceptStmt(a, bb),
+      await this.tx.run([this.friendships.acceptStmt(a, bb),
         this.notify.stmt({ to: other, kind: "friend_accepted", title: `${u.name} accepted your friend request`, body: "You can now invite each other to groups.", link: "#/friends", actor: u.name })]);
       return { ok: true };
     }

@@ -8,6 +8,7 @@ import { ApiError, conflict, needGroupAdmin, notFound } from "../http/ApiError.t
 import type { FriendshipRepository } from "../repository/FriendshipRepository.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { SessionRepository } from "../repository/SessionRepository.ts";
+import type { Transaction } from "../repository/Transaction.ts";
 import type { CurrentUser, Role } from "../repository/types.ts";
 import type { GroupPinGuard } from "../security/GroupPinGuard.ts";
 import type { PasswordHasher } from "../security/PasswordHasher.ts";
@@ -18,15 +19,15 @@ import type { Notifier } from "./Notifier.ts";
 export type GroupScope = { gid: string; user: CurrentUser; role: Role; isAdmin: boolean; name: string; pinHash: string | null };
 
 export class GroupService {
-  private readonly db: D1Database;
+  private readonly tx: Transaction;
   private readonly groups: GroupRepository;
   private readonly friendships: FriendshipRepository;
   private readonly sessions: SessionRepository;
   private readonly hasher: PasswordHasher;
   private readonly pins: GroupPinGuard;
   private readonly notify: Notifier;
-  constructor(deps: { db: D1Database; groups: GroupRepository; friendships: FriendshipRepository; sessions: SessionRepository; hasher: PasswordHasher; pins: GroupPinGuard; notify: Notifier }) {
-    this.db = deps.db; this.groups = deps.groups; this.friendships = deps.friendships; this.sessions = deps.sessions;
+  constructor(deps: { tx: Transaction; groups: GroupRepository; friendships: FriendshipRepository; sessions: SessionRepository; hasher: PasswordHasher; pins: GroupPinGuard; notify: Notifier }) {
+    this.tx = deps.tx; this.groups = deps.groups; this.friendships = deps.friendships; this.sessions = deps.sessions;
     this.hasher = deps.hasher; this.pins = deps.pins; this.notify = deps.notify;
   }
 
@@ -36,7 +37,7 @@ export class GroupService {
     if (name.length < 2 || name.length > 80) throw new ApiError("Group name must be 2–80 characters.");
     if (!PIN_RE.test(textField(b?.pin))) throw new ApiError("Choose a 4-digit PIN for the group. Members need it to join and to open the group.");
     const gid = newId(), now = Date.now();
-    await this.db.batch([
+    await this.tx.run([
       this.groups.insertStmt(gid, name, now, u.id, await this.hasher.hash(textField(b.pin)), newUrlToken()),
       this.groups.addCreatorStmt(gid, u.id, u.name, now),
       this.pins.unlockStmt(u, gid),
@@ -61,7 +62,7 @@ export class GroupService {
     if (!row || row.status !== "invited") throw notFound("This invitation is no longer open.");
     if (row.pin_hash) await this.pins.check(u, gid, row.pin_hash, await pin());
     const admins = await this.groups.adminIds(gid);
-    await this.db.batch([
+    await this.tx.run([
       this.groups.acceptInvitationStmt(gid, u.id, u.name, Date.now()),
       this.pins.unlockStmt(u, gid),
       ...admins.filter(a => a !== u.id).map(to => this.notify.stmt({ to, groupId: gid, kind: "member_joined", title: `${u.name} joined “${row.name}”`, body: "They accepted your invitation.", link: `#/g/${gid}`, actor: u.name })),
@@ -97,11 +98,11 @@ export class GroupService {
     if (g.pin_hash) await this.pins.check(u, g.id, g.pin_hash, await pin());
     const now = Date.now();
     if (status === "invited") {
-      await this.db.batch([this.groups.joinAsInvitedStmt(g.id, u.id, u.name, now), this.pins.unlockStmt(u, g.id)]);
+      await this.tx.run([this.groups.joinAsInvitedStmt(g.id, u.id, u.name, now), this.pins.unlockStmt(u, g.id)]);
       return { ok: true, groupId: g.id, status: "active" };
     }
     const admins = await this.groups.adminIds(g.id);
-    await this.db.batch([
+    await this.tx.run([
       this.groups.askToJoinStmt(g.id, u.id, u.name),
       this.pins.unlockStmt(u, g.id),
       ...admins.map(to => this.notify.stmt({ to, groupId: g.id, kind: "join_request", title: `${u.name} asked to join “${g.name}”`, body: "Let them in from Members → Waiting.", link: `#/g/${g.id}`, actor: u.name })),
@@ -114,7 +115,7 @@ export class GroupService {
   async unlock(s: GroupScope, pin: () => Promise<unknown>) {
     if (!s.pinHash) return { ok: true };
     await this.pins.check(s.user, s.gid, s.pinHash, await pin());
-    await this.db.batch([this.pins.unlockStmt(s.user, s.gid), this.sessions.deleteExpiredUnlocksStmt(Date.now())]);
+    await this.tx.run([this.pins.unlockStmt(s.user, s.gid), this.sessions.deleteExpiredUnlocksStmt(Date.now())]);
     return { ok: true };
   }
 
@@ -126,7 +127,7 @@ export class GroupService {
     if (!PIN_RE.test(pin)) throw new ApiError("Choose a 4-digit PIN.");
     const others = await this.groups.otherActiveIds(s.gid, s.user.id);
     const u = s.user;
-    await this.db.batch([
+    await this.tx.run([
       this.groups.setPinStmt(s.gid, await this.hasher.hash(pin)),
       this.sessions.deleteUnlocksForGroupStmt(s.gid),
       this.pins.unlockStmt(u, s.gid),
@@ -192,7 +193,7 @@ export class GroupService {
   async delete(s: GroupScope) {
     if (!s.isAdmin) throw needGroupAdmin();
     const g = (await this.groups.name(s.gid))!;
-    await this.db.batch(this.groups.deleteAllStmts(s.gid));
+    await this.tx.run(this.groups.deleteAllStmts(s.gid));
     return { ok: true, deletedGroup: g.name };
   }
 }

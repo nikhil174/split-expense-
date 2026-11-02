@@ -7,15 +7,16 @@ import { ApiError } from "../http/ApiError.ts";
 import { pushEnabled, validSubscription } from "../integration/push.ts";
 import type { NotificationRepository } from "../repository/NotificationRepository.ts";
 import type { PushSubscriptionRepository } from "../repository/PushSubscriptionRepository.ts";
+import type { Transaction } from "../repository/Transaction.ts";
 import type { CurrentUser } from "../repository/types.ts";
 
 export class NotificationService {
   private readonly env: AppEnv;
-  private readonly db: D1Database;
+  private readonly tx: Transaction;
   private readonly notifications: NotificationRepository;
   private readonly subscriptions: PushSubscriptionRepository;
-  constructor(deps: { env: AppEnv; db: D1Database; notifications: NotificationRepository; subscriptions: PushSubscriptionRepository }) {
-    this.env = deps.env; this.db = deps.db; this.notifications = deps.notifications; this.subscriptions = deps.subscriptions;
+  constructor(deps: { env: AppEnv; tx: Transaction; notifications: NotificationRepository; subscriptions: PushSubscriptionRepository }) {
+    this.env = deps.env; this.tx = deps.tx; this.notifications = deps.notifications; this.subscriptions = deps.subscriptions;
   }
 
   // Newest first, with how many are unread. Ones older than 90 days are
@@ -39,7 +40,7 @@ export class NotificationService {
     if (!pushEnabled(this.env)) throw new ApiError("Phone notifications are not set up on this server yet.", 503);
     const sub = validSubscription(await body());
     if (!sub) throw new ApiError("That browser subscription is not valid.");
-    await this.db.batch(this.subscriptions.saveStmts(u.id, sub, Date.now()));
+    await this.tx.run(this.subscriptions.saveStmts(u.id, sub, Date.now()));
     return { ok: true };
   }
 

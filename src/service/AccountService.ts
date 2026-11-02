@@ -7,6 +7,7 @@ import { ApiError, conflict, notFound } from "../http/ApiError.ts";
 import { emailEnabled } from "../integration/email.ts";
 import type { AccountMergeRepository } from "../repository/AccountMergeRepository.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
+import type { Transaction } from "../repository/Transaction.ts";
 import type { UserRepository } from "../repository/UserRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import type { AccountPasswordGuard } from "../security/AccountPasswordGuard.ts";
@@ -18,15 +19,15 @@ import type { EmailLinkService } from "./EmailLinkService.ts";
 
 export class AccountService {
   private readonly env: AppEnv;
-  private readonly db: D1Database;
+  private readonly tx: Transaction;
   private readonly users: UserRepository;
   private readonly groups: GroupRepository;
   private readonly merges: AccountMergeRepository;
   private readonly hasher: PasswordHasher;
   private readonly passwords: AccountPasswordGuard;
   private readonly emailLinks: EmailLinkService;
-  constructor(deps: { env: AppEnv; db: D1Database; users: UserRepository; groups: GroupRepository; merges: AccountMergeRepository; hasher: PasswordHasher; passwords: AccountPasswordGuard; emailLinks: EmailLinkService }) {
-    this.env = deps.env; this.db = deps.db; this.users = deps.users; this.groups = deps.groups; this.merges = deps.merges;
+  constructor(deps: { env: AppEnv; tx: Transaction; users: UserRepository; groups: GroupRepository; merges: AccountMergeRepository; hasher: PasswordHasher; passwords: AccountPasswordGuard; emailLinks: EmailLinkService }) {
+    this.env = deps.env; this.tx = deps.tx; this.users = deps.users; this.groups = deps.groups; this.merges = deps.merges;
     this.hasher = deps.hasher; this.passwords = deps.passwords; this.emailLinks = deps.emailLinks;
   }
 
@@ -58,7 +59,7 @@ export class AccountService {
   async rename(uid: string, rawName: unknown): Promise<string> {
     const name = cleanName(rawName);
     if (name.length < 2 || name.length > 60) throw new ApiError("Name must be 2–60 characters.");
-    await this.db.batch([this.users.setDisplayNameStmt(uid, name), this.groups.renameMemberEverywhereStmt(uid, name)]);
+    await this.tx.run([this.users.setDisplayNameStmt(uid, name), this.groups.renameMemberEverywhereStmt(uid, name)]);
     return name;
   }
 
@@ -112,7 +113,7 @@ export class AccountService {
     if (!other.pin_hash) throw conflict("That account has no password yet. Sign in to it once to set one, then link it here.");
     if (!passwordOf(b)) throw new ApiError("Enter that account's password.");
     await this.passwords.check(other, passwordOf(b));
-    await this.db.batch(await this.merges.mergeStatements(u.id, other.id));
+    await this.tx.run(await this.merges.mergeStatements(u.id, other.id));
     return other.display_name;
   }
 }

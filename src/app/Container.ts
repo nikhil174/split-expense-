@@ -13,9 +13,11 @@ import { HousekeepingRepository } from "../repository/HousekeepingRepository.ts"
 import { NotificationRepository } from "../repository/NotificationRepository.ts";
 import { PaymentMethodRepository } from "../repository/PaymentMethodRepository.ts";
 import { PushSubscriptionRepository } from "../repository/PushSubscriptionRepository.ts";
+import { RateLimitRepository } from "../repository/RateLimitRepository.ts";
 import { SessionRepository } from "../repository/SessionRepository.ts";
 import { SettlementRepository } from "../repository/SettlementRepository.ts";
 import { SiteAdminRepository } from "../repository/SiteAdminRepository.ts";
+import { D1Transaction } from "../repository/Transaction.ts";
 import { UserRepository } from "../repository/UserRepository.ts";
 import { AccountPasswordGuard } from "../security/AccountPasswordGuard.ts";
 import { GroupPinGuard } from "../security/GroupPinGuard.ts";
@@ -60,6 +62,7 @@ export class Container {
 
   constructor(ctx: RequestContext) {
     const { env, db } = ctx;
+    const tx = new D1Transaction(db);
     const users = this.users = new UserRepository(db);
     const sessions = this.sessionRepo = new SessionRepository(db);
     const groups = this.groupRepo = new GroupRepository(db);
@@ -68,26 +71,27 @@ export class Container {
     const history = new HistoryRepository(db);
     const friendships = new FriendshipRepository(db);
     const tokens = new EmailTokenRepository(db);
+    const notificationRepo = new NotificationRepository(db);
 
     const hasher = new PasswordHasher(env);
-    this.limiter = new RateLimiter(db);
-    this.sessions = new SessionManager(sessions);
+    this.limiter = new RateLimiter(new RateLimitRepository(db));
+    this.sessions = new SessionManager(sessions, tx);
     const passwords = new AccountPasswordGuard(env, users, hasher);
     const pins = this.groupPins = new GroupPinGuard(hasher, this.limiter, sessions);
 
-    const notify = new Notifier(new NotificationRepository(db), ctx.outbox);
-    const emailLinks = new EmailLinkService(env, db, tokens);
-    this.auth = new AuthService({ env, db, users, sessions, tokens, hasher, passwords, emailLinks });
-    this.account = new AccountService({ env, db, users, groups, merges: new AccountMergeRepository(db), hasher, passwords, emailLinks });
-    this.groups = new GroupService({ db, groups, friendships, sessions, hasher, pins, notify });
-    this.members = new MembershipService({ db, groups, users, friendships, notify });
-    this.expenses = new ExpenseService({ db, expenses, groups, history, notify });
-    this.settlements = new SettlementService({ db, settlements, expenses, groups, history, notify });
+    const notify = new Notifier(notificationRepo, ctx.outbox);
+    const emailLinks = new EmailLinkService(env, tx, tokens);
+    this.auth = new AuthService({ env, tx, users, sessions, tokens, hasher, passwords, emailLinks });
+    this.account = new AccountService({ env, tx, users, groups, merges: new AccountMergeRepository(db), hasher, passwords, emailLinks });
+    this.groups = new GroupService({ tx, groups, friendships, sessions, hasher, pins, notify });
+    this.members = new MembershipService({ tx, groups, users, friendships, notify });
+    this.expenses = new ExpenseService({ tx, expenses, groups, history, notify });
+    this.settlements = new SettlementService({ tx, settlements, expenses, groups, history, notify });
     this.insights = new InsightsService({ groups, expenses, settlements });
     this.paymentMethods = new PaymentMethodService({ methods: new PaymentMethodRepository(db), groups });
-    this.friends = new FriendService({ db, friendships, users, notify });
-    this.notifications = new NotificationService({ env, db, notifications: new NotificationRepository(db), subscriptions: new PushSubscriptionRepository(db) });
-    this.siteAdmin = new SiteAdminService({ env, db, users, sessions, groups, stats: new SiteAdminRepository(db) });
+    this.friends = new FriendService({ tx, friendships, users, notify });
+    this.notifications = new NotificationService({ env, tx, notifications: notificationRepo, subscriptions: new PushSubscriptionRepository(db) });
+    this.siteAdmin = new SiteAdminService({ env, tx, users, sessions, groups, stats: new SiteAdminRepository(db) });
   }
 }
 

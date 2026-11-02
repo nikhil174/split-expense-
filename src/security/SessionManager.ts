@@ -5,6 +5,7 @@ import { SESSION_COOKIE, SESSION_MS } from "../config/constants.ts";
 import { setCookie, type RequestContext } from "../http/RequestContext.ts";
 import { json } from "../http/responses.ts";
 import type { SessionRepository } from "../repository/SessionRepository.ts";
+import type { Transaction } from "../repository/Transaction.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import { newId, sha256Hex } from "./crypto.ts";
 
@@ -15,7 +16,8 @@ export const userOut = (u: CurrentUser): User => ({ id: u.id, name: u.name, user
 
 export class SessionManager {
   private readonly sessions: SessionRepository;
-  constructor(sessions: SessionRepository) { this.sessions = sessions; }
+  private readonly tx: Transaction;
+  constructor(sessions: SessionRepository, tx: Transaction) { this.sessions = sessions; this.tx = tx; }
 
   // The signed-in person, from their session cookie, or null.
   async currentUser(ctx: RequestContext): Promise<CurrentUser | null> {
@@ -45,7 +47,7 @@ export class SessionManager {
     const raw = ctx.cookie(SESSION_COOKIE);
     if (raw) {
       const h = await sha256Hex(raw);
-      await ctx.db.batch([this.sessions.deleteStmt(h), this.sessions.deleteUnlocksForSessionStmt(h)]);
+      await this.tx.run([this.sessions.deleteStmt(h), this.sessions.deleteUnlocksForSessionStmt(h)]);
     }
     return json({ ok: true }, 200, { "set-cookie": setCookie(SESSION_COOKIE, "", 0) });
   }

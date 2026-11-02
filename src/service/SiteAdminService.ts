@@ -13,6 +13,7 @@ import { ApiError, notFound } from "../http/ApiError.ts";
 import type { GroupRepository } from "../repository/GroupRepository.ts";
 import type { SessionRepository } from "../repository/SessionRepository.ts";
 import type { SiteAdminRepository } from "../repository/SiteAdminRepository.ts";
+import type { Transaction } from "../repository/Transaction.ts";
 import type { UserRepository } from "../repository/UserRepository.ts";
 import type { CurrentUser } from "../repository/types.ts";
 import { secretEquals } from "../security/crypto.ts";
@@ -21,13 +22,13 @@ export const hidden = () => notFound("Not found.");
 
 export class SiteAdminService {
   private readonly env: AppEnv;
-  private readonly db: D1Database;
+  private readonly tx: Transaction;
   private readonly accounts: UserRepository;
   private readonly sessions: SessionRepository;
   private readonly groups: GroupRepository;
   private readonly stats: SiteAdminRepository;
-  constructor(deps: { env: AppEnv; db: D1Database; users: UserRepository; sessions: SessionRepository; groups: GroupRepository; stats: SiteAdminRepository }) {
-    this.env = deps.env; this.db = deps.db; this.accounts = deps.users; this.sessions = deps.sessions; this.groups = deps.groups; this.stats = deps.stats;
+  constructor(deps: { env: AppEnv; tx: Transaction; users: UserRepository; sessions: SessionRepository; groups: GroupRepository; stats: SiteAdminRepository }) {
+    this.env = deps.env; this.tx = deps.tx; this.accounts = deps.users; this.sessions = deps.sessions; this.groups = deps.groups; this.stats = deps.stats;
   }
 
   // Before the key is checked: is this person allowed to try at all?
@@ -39,7 +40,7 @@ export class SiteAdminService {
   // Opens the Admin tab in this session (for 12 hours) with the admin key.
   async unlock(u: CurrentUser, key: string) {
     if (!await secretEquals(key, String(this.env.ADMIN_PIN))) throw new ApiError("That's not the admin key.", 401);
-    await this.db.batch([
+    await this.tx.run([
       ...(u.siteAdmin ? [] : [this.accounts.claimSiteOwnerStmt(u.id)]),
       this.sessions.setAdminUntilStmt(u.tokenHash, Date.now() + ADMIN_UNLOCK_MS),
     ]);
@@ -69,7 +70,7 @@ export class SiteAdminService {
   async resetGroupPin(gid: string) {
     const g = await this.groups.idAndName(gid);
     if (!g) throw notFound("Group not found.");
-    await this.db.batch([this.groups.setPinStmt(g.id, null), this.sessions.deleteUnlocksForGroupStmt(g.id)]);
+    await this.tx.run([this.groups.setPinStmt(g.id, null), this.sessions.deleteUnlocksForGroupStmt(g.id)]);
     return { ok: true, name: g.name };
   }
 }
