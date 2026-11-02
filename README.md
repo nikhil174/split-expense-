@@ -73,6 +73,11 @@ npx wrangler d1 migrations list split_expense_db --remote
 npx wrangler d1 migrations apply split_expense_db --remote
 ```
 
+## Design documents
+- [High-level design](docs/design/HLD.md): scope, architecture, data, main flows, security, consistency, scale, deployment, decisions.
+- [Low-level design](docs/design/LLD.md): code structure, request pipeline, classes, API, schema, state machines, algorithms, testing, how to extend.
+- [Accounts and groups design](docs/system-design.md): the move to accounts, groups and admins, and its migrations.
+
 ## Backend code (TypeScript, Spring-style layers)
 The Worker is TypeScript in layers, each depending only on the ones below it:
 
