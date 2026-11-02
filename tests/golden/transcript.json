@@ -13246,7 +13246,25 @@
     "id": "00000000-0000-4000-8000-000000000215",
     "amountCents": 1000,
     "status": "pending"
-   }
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Gina Rao asks Paro to let them off ₹10.00",
+       "body": "Paro or a group admin decides. You're an admin, so you can too.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "waiver_asked"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
   },
   {
    "n": 462,
@@ -13351,16 +13369,34 @@
    },
    "body": {
     "ok": true,
-    "id": "00000000-0000-4000-8000-000000000218",
+    "id": "00000000-0000-4000-8000-000000000220",
     "amountCents": 1000,
     "status": "pending"
-   }
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Gina Rao asks Paro to let them off ₹10.00",
+       "body": "Paro or a group admin decides. You're an admin, so you can too.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "waiver_asked"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
   },
   {
    "n": 467,
    "label": "debtor withdraws ask",
    "method": "POST",
-   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000218/cancel",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000220/cancel",
    "status": 200,
    "headers": {
     "content-type": "application/json; charset=utf-8",
@@ -13383,16 +13419,34 @@
    },
    "body": {
     "ok": true,
-    "id": "00000000-0000-4000-8000-000000000222",
+    "id": "00000000-0000-4000-8000-000000000226",
     "amountCents": 2000,
     "status": "pending"
-   }
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Gina Rao asks Paro to let them off ₹20.00",
+       "body": "Paro or a group admin decides. You're an admin, so you can too.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "waiver_asked"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
   },
   {
    "n": 469,
    "label": "lender agrees",
    "method": "POST",
-   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000222/confirm",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000226/confirm",
    "status": 200,
    "headers": {
     "content-type": "application/json; charset=utf-8",
@@ -13433,16 +13487,34 @@
    },
    "body": {
     "ok": true,
-    "id": "00000000-0000-4000-8000-000000000227",
+    "id": "00000000-0000-4000-8000-000000000233",
     "amountCents": 4000,
     "status": "pending"
-   }
+   },
+   "sent": [
+    {
+     "push": {
+      "to": "https://fcm.googleapis.com/fcm/send/vicky-phone",
+      "payload": {
+       "title": "Gina Rao asks Paro to let them off ₹40.00",
+       "body": "Paro or a group admin decides. You're an admin, so you can too.",
+       "link": "#/g/00000000-0000-4000-8000-000000000177",
+       "tag": "waiver_asked"
+      },
+      "ttl": "86400",
+      "encoding": "aes128gcm",
+      "urgency": "normal",
+      "vapid": true
+     },
+     "status": 201
+    }
+   ]
   },
   {
    "n": 471,
    "label": "admin grants ask",
    "method": "POST",
-   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000227/confirm",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/settlements/00000000-0000-4000-8000-000000000233/confirm",
    "status": 200,
    "headers": {
     "content-type": "application/json; charset=utf-8",
@@ -13484,7 +13556,7 @@
    "body": {
     "settlements": [
      {
-      "id": "00000000-0000-4000-8000-000000000227",
+      "id": "00000000-0000-4000-8000-000000000233",
       "fromMemberId": "00000000-0000-4000-8000-000000000035",
       "fromName": "Gina Rao",
       "toMemberId": "00000000-0000-4000-8000-000000000013",
@@ -13503,7 +13575,7 @@
       "canCancel": false
      },
      {
-      "id": "00000000-0000-4000-8000-000000000222",
+      "id": "00000000-0000-4000-8000-000000000226",
       "fromMemberId": "00000000-0000-4000-8000-000000000035",
       "fromName": "Gina Rao",
       "toMemberId": "00000000-0000-4000-8000-000000000013",
@@ -13613,7 +13685,7 @@
    "body": {
     "items": [
      {
-      "id": "00000000-0000-4000-8000-000000000229",
+      "id": "00000000-0000-4000-8000-000000000237",
       "kind": "waiver_approved",
       "title": "Jagan let you off ₹40.00 you owed Paro",
       "body": "You don't need to pay it. It's cleared from what you owe Paro.",
@@ -13625,7 +13697,7 @@
       "groupName": "Flat"
      },
      {
-      "id": "00000000-0000-4000-8000-000000000224",
+      "id": "00000000-0000-4000-8000-000000000230",
       "kind": "waiver_approved",
       "title": "Paro let you off ₹20.00",
       "body": "You don't need to pay it. It's cleared from what you owe Paro.",
@@ -13637,7 +13709,7 @@
       "groupName": "Flat"
      },
      {
-      "id": "00000000-0000-4000-8000-000000000217",
+      "id": "00000000-0000-4000-8000-000000000219",
       "kind": "waiver_rejected",
       "title": "Paro said no to letting you off ₹10.00",
       "body": "You still owe it.",
@@ -13785,7 +13857,7 @@
    "body": {
     "items": [
      {
-      "id": "00000000-0000-4000-8000-000000000230",
+      "id": "00000000-0000-4000-8000-000000000238",
       "kind": "waiver_approved",
       "title": "Jagan let Gina Rao off ₹40.00 they owed you",
       "body": "Gina Rao asked, and a group admin agreed. It's cleared from what Gina Rao owes you.",
@@ -13797,7 +13869,7 @@
       "groupName": "Flat"
      },
      {
-      "id": "00000000-0000-4000-8000-000000000228",
+      "id": "00000000-0000-4000-8000-000000000234",
       "kind": "waiver_asked",
       "title": "Gina Rao asks you to let them off ₹40.00",
       "body": "Say yes and they won't need to pay it; everyone in the group is told. Or say no and they still owe it.",
@@ -13809,7 +13881,7 @@
       "groupName": "Flat"
      },
      {
-      "id": "00000000-0000-4000-8000-000000000223",
+      "id": "00000000-0000-4000-8000-000000000227",
       "kind": "waiver_asked",
       "title": "Gina Rao asks you to let them off ₹20.00",
       "body": "Say yes and they won't need to pay it; everyone in the group is told. Or say no and they still owe it.",
@@ -13821,7 +13893,7 @@
       "groupName": "Flat"
      },
      {
-      "id": "00000000-0000-4000-8000-000000000221",
+      "id": "00000000-0000-4000-8000-000000000225",
       "kind": "waiver_cancelled",
       "title": "Gina Rao withdrew their request to be let off ₹10.00",
       "body": "Gina Rao still owes it.",
@@ -13833,7 +13905,7 @@
       "groupName": "Flat"
      },
      {
-      "id": "00000000-0000-4000-8000-000000000219",
+      "id": "00000000-0000-4000-8000-000000000221",
       "kind": "waiver_asked",
       "title": "Gina Rao asks you to let them off ₹10.00",
       "body": "Say yes and they won't need to pay it; everyone in the group is told. Or say no and they still owe it.",
@@ -13921,7 +13993,7 @@
    "body": {
     "items": [
      {
-      "id": "00000000-0000-4000-8000-000000000231",
+      "id": "00000000-0000-4000-8000-000000000239",
       "kind": "waiver_approved",
       "title": "Jagan let Gina Rao off ₹40.00 owed to Paro",
       "body": "Gina Rao doesn't need to pay it back.",
@@ -13933,13 +14005,61 @@
       "groupName": "Flat"
      },
      {
-      "id": "00000000-0000-4000-8000-000000000226",
+      "id": "00000000-0000-4000-8000-000000000236",
+      "kind": "waiver_asked",
+      "title": "Gina Rao asks Paro to let them off ₹40.00",
+      "body": "Paro or a group admin decides. You're an admin, so you can too.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Gina Rao",
+      "createdAt": 1799393090000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000232",
       "kind": "waiver_approved",
       "title": "Paro let Gina Rao off ₹20.00",
       "body": "Gina Rao doesn't need to pay it back.",
       "link": "#/g/00000000-0000-4000-8000-000000000177",
       "actorName": "Paro",
       "createdAt": 1799393089000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000229",
+      "kind": "waiver_asked",
+      "title": "Gina Rao asks Paro to let them off ₹20.00",
+      "body": "Paro or a group admin decides. You're an admin, so you can too.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Gina Rao",
+      "createdAt": 1799393088000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000223",
+      "kind": "waiver_asked",
+      "title": "Gina Rao asks Paro to let them off ₹10.00",
+      "body": "Paro or a group admin decides. You're an admin, so you can too.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Gina Rao",
+      "createdAt": 1799393086000,
+      "readAt": null,
+      "groupId": "00000000-0000-4000-8000-000000000177",
+      "groupName": "Flat"
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000218",
+      "kind": "waiver_asked",
+      "title": "Gina Rao asks Paro to let them off ₹10.00",
+      "body": "Paro or a group admin decides. You're an admin, so you can too.",
+      "link": "#/g/00000000-0000-4000-8000-000000000177",
+      "actorName": "Gina Rao",
+      "createdAt": 1799393081000,
       "readAt": null,
       "groupId": "00000000-0000-4000-8000-000000000177",
       "groupName": "Flat"
@@ -14041,7 +14161,7 @@
       "groupName": "Flat"
      }
     ],
-    "unread": 10
+    "unread": 14
    }
   }
  ],
@@ -14290,10 +14410,10 @@
     "created_at": 1799393066000
    },
    {
-    "id": "00000000-0000-4000-8000-000000000220",
+    "id": "00000000-0000-4000-8000-000000000224",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "entity": "payment",
-    "entity_id": "00000000-0000-4000-8000-000000000218",
+    "entity_id": "00000000-0000-4000-8000-000000000220",
     "action": "cancelled",
     "actor_id": "00000000-0000-4000-8000-000000000035",
     "before_json": "{\"fromMemberId\":\"00000000-0000-4000-8000-000000000035\",\"toMemberId\":\"00000000-0000-4000-8000-000000000013\",\"amountCents\":1000,\"createdBy\":\"00000000-0000-4000-8000-000000000035\",\"createdAt\":1799393086000,\"kind\":\"waiver\"}",
@@ -14700,6 +14820,30 @@
    },
    {
     "id": "00000000-0000-4000-8000-000000000217",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_asked",
+    "title": "Gina Rao asks Paro to let them off ₹10.00",
+    "body": "Paro or a group admin decides. You're an admin, so you can too.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Gina Rao",
+    "created_at": 1799393081000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000218",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_asked",
+    "title": "Gina Rao asks Paro to let them off ₹10.00",
+    "body": "Paro or a group admin decides. You're an admin, so you can too.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Gina Rao",
+    "created_at": 1799393081000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000219",
     "recipient_id": "00000000-0000-4000-8000-000000000035",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_rejected",
@@ -14711,7 +14855,7 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000219",
+    "id": "00000000-0000-4000-8000-000000000221",
     "recipient_id": "00000000-0000-4000-8000-000000000013",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_asked",
@@ -14723,7 +14867,31 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000221",
+    "id": "00000000-0000-4000-8000-000000000222",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_asked",
+    "title": "Gina Rao asks Paro to let them off ₹10.00",
+    "body": "Paro or a group admin decides. You're an admin, so you can too.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Gina Rao",
+    "created_at": 1799393086000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000223",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_asked",
+    "title": "Gina Rao asks Paro to let them off ₹10.00",
+    "body": "Paro or a group admin decides. You're an admin, so you can too.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Gina Rao",
+    "created_at": 1799393086000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000225",
     "recipient_id": "00000000-0000-4000-8000-000000000013",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_cancelled",
@@ -14735,7 +14903,7 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000223",
+    "id": "00000000-0000-4000-8000-000000000227",
     "recipient_id": "00000000-0000-4000-8000-000000000013",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_asked",
@@ -14747,7 +14915,31 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000224",
+    "id": "00000000-0000-4000-8000-000000000228",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_asked",
+    "title": "Gina Rao asks Paro to let them off ₹20.00",
+    "body": "Paro or a group admin decides. You're an admin, so you can too.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Gina Rao",
+    "created_at": 1799393088000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000229",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_asked",
+    "title": "Gina Rao asks Paro to let them off ₹20.00",
+    "body": "Paro or a group admin decides. You're an admin, so you can too.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Gina Rao",
+    "created_at": 1799393088000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000230",
     "recipient_id": "00000000-0000-4000-8000-000000000035",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_approved",
@@ -14759,7 +14951,7 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000225",
+    "id": "00000000-0000-4000-8000-000000000231",
     "recipient_id": "00000000-0000-4000-8000-000000000007",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_approved",
@@ -14771,7 +14963,7 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000226",
+    "id": "00000000-0000-4000-8000-000000000232",
     "recipient_id": "00000000-0000-4000-8000-000000000004",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_approved",
@@ -14783,7 +14975,7 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000228",
+    "id": "00000000-0000-4000-8000-000000000234",
     "recipient_id": "00000000-0000-4000-8000-000000000013",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_asked",
@@ -14795,7 +14987,31 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000229",
+    "id": "00000000-0000-4000-8000-000000000235",
+    "recipient_id": "00000000-0000-4000-8000-000000000007",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_asked",
+    "title": "Gina Rao asks Paro to let them off ₹40.00",
+    "body": "Paro or a group admin decides. You're an admin, so you can too.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Gina Rao",
+    "created_at": 1799393090000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000236",
+    "recipient_id": "00000000-0000-4000-8000-000000000004",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "waiver_asked",
+    "title": "Gina Rao asks Paro to let them off ₹40.00",
+    "body": "Paro or a group admin decides. You're an admin, so you can too.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Gina Rao",
+    "created_at": 1799393090000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000237",
     "recipient_id": "00000000-0000-4000-8000-000000000035",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_approved",
@@ -14807,7 +15023,7 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000230",
+    "id": "00000000-0000-4000-8000-000000000238",
     "recipient_id": "00000000-0000-4000-8000-000000000013",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_approved",
@@ -14819,7 +15035,7 @@
     "read_at": null
    },
    {
-    "id": "00000000-0000-4000-8000-000000000231",
+    "id": "00000000-0000-4000-8000-000000000239",
     "recipient_id": "00000000-0000-4000-8000-000000000004",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "kind": "waiver_approved",
@@ -14961,7 +15177,7 @@
     "kind": "waiver"
    },
    {
-    "id": "00000000-0000-4000-8000-000000000222",
+    "id": "00000000-0000-4000-8000-000000000226",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "from_member_id": "00000000-0000-4000-8000-000000000035",
     "to_member_id": "00000000-0000-4000-8000-000000000013",
@@ -14974,7 +15190,7 @@
     "kind": "waiver"
    },
    {
-    "id": "00000000-0000-4000-8000-000000000227",
+    "id": "00000000-0000-4000-8000-000000000233",
     "group_id": "00000000-0000-4000-8000-000000000177",
     "from_member_id": "00000000-0000-4000-8000-000000000035",
     "to_member_id": "00000000-0000-4000-8000-000000000013",
