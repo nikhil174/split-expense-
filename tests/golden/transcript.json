@@ -5180,6 +5180,7 @@
         "amountCents": 2000
        }
       ],
+      "photoIds": [],
       "myShareCents": 0,
       "myEffectCents": 0,
       "canDelete": false,
@@ -5208,6 +5209,7 @@
         "amountCents": 30000
        }
       ],
+      "photoIds": [],
       "myShareCents": 30000,
       "myEffectCents": 30000,
       "canDelete": true,
@@ -5246,6 +5248,7 @@
         "amountCents": 10000
        }
       ],
+      "photoIds": [],
       "myShareCents": 10000,
       "myEffectCents": -10000,
       "canDelete": false,
@@ -5279,6 +5282,7 @@
         "amountCents": 43300
        }
       ],
+      "photoIds": [],
       "myShareCents": 43300,
       "myEffectCents": -43300,
       "canDelete": false,
@@ -5322,6 +5326,7 @@
         "amountCents": 90010
        }
       ],
+      "photoIds": [],
       "myShareCents": 90010,
       "myEffectCents": -90010,
       "canDelete": false,
@@ -5370,6 +5375,7 @@
         "amountCents": 2000
        }
       ],
+      "photoIds": [],
       "myShareCents": 0,
       "myEffectCents": 0,
       "canDelete": true,
@@ -5398,6 +5404,7 @@
         "amountCents": 30000
        }
       ],
+      "photoIds": [],
       "myShareCents": 0,
       "myEffectCents": 0,
       "canDelete": true,
@@ -5436,6 +5443,7 @@
         "amountCents": 10000
        }
       ],
+      "photoIds": [],
       "myShareCents": 10000,
       "myEffectCents": -10000,
       "canDelete": true,
@@ -5469,6 +5477,7 @@
         "amountCents": 43300
        }
       ],
+      "photoIds": [],
       "myShareCents": 0,
       "myEffectCents": 0,
       "canDelete": true,
@@ -5512,6 +5521,7 @@
         "amountCents": 90010
        }
       ],
+      "photoIds": [],
       "myShareCents": 90010,
       "myEffectCents": 360040,
       "canDelete": true,
@@ -9343,6 +9353,7 @@
         "amountCents": 2000
        }
       ],
+      "photoIds": [],
       "myShareCents": 2000,
       "myEffectCents": 2000,
       "canDelete": true,
@@ -9376,6 +9387,7 @@
         "amountCents": 2000
        }
       ],
+      "photoIds": [],
       "myShareCents": 2000,
       "myEffectCents": -2000,
       "canDelete": false,
@@ -9404,6 +9416,7 @@
         "amountCents": 5000
        }
       ],
+      "photoIds": [],
       "myShareCents": 0,
       "myEffectCents": 0,
       "canDelete": false,
@@ -9442,6 +9455,7 @@
         "amountCents": 10000
        }
       ],
+      "photoIds": [],
       "myShareCents": 0,
       "myEffectCents": 0,
       "canDelete": false,
@@ -9485,6 +9499,7 @@
         "amountCents": 90010
        }
       ],
+      "photoIds": [],
       "myShareCents": 90010,
       "myEffectCents": -90010,
       "canDelete": false,
@@ -10560,6 +10575,7 @@
         "amountCents": 2000
        }
       ],
+      "photoIds": [],
       "myShareCents": 2000,
       "myEffectCents": -2000,
       "canDelete": false,
@@ -10593,6 +10609,7 @@
         "amountCents": 2000
        }
       ],
+      "photoIds": [],
       "myShareCents": 0,
       "myEffectCents": 0,
       "canDelete": false,
@@ -10621,6 +10638,7 @@
         "amountCents": 5000
        }
       ],
+      "photoIds": [],
       "myShareCents": 0,
       "myEffectCents": 0,
       "canDelete": false,
@@ -10659,6 +10677,7 @@
         "amountCents": 10000
        }
       ],
+      "photoIds": [],
       "myShareCents": 10000,
       "myEffectCents": 30000,
       "canDelete": true,
@@ -10702,6 +10721,7 @@
         "amountCents": 90010
        }
       ],
+      "photoIds": [],
       "myShareCents": 90010,
       "myEffectCents": -90010,
       "canDelete": false,
@@ -14163,10 +14183,350 @@
     ],
     "unread": 14
    }
+  },
+  {
+   "n": 476,
+   "label": "expense bad photo",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses",
+   "status": 400,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "Upload the photo as a PNG, JPEG or WebP image."
+   }
+  },
+  {
+   "n": 477,
+   "label": "expense too many photos",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses",
+   "status": 400,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "Attach at most 3 photos to an expense."
+   }
+  },
+  {
+   "n": 478,
+   "label": "expense with receipt",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses",
+   "status": 201,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000240",
+    "amountCents": 3000,
+    "splits": [
+     {
+      "memberId": "00000000-0000-4000-8000-000000000004",
+      "amountCents": 1500
+     },
+     {
+      "memberId": "00000000-0000-4000-8000-000000000035",
+      "amountCents": 1500
+     }
+    ]
+   }
+  },
+  {
+   "n": 479,
+   "label": "expenses with photos",
+   "method": "GET",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "expenses": [
+     {
+      "id": "00000000-0000-4000-8000-000000000240",
+      "description": "Groceries",
+      "amountCents": 3000,
+      "createdAt": 1799393098000,
+      "paidBy": "00000000-0000-4000-8000-000000000004",
+      "createdBy": "00000000-0000-4000-8000-000000000004",
+      "amount": 30,
+      "paidByName": "Vicky",
+      "createdByName": "Vicky",
+      "splitCount": 2,
+      "splits": [
+       {
+        "memberId": "00000000-0000-4000-8000-000000000035",
+        "name": "Gina Rao",
+        "amountCents": 1500
+       },
+       {
+        "memberId": "00000000-0000-4000-8000-000000000004",
+        "name": "Vicky",
+        "amountCents": 1500
+       }
+      ],
+      "photoIds": [
+       "00000000-0000-4000-8000-000000000241"
+      ],
+      "myShareCents": 1500,
+      "myEffectCents": -1500,
+      "canDelete": false,
+      "canEdit": false
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000189",
+      "description": "Wifi",
+      "amountCents": 9000,
+      "createdAt": 1799393049000,
+      "paidBy": "00000000-0000-4000-8000-000000000004",
+      "createdBy": "00000000-0000-4000-8000-000000000004",
+      "amount": 90,
+      "paidByName": "Vicky",
+      "createdByName": "Vicky",
+      "splitCount": 2,
+      "splits": [
+       {
+        "memberId": "00000000-0000-4000-8000-000000000035",
+        "name": "Gina Rao",
+        "amountCents": 4500
+       },
+       {
+        "memberId": "00000000-0000-4000-8000-000000000004",
+        "name": "Vicky",
+        "amountCents": 4500
+       }
+      ],
+      "photoIds": [],
+      "myShareCents": 4500,
+      "myEffectCents": -4500,
+      "canDelete": false,
+      "canEdit": false
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000185",
+      "description": "Rent",
+      "amountCents": 30000,
+      "createdAt": 1799393048000,
+      "paidBy": "00000000-0000-4000-8000-000000000013",
+      "createdBy": "00000000-0000-4000-8000-000000000013",
+      "amount": 300,
+      "paidByName": "Paro",
+      "createdByName": "Paro",
+      "splitCount": 3,
+      "splits": [
+       {
+        "memberId": "00000000-0000-4000-8000-000000000035",
+        "name": "Gina Rao",
+        "amountCents": 10000
+       },
+       {
+        "memberId": "00000000-0000-4000-8000-000000000013",
+        "name": "Paro",
+        "amountCents": 10000
+       },
+       {
+        "memberId": "00000000-0000-4000-8000-000000000004",
+        "name": "Vicky",
+        "amountCents": 10000
+       }
+      ],
+      "photoIds": [],
+      "myShareCents": 10000,
+      "myEffectCents": -10000,
+      "canDelete": false,
+      "canEdit": false
+     }
+    ]
+   }
+  },
+  {
+   "n": 480,
+   "label": "receipt photo",
+   "method": "GET",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses/00000000-0000-4000-8000-000000000240/photos/00000000-0000-4000-8000-000000000241",
+   "status": 200,
+   "headers": {
+    "content-type": "image/png",
+    "cache-control": "private, max-age=86400",
+    "x-content-type-options": "nosniff"
+   },
+   "body": {
+    "bytes": 8,
+    "sha256": "cc1cdcbcf0bdb70801a2f0777e9f9c85571461df7f96d1d3f1476f420df37e38"
+   }
+  },
+  {
+   "n": 481,
+   "label": "receipt photo unknown",
+   "method": "GET",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses/00000000-0000-4000-8000-000000000240/photos/nope",
+   "status": 404,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "Photo not found."
+   }
+  },
+  {
+   "n": 482,
+   "label": "edit swaps receipt",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses/00000000-0000-4000-8000-000000000240/edit",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "id": "00000000-0000-4000-8000-000000000240",
+    "amountCents": 3000,
+    "splits": [
+     {
+      "memberId": "00000000-0000-4000-8000-000000000004",
+      "amountCents": 1500
+     },
+     {
+      "memberId": "00000000-0000-4000-8000-000000000035",
+      "amountCents": 1500
+     }
+    ]
+   }
+  },
+  {
+   "n": 483,
+   "label": "edit removes unknown photo",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses/00000000-0000-4000-8000-000000000240/edit",
+   "status": 400,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "error": "That photo isn't on this expense."
+   }
+  },
+  {
+   "n": 484,
+   "label": "receipt history",
+   "method": "GET",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/history?expense=00000000-0000-4000-8000-000000000240",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "history": [
+     {
+      "id": "00000000-0000-4000-8000-000000000244",
+      "entity": "expense",
+      "entityId": "00000000-0000-4000-8000-000000000240",
+      "action": "edited",
+      "actorId": "00000000-0000-4000-8000-000000000004",
+      "actorName": "Vicky",
+      "createdAt": 1799393102000,
+      "before": {
+       "description": "Groceries",
+       "amountCents": 3000,
+       "paidBy": "00000000-0000-4000-8000-000000000004",
+       "splits": [
+        {
+         "memberId": "00000000-0000-4000-8000-000000000004",
+         "amountCents": 1500,
+         "name": "Vicky"
+        },
+        {
+         "memberId": "00000000-0000-4000-8000-000000000035",
+         "amountCents": 1500,
+         "name": "Gina Rao"
+        }
+       ],
+       "photos": 1,
+       "paidByName": "Vicky"
+      },
+      "after": {
+       "description": "Groceries",
+       "amountCents": 3000,
+       "paidBy": "00000000-0000-4000-8000-000000000004",
+       "splits": [
+        {
+         "memberId": "00000000-0000-4000-8000-000000000004",
+         "amountCents": 1500,
+         "name": "Vicky"
+        },
+        {
+         "memberId": "00000000-0000-4000-8000-000000000035",
+         "amountCents": 1500,
+         "name": "Gina Rao"
+        }
+       ],
+       "photos": 2,
+       "paidByName": "Vicky"
+      }
+     },
+     {
+      "id": "00000000-0000-4000-8000-000000000243",
+      "entity": "expense",
+      "entityId": "00000000-0000-4000-8000-000000000240",
+      "action": "created",
+      "actorId": "00000000-0000-4000-8000-000000000004",
+      "actorName": "Vicky",
+      "createdAt": 1799393098000,
+      "before": null,
+      "after": {
+       "description": "Groceries",
+       "amountCents": 3000,
+       "paidBy": "00000000-0000-4000-8000-000000000004",
+       "splits": [
+        {
+         "memberId": "00000000-0000-4000-8000-000000000004",
+         "amountCents": 1500,
+         "name": "Vicky"
+        },
+        {
+         "memberId": "00000000-0000-4000-8000-000000000035",
+         "amountCents": 1500,
+         "name": "Gina Rao"
+        }
+       ],
+       "photos": 1,
+       "paidByName": "Vicky"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "n": 485,
+   "label": "delete expense with photos",
+   "method": "POST",
+   "path": "/api/groups/00000000-0000-4000-8000-000000000177/expenses/00000000-0000-4000-8000-000000000240/delete",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+   },
+   "body": {
+    "ok": true,
+    "deleted": true
+   }
   }
  ],
  "db": {
   "appx_email_tokens": [],
+  "appx_expense_photos": [],
   "appx_expenses": [
    {
     "id": "00000000-0000-4000-8000-000000000165",
@@ -14419,6 +14779,39 @@
     "before_json": "{\"fromMemberId\":\"00000000-0000-4000-8000-000000000035\",\"toMemberId\":\"00000000-0000-4000-8000-000000000013\",\"amountCents\":1000,\"createdBy\":\"00000000-0000-4000-8000-000000000035\",\"createdAt\":1799393086000,\"kind\":\"waiver\"}",
     "after_json": null,
     "created_at": 1799393087000
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000243",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "entity": "expense",
+    "entity_id": "00000000-0000-4000-8000-000000000240",
+    "action": "created",
+    "actor_id": "00000000-0000-4000-8000-000000000004",
+    "before_json": null,
+    "after_json": "{\"description\":\"Groceries\",\"amountCents\":3000,\"paidBy\":\"00000000-0000-4000-8000-000000000004\",\"splits\":[{\"memberId\":\"00000000-0000-4000-8000-000000000004\",\"amountCents\":1500},{\"memberId\":\"00000000-0000-4000-8000-000000000035\",\"amountCents\":1500}],\"photos\":1}",
+    "created_at": 1799393098000
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000244",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "entity": "expense",
+    "entity_id": "00000000-0000-4000-8000-000000000240",
+    "action": "edited",
+    "actor_id": "00000000-0000-4000-8000-000000000004",
+    "before_json": "{\"description\":\"Groceries\",\"amountCents\":3000,\"paidBy\":\"00000000-0000-4000-8000-000000000004\",\"splits\":[{\"memberId\":\"00000000-0000-4000-8000-000000000004\",\"amountCents\":1500},{\"memberId\":\"00000000-0000-4000-8000-000000000035\",\"amountCents\":1500}],\"photos\":1}",
+    "after_json": "{\"description\":\"Groceries\",\"amountCents\":3000,\"paidBy\":\"00000000-0000-4000-8000-000000000004\",\"splits\":[{\"memberId\":\"00000000-0000-4000-8000-000000000004\",\"amountCents\":1500},{\"memberId\":\"00000000-0000-4000-8000-000000000035\",\"amountCents\":1500}],\"photos\":2}",
+    "created_at": 1799393102000
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000249",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "entity": "expense",
+    "entity_id": "00000000-0000-4000-8000-000000000240",
+    "action": "deleted",
+    "actor_id": "00000000-0000-4000-8000-000000000004",
+    "before_json": "{\"description\":\"Groceries\",\"amountCents\":3000,\"paidBy\":\"00000000-0000-4000-8000-000000000004\",\"splits\":[{\"memberId\":\"00000000-0000-4000-8000-000000000004\",\"amountCents\":1500},{\"memberId\":\"00000000-0000-4000-8000-000000000035\",\"amountCents\":1500}],\"photos\":2}",
+    "after_json": null,
+    "created_at": 1799393105000
    }
   ],
   "appx_notifications": [
@@ -15045,6 +15438,42 @@
     "actor_name": "Jagan",
     "created_at": 1799393091000,
     "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000242",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "expense_added",
+    "title": "Vicky added “Groceries”",
+    "body": "Vicky paid ₹30.00 · you owe ₹15.00",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/e/00000000-0000-4000-8000-000000000240",
+    "actor_name": "Vicky",
+    "created_at": 1799393098000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000247",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "expense_edited",
+    "title": "Vicky changed “Groceries”",
+    "body": "Vicky paid ₹30.00 · you owe ₹15.00",
+    "link": "#/g/00000000-0000-4000-8000-000000000177/e/00000000-0000-4000-8000-000000000240",
+    "actor_name": "Vicky",
+    "created_at": 1799393102000,
+    "read_at": null
+   },
+   {
+    "id": "00000000-0000-4000-8000-000000000248",
+    "recipient_id": "00000000-0000-4000-8000-000000000035",
+    "group_id": "00000000-0000-4000-8000-000000000177",
+    "kind": "expense_deleted",
+    "title": "Vicky deleted “Groceries”",
+    "body": "It no longer counts in your balance.",
+    "link": "#/g/00000000-0000-4000-8000-000000000177",
+    "actor_name": "Vicky",
+    "created_at": 1799393105000,
+    "read_at": null
    }
   ],
   "appx_payment_methods": [
@@ -15079,7 +15508,7 @@
    {
     "bucket": "expense:00000000-0000-4000-8000-000000000004",
     "window_start": 1799392800000,
-    "count": 1
+    "count": 7
    },
    {
     "bucket": "expense:00000000-0000-4000-8000-000000000013",

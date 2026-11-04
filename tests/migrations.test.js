@@ -16,13 +16,14 @@ test("all migrations apply cleanly, in Wrangler order, to an empty isolated data
     "0010_payment_methods.sql", "0011_notifications.sql", "0012_payment_proofs_and_push.sql", "0013_accounts.sql", "0014_site_admin.sql", "0015_group_pins.sql", "0016_invites_and_friends.sql", "0017_email_links.sql",
     "0018_history_integrity_cleanup.sql",
     "0019_waivers.sql",
+    "0020_expense_photos.sql",
   ]);
   await applyMigrations(db);
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'appx_%' ORDER BY name").all().map(r => r.name);
   // The old sign-in's tables (access requests, sessions, admin sessions, invites) were dropped by 0018.
   assert.deepEqual(tables, ["appx_expenses", "appx_group_members", "appx_groups", "appx_notifications",
     "appx_payment_methods", "appx_payment_proofs", "appx_push_subscriptions", "appx_rate_limits", "appx_settings", "appx_settlements", "appx_splits",
-    "appx_user_sessions", "appx_users"].concat("appx_group_unlocks", "appx_friendships", "appx_email_tokens", "appx_history").sort());
+    "appx_user_sessions", "appx_users"].concat("appx_group_unlocks", "appx_friendships", "appx_email_tokens", "appx_history", "appx_expense_photos").sort());
   const cols = db.prepare("PRAGMA table_info(appx_settlements)").all().map(c => [c.name, c.type, c.notnull]);
   assert.deepEqual(cols, [["id", "TEXT", 0], ["group_id", "TEXT", 1], ["from_member_id", "TEXT", 1], ["to_member_id", "TEXT", 1],
     ["amount_cents", "INTEGER", 1], ["created_by", "TEXT", 1], ["created_at", "INTEGER", 1],

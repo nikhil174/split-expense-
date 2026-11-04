@@ -6,6 +6,7 @@ import { systemClock, type Clock } from "../config/Clock.ts";
 import type { RequestContext } from "../http/RequestContext.ts";
 import { AccountMergeRepository } from "../repository/AccountMergeRepository.ts";
 import { EmailTokenRepository } from "../repository/EmailTokenRepository.ts";
+import { ExpensePhotoRepository } from "../repository/ExpensePhotoRepository.ts";
 import { ExpenseRepository } from "../repository/ExpenseRepository.ts";
 import { FriendshipRepository } from "../repository/FriendshipRepository.ts";
 import { GroupRepository } from "../repository/GroupRepository.ts";
@@ -96,7 +97,7 @@ export class Container {
     this.groupAccess = new GroupAccessService({ clock, tx, groups, sessions, hasher, pins, notify });
     this.invitations = new InvitationService({ clock, tx, groups, pins, notify });
     this.members = new MembershipService({ clock, tx, groups, users, friendships, notify });
-    this.expenses = new ExpenseService({ clock, tx, expenses, groups, history, notify });
+    this.expenses = new ExpenseService({ clock, tx, expenses, photos: new ExpensePhotoRepository(db), groups, history, notify });
     this.settlements = new SettlementService({ clock, tx, settlements, expenses, groups, history, paymentNotes: new PaymentNotifications(notify, tx), waiverNotes: new WaiverNotifications(notify) });
     this.insights = new InsightsService({ clock, groups, expenses, settlements });
     this.paymentMethods = new PaymentMethodService({ clock, methods: new PaymentMethodRepository(db), groups });

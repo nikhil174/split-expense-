@@ -41,6 +41,8 @@ export type HistoryEntry = {
 export type Expense = {
   id: string; description: string; amountCents: number; amount: number; createdAt: number; paidBy: string; paidByName: string;
   createdBy: string; createdByName: string; splitCount: number; splits: Split[];
+  // Photos attached to it (receipts); each is GET /api/groups/:id/expenses/:expenseId/photos/:photoId.
+  photoIds: string[];
   myShareCents: number; myEffectCents: number; canDelete: boolean; canEdit: boolean;
 };
 export type Debt = {
