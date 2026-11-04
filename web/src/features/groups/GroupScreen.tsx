@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { AnimatePresence, m } from "motion/react";
 import { toast } from "sonner";
-import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Pencil, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet, Paperclip, History } from "lucide-react";
+import { ChartPie, ChevronLeft, ChevronRight, HandCoins, Pencil, Plus, ReceiptText, Scale, Search, Trash2, Users, Wallet, Paperclip, History, Camera } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +18,7 @@ import { MembersSheet } from "./MembersSheet";
 import { PendingPayments } from "./PendingPayments";
 import { MemberSheet, ShareExcelIcon } from "./MemberSheet";
 import { UpiPeople } from "./UpiPayments";
+import { ExpensePhotoStrip } from "./ExpensePhotos";
 import { AwaitingBadge, ProofDialog, isAskedWaiver, isWaiver, proofSrc } from "./Awaiting";
 import { PairSheet } from "./PairDetail";
 import { AddExpenseDrawer } from "./AddExpenseDrawer";
@@ -194,7 +195,10 @@ function ExpenseRow({ x, meId, groupId, open, onToggle, onEdit }: { x: Expense; 
             <CategoryTile description={x.description} />
             <span className="min-w-0">
               <span className="block truncate text-[15px] font-medium">{x.description}</span>
-              <span className="block truncate text-[12.5px] text-muted-foreground">{d.day} {d.month} · {who(x.paidBy, x.paidByName)} paid</span>
+              <span className="flex min-w-0 items-center gap-1 text-[12.5px] text-muted-foreground">
+                <span className="truncate">{d.day} {d.month} · {who(x.paidBy, x.paidByName)} paid</span>
+                {x.photoIds.length > 0 && <span className="inline-flex shrink-0 items-center gap-0.5 text-tint" aria-label={`${x.photoIds.length} ${x.photoIds.length === 1 ? "photo" : "photos"}`}><Camera className="size-3.5" strokeWidth={2.2} />{x.photoIds.length}</span>}
+              </span>
             </span>
           </span>
         </td>
@@ -224,6 +228,7 @@ function ExpenseRow({ x, meId, groupId, open, onToggle, onEdit }: { x: Expense; 
                       ))}</tbody>
                     </table>
                   </div>
+                  <ExpensePhotoStrip groupId={groupId} expenseId={x.id} photoIds={x.photoIds} title={x.description} />
                   <ExpenseHistory groupId={groupId} expenseId={x.id} />
                   {(x.canEdit || x.canDelete) && (
                     <div className="grid grid-cols-2 gap-2">

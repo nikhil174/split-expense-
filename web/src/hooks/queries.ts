@@ -83,9 +83,11 @@ export function refreshGroup(qc: QueryClient, groupId: string) {
   return Promise.all([qc.invalidateQueries({ queryKey: keys.group(groupId) }), qc.invalidateQueries({ queryKey: keys.groups }), qc.invalidateQueries({ queryKey: keys.people }), qc.invalidateQueries({ queryKey: keys.pending })]);
 }
 
-export type NewExpense =
+// photos: new images (data URLs); removePhotoIds: attached ones to take off (edit only).
+export type NewExpense = (
   | { description: string; amount: string; paidBy: string; splitMode: "equal"; memberIds: string[] }
-  | { description: string; amount: string; paidBy: string; splitMode: "manual"; allocations: { memberId: string; amount: string }[] };
+  | { description: string; amount: string; paidBy: string; splitMode: "manual"; allocations: { memberId: string; amount: string }[] }
+) & { photos?: string[]; removePhotoIds?: string[] };
 
 export function useAddExpense(groupId: string) {
   const qc = useQueryClient();

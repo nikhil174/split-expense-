@@ -32,6 +32,8 @@ export type Split = { memberId: string; name: string; amountCents: number };
 export type HistorySnapshot = {
   description?: string; amountCents: number; paidBy?: string; paidByName?: string;
   splits?: { memberId: string; name: string; amountCents: number }[];
+  // How many photos the expense had (left out when none).
+  photos?: number;
   fromMemberId?: string; fromName?: string; toMemberId?: string; toName?: string; createdBy?: string; createdByName?: string; createdAt?: number;
 };
 export type HistoryEntry = {
