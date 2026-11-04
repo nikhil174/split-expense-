@@ -13,13 +13,17 @@ export const expensePhotoSrc = (groupId: string, expenseId: string, photoId: str
 
 const tile = "relative size-[72px] shrink-0 overflow-hidden rounded-[14px] bg-white ring-1 ring-[#141716]/[0.08]";
 
-// The form part (add or edit an expense): photos it already has (kept, by id)
-// and new ones (data URLs, shrunk on the phone), each with a remove button,
-// and an "Add photo" tile while there is room.
-export function ExpensePhotosField({ groupId, expenseId, kept, onKeptChange, added, onAddedChange, disabled, onError }: {
+// The form part (add or edit an expense), in two pieces placed apart: the
+// "Add photo" tile (beside Total and Paid by) and the photos chosen so far
+// (below them). Photos it already has are kept by id; new ones are data URLs,
+// shrunk on the phone.
+export type PhotoFieldProps = {
   groupId: string; expenseId?: string; kept: string[]; onKeptChange: (ids: string[]) => void;
   added: string[]; onAddedChange: (urls: string[]) => void; disabled?: boolean; onError: (message: string) => void;
-}) {
+};
+
+// The tall "Add photo" tile. Says when the limit is reached.
+export function ExpensePhotoAddTile({ kept, added, onAddedChange, disabled, onError, className }: PhotoFieldProps & { className?: string }) {
   const input = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(false);
   const room = MAX_EXPENSE_PHOTOS - kept.length - added.length;
@@ -35,34 +39,41 @@ export function ExpensePhotosField({ groupId, expenseId, kept, onKeptChange, add
     } catch (e) { onError((e as Error).message); }
     finally { setBusy(false); if (input.current) input.current.value = ""; }
   };
+  const count = kept.length + added.length;
+  return (
+    <>
+      <button type="button" disabled={disabled || busy || room <= 0} onClick={() => input.current?.click()} data-testid="expense-photo-add"
+        className={cn("flex w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-[16px] border border-dashed border-[#141716]/20 bg-white/60 px-2 text-center transition-transform active:scale-[0.97] disabled:cursor-default disabled:opacity-60", className)}>
+        <Camera className="size-6 text-tint" strokeWidth={2} />
+        <span className="text-[13.5px] leading-4 font-medium text-tint">{busy ? "Preparing…" : room <= 0 ? `${MAX_EXPENSE_PHOTOS} photos added` : count ? "Add another" : "Add photo"}</span>
+        <span className="text-[11.5px] leading-[15px] text-muted-foreground">{room <= 0 ? "Remove one to add more" : count ? `${count} of ${MAX_EXPENSE_PHOTOS}` : "Receipt, bill or proof"}</span>
+      </button>
+      <input ref={input} type="file" accept="image/*" multiple className="hidden" aria-label="Choose photos" onChange={e => pick(e.target.files)} />
+    </>
+  );
+}
+
+// The photos chosen so far, each with a remove button; nothing when none.
+export function ExpensePhotoThumbs({ groupId, expenseId, kept, onKeptChange, added, onAddedChange, disabled }: PhotoFieldProps) {
+  if (!kept.length && !added.length) return null;
   const remove = (label: string, onClick: () => void) => (
     <button type="button" aria-label={label} disabled={disabled} onClick={onClick}
       className="absolute top-1 right-1 grid size-6 cursor-pointer place-items-center rounded-full bg-black/60 text-white transition-transform active:scale-90 disabled:opacity-50"><X className="size-3.5" strokeWidth={2.6} /></button>
   );
   return (
-    <div data-testid="expense-photos">
-      <div className="flex flex-wrap gap-2.5">
-        {kept.map((id, i) => expenseId && (
-          <div key={id} className={tile}>
-            <img src={expensePhotoSrc(groupId, expenseId, id)} alt={`Photo ${i + 1}`} className="size-full object-cover" />
-            {remove(`Remove photo ${i + 1}`, () => onKeptChange(kept.filter(k => k !== id)))}
-          </div>
-        ))}
-        {added.map((url, i) => (
-          <div key={url.slice(-32) + i} className={tile}>
-            <img src={url} alt={`New photo ${i + 1}`} className="size-full object-cover" />
-            {remove(`Remove new photo ${i + 1}`, () => onAddedChange(added.filter((_, j) => j !== i)))}
-          </div>
-        ))}
-        {room > 0 && (
-          <button type="button" disabled={disabled || busy} onClick={() => input.current?.click()}
-            className={cn(tile, "flex cursor-pointer flex-col items-center justify-center gap-1 border border-dashed border-[#141716]/20 bg-transparent text-[12px] font-medium text-tint ring-0 transition-transform active:scale-95 disabled:opacity-50")}>
-            <Camera className="size-5" strokeWidth={2} />{busy ? "Preparing…" : "Add photo"}
-          </button>
-        )}
-      </div>
-      <p className="footnote mt-2 px-1 text-muted-foreground">Optional: a receipt, bill or proof, so everyone can see it. Up to {MAX_EXPENSE_PHOTOS}.</p>
-      <input ref={input} type="file" accept="image/*" multiple className="hidden" aria-label="Choose photos" onChange={e => pick(e.target.files)} />
+    <div data-testid="expense-photos" className="flex flex-wrap gap-2.5">
+      {kept.map((id, i) => expenseId && (
+        <div key={id} className={tile}>
+          <img src={expensePhotoSrc(groupId, expenseId, id)} alt={`Photo ${i + 1}`} className="size-full object-cover" />
+          {remove(`Remove photo ${i + 1}`, () => onKeptChange(kept.filter(k => k !== id)))}
+        </div>
+      ))}
+      {added.map((url, i) => (
+        <div key={url.slice(-32) + i} className={tile}>
+          <img src={url} alt={`New photo ${i + 1}`} className="size-full object-cover" />
+          {remove(`Remove new photo ${i + 1}`, () => onAddedChange(added.filter((_, j) => j !== i)))}
+        </div>
+      ))}
     </div>
   );
 }
