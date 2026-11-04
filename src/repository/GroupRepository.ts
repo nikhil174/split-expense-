@@ -28,6 +28,7 @@ export class GroupRepository {
     return [
       this.db.prepare("DELETE FROM appx_payment_proofs WHERE settlement_id IN (SELECT id FROM appx_settlements WHERE group_id=?)").bind(gid),
       this.db.prepare("DELETE FROM appx_settlements WHERE group_id=?").bind(gid),
+      this.db.prepare("DELETE FROM appx_expense_photos WHERE expense_id IN (SELECT id FROM appx_expenses WHERE group_id=?)").bind(gid),
       this.db.prepare("DELETE FROM appx_splits WHERE expense_id IN (SELECT id FROM appx_expenses WHERE group_id=?)").bind(gid),
       this.db.prepare("DELETE FROM appx_expenses WHERE group_id=?").bind(gid),
       this.db.prepare("DELETE FROM appx_group_members WHERE group_id=?").bind(gid),

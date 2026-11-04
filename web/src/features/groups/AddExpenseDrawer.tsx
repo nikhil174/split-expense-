@@ -9,6 +9,7 @@ import { glitterBurst } from "@/components/app/glitter";
 import { useAddExpense, useEditExpense, useGroup, type NewExpense } from "@/hooks/queries";
 import type { Expense } from "@/lib/api";
 import { centsToInput, inr, toCents } from "@/lib/money";
+import { ExpensePhotosField } from "./ExpensePhotos";
 import { cn } from "@/lib/utils";
 
 type Mode = "equal" | "manual";
@@ -42,6 +43,9 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange, editing }: { gro
   const [manual, setManual] = React.useState<Record<string, string>>({});
   const [error, setError] = React.useState("");
   const [dropped, setDropped] = React.useState<string[]>([]);
+  // Photos: attached ones still kept (edit), and new ones to upload.
+  const [keptPhotos, setKeptPhotos] = React.useState<string[]>([]);
+  const [newPhotos, setNewPhotos] = React.useState<string[]>([]);
 
   // Fresh form every time the sheet opens. New: payer = me and nobody in the
   // split until chosen. Edit: the expense as saved (equal if shares differ by
@@ -49,6 +53,7 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange, editing }: { gro
   React.useEffect(() => {
     if (!open) return;
     setError("");
+    setKeptPhotos(editing?.photoIds || []); setNewPhotos([]);
     if (!editing) {
       setDescription(""); setAmount(""); setMode("equal"); setManual({}); setDropped([]);
       setPaidBy(members.some(mm => mm.id === meId) ? meId! : members[0]?.id || "");
@@ -83,6 +88,9 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange, editing }: { gro
     const body: NewExpense = mode === "equal"
       ? { description: description.trim(), amount: amount.trim(), paidBy, splitMode: "equal", memberIds: [...selected] }
       : { description: description.trim(), amount: amount.trim(), paidBy, splitMode: "manual", allocations: Object.entries(manual).filter(([, v]) => v.trim()).map(([memberId, v]) => ({ memberId, amount: v.trim() })) };
+    const removed = (editing?.photoIds || []).filter(id => !keptPhotos.includes(id));
+    if (newPhotos.length) body.photos = newPhotos;
+    if (removed.length) body.removePhotoIds = removed;
     const done = { onSuccess: () => { haptic(); glitterBurst(); toast.success(`“${body.description}” ${editing ? "updated" : "added"} · ${inr(total)}`); onOpenChange(false); }, onError: (err: Error) => setError(err.message) };
     if (editing) editExpense.mutate({ ...body, id: editing.id }, done);
     else addExpense.mutate(body, done);
@@ -154,6 +162,10 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange, editing }: { gro
                   </m.div>
                 )}
               </AnimatePresence>
+            </div>
+            <div>
+              <SectionTitle>Photos</SectionTitle>
+              <ExpensePhotosField groupId={groupId} expenseId={editing?.id} kept={keptPhotos} onKeptChange={setKeptPhotos} added={newPhotos} onAddedChange={setNewPhotos} disabled={add.isPending} onError={setError} />
             </div>
             {dropped.length > 0 && <p className="subhead rounded-[16px] bg-[#141716]/[0.035] px-4 py-3 text-muted-foreground">{dropped.join(", ")} {dropped.length === 1 ? "is" : "are"} no longer in the group, so saving removes them from this split.</p>}
             <AnimatePresence>{error && <m.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} role="alert" className="subhead rounded-[16px] bg-negative-soft px-4 py-3 text-negative">{error}</m.p>}</AnimatePresence>

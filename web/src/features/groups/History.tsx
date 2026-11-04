@@ -20,6 +20,7 @@ function changes(b: HistorySnapshot, a: HistorySnapshot) {
     const names = (s?: HistorySnapshot["splits"]) => (s || []).map(x => x.name).join(", ");
     out.push((b.splits?.length === a.splits?.length ? "shares changed" : `split between ${b.splits?.length} → ${people(a.splits?.length || 0)}`) + ` (${names(a.splits)})`);
   }
+  if ((b.photos || 0) !== (a.photos || 0)) out.push(`photos ${b.photos || 0} → ${a.photos || 0}`);
   return out.length ? out : ["no visible change"];
 }
 

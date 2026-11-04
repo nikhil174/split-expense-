@@ -54,9 +54,9 @@ test("QR uploads may be larger than other requests, but not unlimited", async t 
   const r = await f.save("Bea", { upiId: "bea@okaxis", qr: tooBigImage });
   assert.equal(r.status, 400);
   assert.match(r.data.error, /too large/);
-  // Other endpoints keep the small limit.
-  const exp = await call(f.env, `/api/groups/${f.g.groupId}/expenses`, { method: "POST", cookie: f.g.cookies.Bea, body: { description: "x".repeat(20 * 1024), amount: "1" } });
-  assert.equal(exp.status, 413);
+  // Requests without images keep the small limit.
+  const rename = await call(f.env, `/api/groups/${f.g.groupId}/rename`, { method: "POST", cookie: f.g.adminCookie, body: { name: "x".repeat(20 * 1024) } });
+  assert.equal(rename.status, 413);
 });
 
 test("everyone in the group sees how to pay each other; the QR image is served only within the group", async t => {

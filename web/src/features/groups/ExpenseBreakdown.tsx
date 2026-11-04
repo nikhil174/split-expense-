@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EASE } from "@/components/app/bits";
 import { useExpenses } from "@/hooks/queries";
 import { inr, shortDate } from "@/lib/money";
+import { ExpensePhotoStrip } from "./ExpensePhotos";
 import { cn } from "@/lib/utils";
 
 // The full split of one expense (who paid, who added it, each person's share
@@ -30,6 +31,7 @@ export function ExpenseBreakdown({ groupId, expenseId, meId }: { groupId: string
           ))}</tbody>
         </table>
       </div>
+      <ExpensePhotoStrip groupId={groupId} expenseId={x.id} photoIds={x.photoIds} title={x.description} />
     </div>
   );
 }

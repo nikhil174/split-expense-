@@ -75,8 +75,11 @@ test("cross-site writes and oversized bodies are refused", async t => {
   assert.equal(crossSite.status, 403);
   const sameSite = await call(env, `/api/groups/${g.groupId}/expenses`, { method: "POST", cookie: g.cookies.Bea, headers: { Origin: "https://test.local" }, body: { description: "x", amount: "1", paidBy: g.ids.Bea, memberIds: [g.ids.Bea] } });
   assert.equal(sameSite.status, 201);
-  const huge = await call(env, `/api/groups/${g.groupId}/expenses`, { method: "POST", cookie: g.cookies.Bea, body: { description: "x".repeat(20000) } });
+  const huge = await call(env, "/api/groups", { method: "POST", cookie: g.cookies.Bea, body: { name: "x".repeat(20000) } });
   assert.equal(huge.status, 413);
+  // Expenses may carry photos, so their limit is larger, but still a limit.
+  const hugeExpense = await call(env, `/api/groups/${g.groupId}/expenses`, { method: "POST", cookie: g.cookies.Bea, body: { description: "x".repeat(2 * 1024 * 1024) } });
+  assert.equal(hugeExpense.status, 413);
   const tooManyMembers = await call(env, `/api/groups/${g.groupId}/expenses`, { method: "POST", cookie: g.cookies.Bea, body: { description: "x", amount: "1", paidBy: g.ids.Bea, memberIds: Array(101).fill(g.ids.Bea) } });
   assert.equal(tooManyMembers.status, 400);
 });

@@ -26,6 +26,10 @@ export const MAX_BODY_BYTES = 16 * 1024;
 export const IMAGE_BODY_BYTES = 512 * 1024;
 export const QR_MAX_BYTES = 300 * 1024;
 export const MAX_SPLIT_MEMBERS = 100;
+// Photos per expense (receipts, bills), each at most QR_MAX_BYTES. Adding or
+// editing an expense may carry that many images.
+export const MAX_EXPENSE_PHOTOS = 3;
+export const EXPENSE_BODY_BYTES = MAX_EXPENSE_PHOTOS * IMAGE_BODY_BYTES + MAX_BODY_BYTES;
 
 export type RateLimit = { limit: number; windowMs: number };
 export const RATE_LIMITS = {

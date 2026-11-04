@@ -527,4 +527,17 @@ export async function scenario(t) {
   await c("admin grants ask", "POST", `${FS}/${a4}/confirm`, { as: "jagan" });
   await c("flat payments after asks", "GET", FS, { as: "gina" });
   for (const who of ["gina", "paro", "vicky"]) await c(`ask notifications ${who}`, "GET", "/api/notifications", { as: who });
+
+  // ----- Photos on expenses (receipts) -----
+  const FE = F + "/expenses";
+  await c("expense bad photo", "POST", FE, { as: "vicky", body: { description: "Groceries", amount: "30", paidBy: ids.vicky, memberIds: [ids.vicky, ids.gina], photos: ["nope"] } });
+  await c("expense too many photos", "POST", FE, { as: "vicky", body: { description: "Groceries", amount: "30", paidBy: ids.vicky, memberIds: [ids.vicky, ids.gina], photos: [png, png, png, png] } });
+  const groceries = (await c("expense with receipt", "POST", FE, { as: "vicky", body: { description: "Groceries", amount: "30", paidBy: ids.vicky, memberIds: [ids.vicky, ids.gina], photos: [png] } })).data.id;
+  const listed = (await c("expenses with photos", "GET", FE, { as: "gina" })).data.expenses.find(e => e.id === groceries);
+  await c("receipt photo", "GET", `${FE}/${groceries}/photos/${listed.photoIds[0]}`, { as: "gina" });
+  await c("receipt photo unknown", "GET", `${FE}/${groceries}/photos/nope`, { as: "gina" });
+  await c("edit swaps receipt", "POST", `${FE}/${groceries}/edit`, { as: "vicky", body: { description: "Groceries", amount: "30", paidBy: ids.vicky, memberIds: [ids.vicky, ids.gina], removePhotoIds: listed.photoIds, photos: [png, png] } });
+  await c("edit removes unknown photo", "POST", `${FE}/${groceries}/edit`, { as: "vicky", body: { description: "Groceries", amount: "30", paidBy: ids.vicky, memberIds: [ids.vicky, ids.gina], removePhotoIds: ["nope"] } });
+  await c("receipt history", "GET", `${F}/history?expense=${groceries}`, { as: "gina" });
+  await c("delete expense with photos", "POST", `${FE}/${groceries}/delete`, { as: "vicky" });
 }

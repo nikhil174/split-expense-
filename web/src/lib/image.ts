@@ -14,6 +14,11 @@ export function shrinkScreenshot(file: File): Promise<string> {
   return shrinkImage(file, { what: "the payment screenshot", maxSide: 1280 });
 }
 
+// Photos on an expense (receipts, bills): larger, so small print stays readable.
+export function shrinkPhoto(file: File): Promise<string> {
+  return shrinkImage(file, { what: "the receipt or photo", maxSide: 1600 });
+}
+
 async function shrinkImage(file: File, { what, maxSide }: { what: string; maxSide: number }): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error(`Choose an image of ${what}.`);
   const url = URL.createObjectURL(file);
