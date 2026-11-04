@@ -664,6 +664,43 @@ try {
   await shot(bea, "payments-waivers");
   step("asking to be let off: the debtor asks, the lender says yes, the group is told, and it's settled");
 
+  // Photos on an expense: Bea attaches a receipt; everyone can open it; editing removes it.
+  const receiptPng = { name: "receipt.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64") };
+  await bea.getByRole("tab", { name: "Expenses", exact: true }).click();
+  await bea.getByRole("button", { name: "Add expense" }).first().click();
+  await bea.getByLabel("Description").fill("Groceries");
+  await bea.getByLabel("Total").fill("12");
+  await bea.getByRole("checkbox", { name: "Bea E2E (you)" }).click(); // just Bea: balances don't change
+  await bea.getByLabel("Choose photos").setInputFiles([receiptPng, receiptPng]);
+  await bea.getByRole("img", { name: "New photo 2" }).waitFor();
+  await bea.getByRole("button", { name: "Remove new photo 2" }).click();
+  await bea.getByRole("img", { name: "New photo 2" }).waitFor({ state: "detached" });
+  await shot(bea, "expense-photo-add");
+  await bea.getByRole("button", { name: "Save ₹12.00 expense" }).click();
+  await toast(bea, "“Groceries” added");
+  const groceriesRow = bea.getByRole("row", { name: /Groceries/ });
+  await groceriesRow.getByLabel("1 photo").waitFor();
+  // Cy opens it and sees the receipt.
+  await cy.goto(BASE + "/#/"); await cy.reload();
+  await openGroup(cy);
+  await cy.getByRole("row", { name: /Groceries/ }).click();
+  await cy.getByRole("button", { name: "View photo 1 of Groceries" }).click();
+  const viewer = cy.getByRole("alertdialog");
+  const full = viewer.getByRole("img", { name: "Photo 1 of Groceries" });
+  await full.waitFor();
+  await cy.waitForFunction(el => el.complete && el.naturalWidth > 0, await full.elementHandle());
+  await shot(cy, "expense-photo-view");
+  await viewer.getByRole("button", { name: "Close" }).click();
+  // Bea edits it and takes the photo off.
+  await groceriesRow.click();
+  await bea.getByRole("button", { name: "Edit", exact: true }).click();
+  await bea.getByRole("img", { name: "Photo 1" }).waitFor();
+  await bea.getByRole("button", { name: "Remove photo 1" }).click();
+  await bea.getByRole("button", { name: /^Save changes/ }).click();
+  await toast(bea, "“Groceries” updated");
+  await groceriesRow.getByLabel("1 photo").waitFor({ state: "detached" });
+  step("photos on an expense: attach a receipt when adding, everyone can open it, editing removes it");
+
   // Group settings: the ⚙ on Home's group list, only for the group's admins.
   await admin.goto(BASE + "/#/"); await admin.reload();
   await admin.getByRole("button", { name: "Settings for " + GROUP }).click();
