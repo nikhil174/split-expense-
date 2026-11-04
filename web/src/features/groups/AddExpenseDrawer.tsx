@@ -9,7 +9,7 @@ import { glitterBurst } from "@/components/app/glitter";
 import { useAddExpense, useEditExpense, useGroup, type NewExpense } from "@/hooks/queries";
 import type { Expense } from "@/lib/api";
 import { centsToInput, inr, toCents } from "@/lib/money";
-import { ExpensePhotosField } from "./ExpensePhotos";
+import { ExpensePhotoAddTile, ExpensePhotoThumbs } from "./ExpensePhotos";
 import { cn } from "@/lib/utils";
 
 type Mode = "equal" | "manual";
@@ -46,6 +46,7 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange, editing }: { gro
   // Photos: attached ones still kept (edit), and new ones to upload.
   const [keptPhotos, setKeptPhotos] = React.useState<string[]>([]);
   const [newPhotos, setNewPhotos] = React.useState<string[]>([]);
+  const photoProps = { groupId, expenseId: editing?.id, kept: keptPhotos, onKeptChange: setKeptPhotos, added: newPhotos, onAddedChange: setNewPhotos, disabled: add.isPending, onError: setError };
 
   // Fresh form every time the sheet opens. New: payer = me and nobody in the
   // split until chosen. Edit: the expense as saved (equal if shares differ by
@@ -106,21 +107,29 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange, editing }: { gro
               <label htmlFor="exp-desc" className="eyebrow mb-2 block px-1">Description</label>
               <Input id="exp-desc" required maxLength={160} autoComplete="off" placeholder="Dinner, cab, groceries…" value={description} onChange={e => setDescription(e.target.value)} className={fieldClass} />
             </div>
-            <div className="grid grid-cols-[1.1fr_1fr] gap-3">
-              <div>
-                <label htmlFor="exp-amount" className="eyebrow mb-2 block px-1">Total</label>
-                <div className="flex h-12 items-center rounded-[16px] border border-[#141716]/[0.08] bg-white px-4 shadow-[0_1px_2px_rgb(16_40_32/4%)] transition-[border-color,box-shadow] focus-within:border-primary/50 focus-within:ring-[3px] focus-within:ring-primary/15">
-                  <span className="mr-1 text-[16px] text-muted-foreground">₹</span>
-                  <input id="exp-amount" required inputMode="decimal" type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className="tabular h-full w-full min-w-0 bg-transparent text-[18px] font-semibold outline-none" />
+            {/* Total with Paid by under it; the photo tile beside both. */}
+            <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-3">
+              <div className="min-w-0 space-y-3">
+                <div>
+                  <label htmlFor="exp-amount" className="eyebrow mb-2 block px-1">Total</label>
+                  <div className="flex h-12 items-center rounded-[16px] border border-[#141716]/[0.08] bg-white px-4 shadow-[0_1px_2px_rgb(16_40_32/4%)] transition-[border-color,box-shadow] focus-within:border-primary/50 focus-within:ring-[3px] focus-within:ring-primary/15">
+                    <span className="mr-1 text-[16px] text-muted-foreground">₹</span>
+                    <input id="exp-amount" required inputMode="decimal" type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className="tabular h-full w-full min-w-0 bg-transparent text-[18px] font-semibold outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="exp-paid-by" className="eyebrow mb-2 block px-1">Paid by</label>
+                  <NativeSelect id="exp-paid-by" value={paidBy} onChange={e => setPaidBy(e.target.value)}>
+                    {members.map(mm => <option key={mm.id} value={mm.id}>{label(mm.id, mm.name)}</option>)}
+                  </NativeSelect>
                 </div>
               </div>
-              <div>
-                <label htmlFor="exp-paid-by" className="eyebrow mb-2 block px-1">Paid by</label>
-                <NativeSelect id="exp-paid-by" value={paidBy} onChange={e => setPaidBy(e.target.value)}>
-                  {members.map(mm => <option key={mm.id} value={mm.id}>{label(mm.id, mm.name)}</option>)}
-                </NativeSelect>
+              <div className="flex flex-col">
+                <span className="eyebrow mb-2 block px-1">Photo</span>
+                <ExpensePhotoAddTile {...photoProps} className="flex-1" />
               </div>
             </div>
+            <ExpensePhotoThumbs {...photoProps} />
 
             <div>
               <Segmented id="split-mode" value={mode} onChange={setMode} options={[{ value: "equal", label: "Equally" }, { value: "manual", label: "Exact amounts" }]} />
@@ -162,10 +171,6 @@ export function AddExpenseDrawer({ groupId, open, onOpenChange, editing }: { gro
                   </m.div>
                 )}
               </AnimatePresence>
-            </div>
-            <div>
-              <SectionTitle>Photos</SectionTitle>
-              <ExpensePhotosField groupId={groupId} expenseId={editing?.id} kept={keptPhotos} onKeptChange={setKeptPhotos} added={newPhotos} onAddedChange={setNewPhotos} disabled={add.isPending} onError={setError} />
             </div>
             {dropped.length > 0 && <p className="subhead rounded-[16px] bg-[#141716]/[0.035] px-4 py-3 text-muted-foreground">{dropped.join(", ")} {dropped.length === 1 ? "is" : "are"} no longer in the group, so saving removes them from this split.</p>}
             <AnimatePresence>{error && <m.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} role="alert" className="subhead rounded-[16px] bg-negative-soft px-4 py-3 text-negative">{error}</m.p>}</AnimatePresence>
