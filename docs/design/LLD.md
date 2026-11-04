@@ -217,6 +217,8 @@ All bodies are JSON. "Signed in" routes need the `split_user` cookie. "In group"
 | `GET/POST expenses`, `POST expenses/:id/(edit|delete)` | in group (payer or admin to change) | `{ expenses: Expense[] }`; `{ ok, id, … }` |
 | `GET history[?expense=]` | in group | `{ history: HistoryEntry[] }` |
 | `GET settlements`, `settlements/mine`, `debts` | in group | `{ settlements: Settlement[] }`; `Mine`; `Debts` |
+| `POST expenses`, `expenses/:id/edit` with `photos?: dataUrl[]`, `removePhotoIds?` (edit) | in group; edit by the payer or an admin | up to 3 photos; each PNG/JPEG/WebP, checked by its bytes, at most 300 KB; expense bodies may be up to 3 images |
+| `GET expenses/:id/photos/:photoId` | in group | image |
 | `POST settlements` | in group | `{ ok, id, amountCents, status }` 201 |
 | `POST settlements/waive` `{ fromMemberId, amount? }` | in group; the lender (the person owed) | `{ ok, id, amountCents, status }` 201; amount defaults to everything still unpaid (owed less pending) |
 | `POST settlements/ask-waiver` `{ toMemberId, amount? }` | in group; the debtor asks the person they owe (who must still be in the group) | `{ ok, id, amountCents, status: "pending" }` 201; same default and limit |
@@ -253,6 +255,7 @@ All bodies are JSON. "Signed in" routes need the `split_user` cookie. "In group"
 | `appx_splits` | `(expense_id, member_id)` | amount_cents | FK to expense, deleted with it |
 | `appx_settlements` | `id` | group_id, from_member_id, to_member_id, amount_cents, status, kind, created_by, created_at, decided_by, decided_at | FK to group; amount > 0; kind is `payment` or `waiver` (0019); indexes on (group, created_at), (group, from, to), (group, status) |
 | `appx_payment_proofs` | `settlement_id` | mime, base64, created_at | kept apart so lists never load images |
+| `appx_expense_photos` | `id` | expense_id, mime, base64, created_at, position | up to 3 per expense (0020); FK to the expense with ON DELETE CASCADE; kept apart so lists never load images |
 | `appx_history` | `id` | group_id, entity, entity_id, action, actor_id, before_json, after_json, created_at | indexes on (group, entity, entity_id, created_at), (group, created_at) |
 | `appx_notifications` | `id` | recipient_id, group_id, kind, title, body, link, actor_name, created_at, read_at | index on (recipient, created_at) |
 | `appx_payment_methods` | `(member_id, kind)` | upi_id, qr_mime, qr_base64, updated_at | |
@@ -345,7 +348,7 @@ Balances in a group always sum to zero. The same ledger feeds every screen, so t
 |---|---|---|
 | Unit | `tests/*.test.js` (money, split, settlement logic, payment rules, text, router, notifications, password guard) | Pure functions, or classes with fakes (`Transaction`, `Clock`, repositories) |
 | API | `tests/*.api.test.js` | The real Worker against `node:sqlite` with all migrations (`tests/helpers/d1.js`) |
-| Golden master | `tests/golden/` | Fixed clock, ids and randomness; 475 requests; compares responses, emails, pushes and the database (`npm run golden:record` after an intended change) |
+| Golden master | `tests/golden/` | Fixed clock, ids and randomness; 485 requests; compares responses, emails, pushes and the database (`npm run golden:record` after an intended change) |
 | Migrations | `tests/migrations.test.js`, `tests/legacy-migration.test.js` | Empty database; data written by the old Worker |
 | Browser | `e2e/browser.e2e.mjs` | Playwright, Pixel 7 viewport, local `wrangler dev` |
 

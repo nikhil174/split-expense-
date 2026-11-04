@@ -14,7 +14,7 @@ All diagrams are on the [Split It design board in Miro](https://miro.com/app/boa
 |---|---|
 | Accounts | Sign up with name, username and password (email optional); sign in with username, email or Google; forgot password by email link; profile; merge an old second account |
 | Groups | Anyone creates a group and becomes its admin; 4-digit group PIN to join and to open (remembered for a day per device); invite by username or email, by invite link, or by QR; members suggest friends and admins approve; several admins per group |
-| Expenses | Equal or exact splits in paise; edit and delete by the payer or an admin; full edit history |
+| Expenses | Equal or exact splits in paise; edit and delete by the payer or an admin; full edit history; up to 3 photos per expense (a receipt, bill or proof) that everyone in the group can open |
 | Settling up | Each person sees whom they owe and who owes them; UPI ID and QR per person; payments count only once confirmed (by the receiver, or by an admin for "they paid me"); payment screenshots; "no need to pay": a lender lets someone off what they still owe (an admin approves), or the debtor asks to be let off (the lender or an admin decides); once it counts, the whole group is told |
 | Insights | Per-person summaries, pair histories, group totals; Excel statement per person |
 | Notifications | In-app bell and phone push for anything that affects you |
@@ -30,7 +30,7 @@ All diagrams are on the [Split It design board in Miro](https://miro.com/app/boa
 | Security and privacy | Passwords and PINs hashed with PBKDF2 and a server-side pepper; HttpOnly session cookies; rate limits and lockouts; every request validated on the server; groups isolated; the site owner can't see expenses |
 | Free to run | Cloudflare's free tier: one Worker, one D1 database, static assets on Cloudflare's CDN |
 | Fast on phones | Edge Worker close to users; app shell cached by a service worker; data cached on the phone and refreshed in the background |
-| Safe changes | 746 automated tests including a golden master of the whole API; a browser test; migrations versioned and applied by the deploy command |
+| Safe changes | 750 automated tests including a golden master of the whole API; a browser test; migrations versioned and applied by the deploy command |
 
 ## 3. Architecture
 
@@ -124,7 +124,7 @@ A payment is written only if the amount still fits what is owed, checked inside 
 |---|---|
 | Unit | Money parsing, splits, debts, payment rules, text normalization, router, notifications, password lockout (with fakes and a fake clock) |
 | API | Every route against the real Worker with an in-memory SQLite database and all migrations |
-| Golden master | 475 scripted requests whose every response, email, push and final database row must match a recording |
+| Golden master | 485 scripted requests whose every response, email, push and final database row must match a recording |
 | Migration | All migrations on an empty database and on data from older versions |
 | Browser | Playwright on a phone-sized screen against a local Worker |
 | CI | GitHub Actions: type-check the app and the Worker, build, run all tests |
