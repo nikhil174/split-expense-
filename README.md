@@ -74,6 +74,7 @@ npx wrangler d1 migrations apply split_expense_db --remote
 ```
 
 ## Design documents
+- [Product document](docs/product/PRODUCT.md): who it is for, roles, every feature and its rules, notifications, limits, main journeys, scope.
 - [High-level design](docs/design/HLD.md): scope, architecture, data, main flows, security, consistency, scale, deployment, decisions.
 - [Low-level design](docs/design/LLD.md): code structure, request pipeline, classes, API, schema, state machines, algorithms, testing, how to extend.
 - [Accounts and groups design](docs/system-design.md): the move to accounts, groups and admins, and its migrations.
